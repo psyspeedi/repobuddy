@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+.nuxt/
+.output/
+.nitro/
+dist/
+build/
+
+# Cache
+.cache/
+.vite/
+.turbo/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage/
+.vitest/
+
+# Docker volumes (if mounted locally)
+docker/data/
+docker/volumes/
+
+# Local data
+data/
+tmp/
+temp/
+
+# Drizzle journal (keep migrations, ignore meta)
+drizzle/meta/
