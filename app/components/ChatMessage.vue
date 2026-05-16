@@ -2,14 +2,29 @@
 import { marked } from 'marked'
 import DOMPurify from 'isomorphic-dompurify'
 
+interface Citation {
+  kind: 'chunk' | 'entity'
+  id: string
+}
 interface Props {
   role: 'user' | 'assistant'
   content: string
   pending?: boolean
   invalid?: string[]
+  citations?: Citation[]
+  workspaceId?: string
 }
 const props = defineProps<Props>()
 const emit = defineEmits<{ (e: 'open-chunk', chunkId: string): void }>()
+
+const entityCitations = computed(() =>
+  (props.citations ?? []).filter((c) => c.kind === 'entity'),
+)
+const graphHighlightUrl = computed(() => {
+  if (!props.workspaceId || entityCitations.value.length === 0) return null
+  const ids = entityCitations.value.map((c) => c.id).join(',')
+  return `/w/${props.workspaceId}/graph?highlight=${encodeURIComponent(ids)}`
+})
 
 const html = computed(() => {
   if (props.role === 'user') {
@@ -55,9 +70,19 @@ function onClick(e: MouseEvent): void {
     class="rounded-lg border border-border px-4 py-3"
     :class="role === 'user' ? 'bg-secondary' : 'bg-card'"
   >
-    <div class="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
-      {{ role === 'user' ? 'You' : 'CodeGraph' }}
-      <span v-if="pending" class="ml-2 animate-pulse">…</span>
+    <div class="mb-1 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+      <span>
+        {{ role === 'user' ? 'You' : 'CodeGraph' }}
+        <span v-if="pending" class="ml-2 animate-pulse">…</span>
+      </span>
+      <NuxtLink
+        v-if="graphHighlightUrl"
+        :to="graphHighlightUrl"
+        class="rounded bg-accent/40 px-2 py-0.5 text-[10px] normal-case tracking-normal hover:bg-accent"
+        title="Open graph with the cited entities highlighted"
+      >
+        Show on graph
+      </NuxtLink>
     </div>
     <div class="cg-prose text-sm leading-relaxed" v-html="html" @click="onClick" />
   </div>

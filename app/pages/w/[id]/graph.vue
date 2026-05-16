@@ -130,6 +130,12 @@ const { data, refresh, pending } = await useFetch<GraphResponse>(
 
 function nodeColor(node: GraphNode): string {
   const base = typeColors[node.type] ?? '#888'
+  const hasHighlight = highlightSet.value.size > 0
+  if (hasHighlight) {
+    // If there's an active highlight set, fade everything not in it.
+    if (highlightSet.value.has(node.id)) return base
+    return base + '30' // ~19% alpha
+  }
   // Context nodes (pulled in only because a primary node touches them) get
   // a desaturated colour so the eye locks on the user-requested set.
   if (node.isContext) return base + '70' // ~44% alpha in hex
@@ -137,12 +143,22 @@ function nodeColor(node: GraphNode): string {
 }
 
 function nodeSize(node: GraphNode): number {
+  if (highlightSet.value.has(node.id)) return 12
   if (node.isContext) return 3
   if (node.type === 'class') return 8
   if (node.type === 'file') return 6
   if (node.type === 'commit') return 5
   return 4
 }
+
+// Reasoning-subgraph highlight: ids passed via ?highlight=<csv> from a chat
+// message's citations. Highlighted nodes get a halo + bigger size, every
+// other node fades so the eye picks up the path the planner used.
+const highlightSet = computed(() => {
+  const raw = route.query.highlight
+  if (typeof raw !== 'string') return new Set<string>()
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))
+})
 
 function rebuild(): void {
   if (!data.value || !containerRef.value) return
@@ -228,9 +244,16 @@ function rebuild(): void {
 }
 
 watch(data, () => rebuild(), { immediate: false })
+watch(highlightSet, () => rebuild())
 
-onMounted(() => {
+onMounted(async () => {
   if (data.value) rebuild()
+  // If we arrived with ?highlight=…, focus the first highlighted node once
+  // the graph is laid out. This makes the chat → graph hand-off feel
+  // intentional rather than dropping the user at a random viewport.
+  await nextTick()
+  const first = [...highlightSet.value][0]
+  if (first) await focusEntity(first)
 })
 
 onBeforeUnmount(() => {

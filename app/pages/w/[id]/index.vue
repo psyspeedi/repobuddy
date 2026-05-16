@@ -180,6 +180,8 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             :content="msg.content"
             :pending="msg.pending"
             :invalid="msg.invalid"
+            :citations="msg.citations"
+            :workspace-id="workspaceId"
             @open-chunk="onOpenChunk"
           />
         </div>
