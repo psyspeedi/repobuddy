@@ -130,17 +130,23 @@ let sigma: Sigma | null = null
 let graph: Graph | null = null
 
 // ---------- Helpers ----------
+// Highlighted nodes use this colour regardless of their type so the eye
+// catches them immediately. Bright orange contrasts well with every
+// type palette colour and against both light and dark canvas.
+const HIGHLIGHT_COLOR = '#f97316'
+const HIGHLIGHT_SIZE = 16
+
 function nodeColor(node: GraphNode): string {
+  if (highlightSet.value.has(node.id)) return HIGHLIGHT_COLOR
   const base = typeColors[node.type] ?? '#888'
   if (highlightSet.value.size >= 2) {
-    if (highlightSet.value.has(node.id)) return base
     return base + '30'
   }
   if (node.isContext) return base + '70'
   return base
 }
 function nodeSize(node: GraphNode): number {
-  if (highlightSet.value.has(node.id)) return 12
+  if (highlightSet.value.has(node.id)) return HIGHLIGHT_SIZE
   if (node.isContext) return 3
   if (node.type === 'class') return 8
   if (node.type === 'file') return 6
@@ -264,12 +270,14 @@ function rebuild(): void {
       selectedNodeId.value = node
     })
 
-    // Force a paint on the next frame — Sigma sometimes draws to an
-    // off-screen canvas before the layout settles.
+    // Force a paint on the next frame. If there's no highlight, fit the
+    // whole graph; otherwise leave the camera alone so the subsequent
+    // panTo to the highlighted node isn't immediately overridden.
     requestAnimationFrame(() => {
       sigma?.refresh()
-      // Fit camera so everything is visible by default.
-      sigma?.getCamera().animatedReset({ duration: 0 })
+      if (highlightSet.value.size === 0) {
+        sigma?.getCamera().animatedReset({ duration: 0 })
+      }
     })
 
     diag.rebuildCount++
@@ -416,14 +424,12 @@ async function fetchEntityType(id: string): Promise<{ type: string } | null> {
 function panTo(id: string): void {
   if (!graph || !sigma) return
   if (!graph.hasNode(id)) return
-  const total = graph.order
-  if (total <= 3) {
-    sigma.getCamera().animatedReset({ duration: 400 })
-    return
-  }
   const display = sigma.getNodeDisplayData(id)
   if (!display) return
-  const ratio = total < 20 ? 1.0 : total < 100 ? 0.6 : 0.3
+  const total = graph.order
+  // Even for tiny graphs (≤3) we now pan TO the target instead of fitting
+  // the whole graph — otherwise the user has no idea which node was meant.
+  const ratio = total <= 3 ? 1.5 : total < 20 ? 1.0 : total < 100 ? 0.6 : 0.3
   sigma.getCamera().animate(
     { x: display.x, y: display.y, ratio },
     { duration: 400 },
@@ -470,7 +476,23 @@ async function pickSearchResult(hit: SearchHit): Promise<void> {
   await focusEntity(hit.id)
 }
 
-const showDebug = ref(true)
+const showDebug = ref(false)
+
+// Resolve highlighted entity names for an explanatory banner over the canvas.
+const highlightedNodes = computed(() => {
+  if (!data.value) return []
+  const set = highlightSet.value
+  if (set.size === 0) return []
+  return data.value.nodes
+    .filter((n) => set.has(n.id))
+    .map((n) => ({ id: n.id, name: n.name, type: n.type }))
+})
+
+function clearHighlight(): void {
+  const q = { ...route.query }
+  delete q.highlight
+  void navigateTo({ path: route.path, query: q }, { replace: true })
+}
 
 useHead({ title: 'Graph — CodeGraph' })
 </script>
@@ -546,6 +568,25 @@ useHead({ title: 'Graph — CodeGraph' })
       <ClientOnly>
         <div ref="containerRef" class="absolute inset-0" />
       </ClientOnly>
+
+      <!-- Highlight banner: shows the entity(ies) the user is centring on -->
+      <div
+        v-if="highlightedNodes.length > 0"
+        class="absolute left-3 top-14 z-10 flex max-w-md items-center gap-2 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-1.5 text-xs shadow-sm backdrop-blur"
+      >
+        <span class="inline-block h-2 w-2 rounded-full bg-orange-500" />
+        <span class="font-medium">
+          Highlighted: {{ highlightedNodes.map((n) => `${n.name} (${n.type})`).join(', ') }}
+        </span>
+        <button
+          type="button"
+          class="ml-auto text-muted-foreground hover:text-foreground"
+          title="Clear highlight"
+          @click="clearHighlight"
+        >
+          ×
+        </button>
+      </div>
 
       <div class="absolute left-3 right-3 top-3 z-10 max-w-md">
         <input
