@@ -2,6 +2,7 @@
 import Graph from 'graphology'
 import Sigma from 'sigma'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
+import { circular } from 'graphology-layout'
 
 interface GraphNode {
   id: string
@@ -241,15 +242,22 @@ function rebuild(): void {
     }
   }
 
-  forceAtlas2.assign(graph, {
-    iterations: 200,
-    settings: {
-      gravity: 1,
-      scalingRatio: 10,
-      slowDown: 5,
-      barnesHutOptimize: true,
-    },
-  })
+  // ForceAtlas2 with very few nodes tends to collapse them near the origin,
+  // which makes the rendered graph look empty. Use a deterministic circular
+  // layout for tiny graphs; FA2 for everything else.
+  if (graph.order <= 10) {
+    circular.assign(graph, { scale: 100 })
+  } else {
+    forceAtlas2.assign(graph, {
+      iterations: 200,
+      settings: {
+        gravity: 1,
+        scalingRatio: 10,
+        slowDown: 5,
+        barnesHutOptimize: true,
+      },
+    })
+  }
 
   sigma = new Sigma(graph, containerRef.value, {
     // Edge labels are rendered globally only for hovered edge — see
