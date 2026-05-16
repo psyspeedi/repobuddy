@@ -168,6 +168,8 @@ function renderEntity(e: AnswerContextEntity): string[] {
         date?: string
         message?: string
         filesChanged?: string[]
+        diff?: string
+        diffTruncated?: boolean
       }
       if (m.sha) out.push(`- sha: ${m.sha}`)
       if (m.author) out.push(`- author: ${m.author}${m.email ? ` <${m.email}>` : ''}`)
@@ -182,6 +184,12 @@ function renderEntity(e: AnswerContextEntity): string[] {
         if (m.filesChanged.length > 30) {
           out.push(`    - … and ${m.filesChanged.length - 30} more`)
         }
+      }
+      if (m.diff) {
+        out.push(`- diff${m.diffTruncated ? ' (truncated)' : ''}:`)
+        out.push('  ```diff')
+        for (const line of m.diff.split('\n')) out.push(`  ${line}`)
+        out.push('  ```')
       }
     } else if (e.type === 'person') {
       const m = meta as { email?: string; commitCount?: number }

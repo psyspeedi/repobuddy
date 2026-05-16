@@ -336,6 +336,11 @@ export async function persistGitHistory(
         date: c.date.toISOString(),
         message: c.message,
         filesChanged: c.filesChanged,
+        // Concatenated diff (capped at DIFF_TOTAL_CAP in the extractor) is
+        // included directly on the commit row so the answer operator can
+        // render it via renderEntity without a separate fetch.
+        diff: c.diff,
+        diffTruncated: c.diffTruncated,
       },
     }),
   )
@@ -386,6 +391,69 @@ export async function persistGitHistory(
     const BATCH = 500
     for (let i = 0; i < relRows.length; i += BATCH) {
       await db.insert(relations).values(relRows.slice(i, i + BATCH))
+    }
+  }
+
+  // Per-file diff chunks. Each chunk's text is the unified diff for one file
+  // in one commit, source_type='diff', linked to both the commit entity and
+  // (if known) the file entity via entity_chunks.
+  const diffChunkRows: typeof chunks.$inferInsert[] = []
+  type DiffLink = { sha: string; filePath: string }
+  const linksByDiffIndex: DiffLink[] = []
+  for (const c of history.commits) {
+    if (!c.diffsByFile || c.diffsByFile.length === 0) continue
+    for (const file of c.diffsByFile) {
+      diffChunkRows.push({
+        workspaceId,
+        sourceType: 'doc', // ride existing 'doc' source_type for tsvector indexing.
+        filePath: file.filePath,
+        text: file.diff,
+        metadata: {
+          kind: 'diff',
+          sha: c.sha,
+          shortSha: c.sha.slice(0, 7),
+          filePath: file.filePath,
+        },
+      })
+      linksByDiffIndex.push({ sha: c.sha, filePath: file.filePath })
+    }
+  }
+
+  const diffChunkIds: string[] = []
+  if (diffChunkRows.length > 0) {
+    const BATCH = 200
+    for (let i = 0; i < diffChunkRows.length; i += BATCH) {
+      const batch = diffChunkRows.slice(i, i + BATCH)
+      const inserted = await db
+        .insert(chunks)
+        .values(batch)
+        .returning({ id: chunks.id })
+      for (let j = 0; j < inserted.length; j++) {
+        const row = inserted[j]
+        if (!row) continue
+        diffChunkIds.push(row.id)
+      }
+    }
+
+    // Link diff chunks to commit + (best-effort) file entity.
+    const pairs: typeof entityChunks.$inferInsert[] = []
+    for (let i = 0; i < diffChunkIds.length; i++) {
+      const chunkId = diffChunkIds[i]
+      const link = linksByDiffIndex[i]
+      if (!chunkId || !link) continue
+      const commitId = commitIdBySha.get(link.sha)
+      if (commitId) pairs.push({ entityId: commitId, chunkId })
+      const fileId = fileIdByPath.get(link.filePath)
+      if (fileId) pairs.push({ entityId: fileId, chunkId })
+    }
+    if (pairs.length > 0) {
+      const PAIR_BATCH = 1000
+      for (let i = 0; i < pairs.length; i += PAIR_BATCH) {
+        await db
+          .insert(entityChunks)
+          .values(pairs.slice(i, i + PAIR_BATCH))
+          .onConflictDoNothing()
+      }
     }
   }
 

@@ -8,7 +8,8 @@ const { data: wsData, refresh: refreshWs } = await useFetch(`/api/workspaces/${w
   key: `workspace-${workspaceId}`,
 })
 
-const { state, done } = useWorkspaceProgress(workspaceId)
+const progressApi = useWorkspaceProgress(workspaceId)
+const { state, done } = progressApi
 
 watch(done, async (isDone) => {
   if (isDone) await refreshWs()
@@ -70,6 +71,23 @@ async function deleteSession(id: string): Promise<void> {
   }
 }
 
+const reindexing = ref(false)
+async function reindex(): Promise<void> {
+  if (reindexing.value) return
+  reindexing.value = true
+  try {
+    await $fetch(`/api/workspaces/${workspaceId}/reindex`, { method: 'POST' })
+    done.value = false
+    state.value = { status: 'pending', progress: null, stats: null, error: null }
+    progressApi.start()
+    await refreshWs()
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'Re-index failed')
+  } finally {
+    reindexing.value = false
+  }
+}
+
 async function submit(): Promise<void> {
   if (chat.streaming.value || !inputText.value.trim()) return
   const q = inputText.value
@@ -115,11 +133,23 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             <span v-else>Uploaded archive</span>
           </p>
         </div>
-        <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/graph`">
-          <Button variant="outline" size="sm">
-            View graph
+        <div class="flex items-center gap-2">
+          <Button
+            v-if="isReady || isFailed"
+            variant="outline"
+            size="sm"
+            :disabled="reindexing"
+            title="Re-run indexing on the latest commit (picks up new diffs, files, annotations)"
+            @click="reindex"
+          >
+            {{ reindexing ? 'Queuing…' : 'Re-index' }}
           </Button>
-        </NuxtLink>
+          <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/graph`">
+            <Button variant="outline" size="sm">
+              View graph
+            </Button>
+          </NuxtLink>
+        </div>
       </div>
     </header>
 

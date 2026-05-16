@@ -1,5 +1,10 @@
 import { simpleGit, type SimpleGit } from 'simple-git'
 
+export interface CommitDiffPerFile {
+  filePath: string
+  diff: string
+}
+
 export interface GitCommit {
   sha: string
   authorName: string
@@ -7,6 +12,12 @@ export interface GitCommit {
   date: Date
   message: string
   filesChanged: string[]
+  /** Concatenated unified diff for the commit, truncated to DIFF_TOTAL_CAP. */
+  diff: string | null
+  /** Per-file diffs (already truncated to DIFF_PER_FILE_CAP each). */
+  diffsByFile: CommitDiffPerFile[]
+  /** True if the diff was clipped due to size caps. */
+  diffTruncated: boolean
 }
 
 export interface GitAuthor {
@@ -26,16 +37,25 @@ export interface GitHistory {
 
 const HOT_WINDOW_DAYS = 90
 const MAX_COMMITS = 200
+const DIFF_TOTAL_CAP = 60_000 // chars per whole commit
+const DIFF_PER_FILE_CAP = 30_000 // chars per file diff
+
+export interface ExtractGitHistoryOptions {
+  maxCommits?: number
+  hotWindowDays?: number
+  /** Set false in tests to skip the per-commit `git show` call. */
+  includeDiffs?: boolean
+}
 
 export async function extractGitHistory(
   workdir: string,
-  options: { maxCommits?: number; hotWindowDays?: number } = {},
+  options: ExtractGitHistoryOptions = {},
 ): Promise<GitHistory> {
   const git = simpleGit({ baseDir: workdir })
   const maxCommits = options.maxCommits ?? MAX_COMMITS
   const hotWindowDays = options.hotWindowDays ?? HOT_WINDOW_DAYS
+  const includeDiffs = options.includeDiffs ?? true
 
-  // Check that this is actually a git repo (zip-uploaded sources won't be).
   let isRepo = false
   try {
     isRepo = await git.checkIsRepo()
@@ -51,23 +71,20 @@ export async function extractGitHistory(
     }
   }
 
-  return readHistory(git, maxCommits, hotWindowDays)
+  return readHistory(git, maxCommits, hotWindowDays, includeDiffs)
 }
 
 async function readHistory(
   git: SimpleGit,
   maxCommits: number,
   hotWindowDays: number,
+  includeDiffs: boolean,
 ): Promise<GitHistory> {
-  // Pull commit metadata via simple-git's typed log API.
   const log = await git.log({
     maxCount: maxCommits,
     '--no-merges': null,
   })
 
-  // Then attach changed files via a separate `show --name-only --no-patch`
-  // call per commit. This is O(N) calls but for ≤200 commits negligible
-  // and avoids brittle parsing of mixed-format git log output.
   const commits: GitCommit[] = []
   for (const entry of log.all) {
     let filesChanged: string[] = []
@@ -87,6 +104,46 @@ async function readHistory(
     } catch {
       /* ignore unreadable commit */
     }
+
+    let diff: string | null = null
+    let diffsByFile: CommitDiffPerFile[] = []
+    let diffTruncated = false
+    if (includeDiffs && filesChanged.length > 0) {
+      try {
+        // --format=  drops the commit header from `git show` output, leaving
+        // just the unified diff. `-U2` keeps context lines bounded (2 lines)
+        // so big diffs don't balloon needlessly.
+        const raw = await git.raw([
+          'show',
+          '--format=',
+          '-U2',
+          entry.hash,
+        ])
+        const parsed = splitDiffByFile(raw)
+        for (const file of parsed) {
+          if (file.diff.length > DIFF_PER_FILE_CAP) {
+            file.diff = file.diff.slice(0, DIFF_PER_FILE_CAP) + '\n[...truncated]'
+            diffTruncated = true
+          }
+        }
+        diffsByFile = parsed
+        // Combined diff (capped) for metadata.
+        let combined = ''
+        for (const file of parsed) {
+          if (combined.length + file.diff.length + 80 > DIFF_TOTAL_CAP) {
+            const remaining = parsed.length - parsed.indexOf(file)
+            combined += `\n[...${remaining} more file(s) elided due to size]`
+            diffTruncated = true
+            break
+          }
+          combined += `\n--- ${file.filePath} ---\n${file.diff}`
+        }
+        diff = combined.length > 0 ? combined.trim() : null
+      } catch {
+        /* skip diff if anything goes wrong */
+      }
+    }
+
     commits.push({
       sha: entry.hash,
       authorName: entry.author_name || 'unknown',
@@ -94,6 +151,9 @@ async function readHistory(
       date: entry.date ? new Date(entry.date) : new Date(0),
       message: entry.message,
       filesChanged,
+      diff,
+      diffsByFile,
+      diffTruncated,
     })
   }
 
@@ -127,4 +187,36 @@ async function readHistory(
     hotness,
     hotWindowDays,
   }
+}
+
+/**
+ * Split a `git show --format= -U2 <sha>` payload into per-file diffs.
+ * Each `diff --git a/<path> b/<path>` line starts a new file block;
+ * everything until the next `diff --git` belongs to the previous one.
+ */
+function splitDiffByFile(raw: string): CommitDiffPerFile[] {
+  const lines = raw.split('\n')
+  const out: CommitDiffPerFile[] = []
+  let currentPath: string | null = null
+  let currentBody: string[] = []
+
+  const flush = (): void => {
+    if (currentPath !== null && currentBody.length > 0) {
+      out.push({ filePath: currentPath, diff: currentBody.join('\n') })
+    }
+  }
+
+  for (const line of lines) {
+    const m = line.match(/^diff --git a\/(.+?) b\/(.+)$/)
+    if (m) {
+      flush()
+      // Prefer the b/ path (post-change name).
+      currentPath = m[2] ?? m[1] ?? null
+      currentBody = [line]
+    } else if (currentPath !== null) {
+      currentBody.push(line)
+    }
+  }
+  flush()
+  return out
 }

@@ -16,7 +16,7 @@ import type {
 import { fetchGitHub, type FetchedSource } from './source/fetch'
 import { walkRepo } from './source/walk'
 import { extractGitHistory } from './git/history'
-import { embedChunks } from './embed'
+import { embedAllPendingChunks, embedChunks } from './embed'
 import {
   createEmbeddingsProvider,
   type EmbeddingsProvider,
@@ -311,6 +311,22 @@ export async function runIndexPipeline(
         history,
         fileIdByPath,
       )
+
+      // Diff chunks were created inside persistGitHistory but skipped the
+      // earlier embed step. Catch them up here so hybrid_search and
+      // retrieve_code_chunks can use them.
+      const diffEmbedded = await embedAllPendingChunks(
+        db,
+        workspaceId,
+        embeddings,
+      )
+      if (diffEmbedded > 0) {
+        await setWorkspaceProgress(db, workspaceId, {
+          phase: 'embedding',
+          percent: 96,
+          message: `Embedded ${diffEmbedded} diff chunk(s)`,
+        })
+      }
 
       // 10b. Annotate file entities with hotness in their metadata.
       for (const [path, hits] of history.hotness) {
