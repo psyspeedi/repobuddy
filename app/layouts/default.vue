@@ -2,9 +2,16 @@
 import { Button } from '@/components/ui/button'
 
 const colorMode = useColorMode()
+const { loggedIn, user, clear } = useUserSession()
 
 function toggleTheme(): void {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
+}
+
+async function logout(): Promise<void> {
+  await $fetch('/api/auth/logout', { method: 'POST' })
+  await clear()
+  await navigateTo('/login')
 }
 </script>
 
@@ -15,14 +22,24 @@ function toggleTheme(): void {
         <NuxtLink to="/" class="text-lg font-semibold tracking-tight">
           CodeGraph
         </NuxtLink>
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label="Toggle theme"
-          @click="toggleTheme"
-        >
-          {{ colorMode.value === 'dark' ? 'Light' : 'Dark' }}
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Toggle theme"
+            @click="toggleTheme"
+          >
+            {{ colorMode.value === 'dark' ? 'Light' : 'Dark' }}
+          </Button>
+          <template v-if="loggedIn">
+            <span class="hidden text-sm text-muted-foreground sm:inline">
+              {{ user?.login }}
+            </span>
+            <Button variant="ghost" size="sm" @click="logout">
+              Sign out
+            </Button>
+          </template>
+        </div>
       </div>
     </header>
     <main class="container mx-auto px-4 py-6">

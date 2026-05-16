@@ -30,12 +30,12 @@ async function applyRawSqlMigrations(sql: postgres.Sql): Promise<void> {
   `)
 
   for (const file of files) {
-    const [{ exists }] = await sql<{ exists: boolean }[]>`
+    const rows = await sql<{ exists: boolean }[]>`
       SELECT EXISTS (
         SELECT 1 FROM "_codegraph_raw_migrations" WHERE name = ${file}
       ) AS exists
     `
-    if (exists) continue
+    if (rows[0]?.exists) continue
 
     const content = await readFile(join(RAW_SQL_DIR, file), 'utf-8')
     console.log(`[migrate] applying raw SQL: ${file}`)

@@ -12,6 +12,7 @@ export default defineNuxtConfig({
     '@nuxt/eslint',
     '@nuxtjs/color-mode',
     '@vueuse/nuxt',
+    'nuxt-auth-utils',
     'shadcn-nuxt',
   ],
 
@@ -58,21 +59,36 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    databaseUrl: '',
-    redisUrl: '',
-    openaiApiKey: '',
-    openaiModelExtraction: 'gpt-4o-mini',
-    openaiModelPlanning: 'gpt-4o',
-    openaiEmbeddingModel: 'text-embedding-3-small',
-    githubClientId: '',
-    githubClientSecret: '',
-    encryptionKey: '',
-    maxRepoSizeMb: 200,
-    maxFilesPerIndex: 2000,
-    llmBudgetUsdPerIndex: 2,
-    processRole: 'web',
+    databaseUrl: process.env.DATABASE_URL ?? '',
+    redisUrl: process.env.REDIS_URL ?? '',
+    openaiApiKey: process.env.OPENAI_API_KEY ?? '',
+    openaiModelExtraction: process.env.OPENAI_MODEL_EXTRACTION ?? 'gpt-4o-mini',
+    openaiModelPlanning: process.env.OPENAI_MODEL_PLANNING ?? 'gpt-4o',
+    openaiEmbeddingModel:
+      process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small',
+    encryptionKey: process.env.ENCRYPTION_KEY ?? '',
+    maxRepoSizeMb: Number(process.env.MAX_REPO_SIZE_MB ?? 200),
+    maxFilesPerIndex: Number(process.env.MAX_FILES_PER_INDEX ?? 2000),
+    llmBudgetUsdPerIndex: Number(process.env.LLM_BUDGET_USD_PER_INDEX ?? 2),
+    processRole: process.env.PROCESS_ROLE ?? 'web',
+
+    // nuxt-auth-utils wires session and OAuth from these keys
+    session: {
+      password: process.env.NUXT_SESSION_PASSWORD ?? '',
+      name: 'codegraph-session',
+      cookie: {
+        sameSite: 'lax',
+      },
+    },
+    oauth: {
+      github: {
+        clientId: process.env.GITHUB_CLIENT_ID ?? '',
+        clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',
+      },
+    },
+
     public: {
-      appUrl: 'http://localhost:3000',
+      appUrl: process.env.APP_URL ?? 'http://localhost:3000',
     },
   },
 })
