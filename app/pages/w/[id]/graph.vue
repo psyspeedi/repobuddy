@@ -50,11 +50,41 @@ const typeColors: Record<string, string> = {
   document: '#71717a',
 }
 
+// Edge colour palette. Picked to be distinguishable on both light and
+// dark backgrounds without being garish. Unknown relation types fall back
+// to the neutral grey.
+const edgeColors: Record<string, string> = {
+  calls: '#10b981',         // green — control flow
+  imports: '#3b82f6',       // blue — module deps
+  extends: '#a855f7',       // purple — class inheritance
+  implements: '#a855f7',
+  uses_type: '#7c3aed',
+  defined_in: '#94a3b8',
+  contained_in: '#94a3b8',
+  renders: '#0ea5e9',
+  handles: '#0ea5e9',
+  tested_by: '#ef4444',
+  implements_concept: '#facc15',
+  follows_pattern: '#f59e0b',
+  mentioned_in: '#cbd5e1',
+  modified_by: '#ec4899',   // pink — git
+  authored: '#22c55e',
+  introduced_in: '#22c55e',
+  relates_to: '#cbd5e1',
+}
+const DEFAULT_EDGE_COLOR = '#cbd5e1'
+
 const selectedTypes = ref<string[]>(['file', 'class', 'function'])
 const selectedNodeId = ref<string | null>(null)
+const hoveredEdgeId = ref<string | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 let sigma: Sigma | null = null
 let graph: Graph | null = null
+
+const visibleEdgeTypes = computed(() => {
+  if (!data.value) return new Set<string>()
+  return new Set(data.value.edges.map((e) => e.type))
+})
 
 const query = computed(() => ({
   types: selectedTypes.value.join(','),
@@ -111,7 +141,7 @@ function rebuild(): void {
       graph.addEdgeWithKey(edge.id, edge.fromEntityId, edge.toEntityId, {
         type: 'arrow',
         size: 1,
-        color: '#cbd5e1',
+        color: edgeColors[edge.type] ?? DEFAULT_EDGE_COLOR,
         label: edge.type,
         edgeType: edge.type,
       })
@@ -131,11 +161,34 @@ function rebuild(): void {
   })
 
   sigma = new Sigma(graph, containerRef.value, {
-    renderEdgeLabels: false,
+    // Edge labels are rendered globally only for hovered edge — see
+    // edgeReducer below. Setting renderEdgeLabels: true is required for
+    // the reducer's `label` field to actually paint.
+    renderEdgeLabels: true,
     labelDensity: 0.5,
     labelGridCellSize: 60,
     minCameraRatio: 0.05,
     maxCameraRatio: 10,
+  })
+
+  // By default hide every edge label; only paint the one Sigma is hovering.
+  sigma.setSetting('edgeReducer', (edge, attrs) => {
+    const hovered = hoveredEdgeId.value === edge
+    return {
+      ...attrs,
+      label: hovered ? attrs.label : '',
+      size: hovered ? 2 : attrs.size,
+      color: hovered ? attrs.color : attrs.color,
+    }
+  })
+
+  sigma.on('enterEdge', ({ edge }) => {
+    hoveredEdgeId.value = edge
+    sigma?.refresh()
+  })
+  sigma.on('leaveEdge', () => {
+    hoveredEdgeId.value = null
+    sigma?.refresh()
   })
 
   sigma.on('clickNode', ({ node }) => {
@@ -221,6 +274,18 @@ useHead({ title: 'Graph — CodeGraph' })
       <div v-if="data?.counts" class="text-[10px] text-muted-foreground">
         {{ data.counts.primary }} primary, {{ data.counts.context }} context, {{ data.counts.edges }} edges
       </div>
+
+      <details v-if="visibleEdgeTypes.size > 0" class="pt-1">
+        <summary class="cursor-pointer text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Edges
+        </summary>
+        <ul class="mt-2 space-y-1 text-xs">
+          <li v-for="t in [...visibleEdgeTypes].sort()" :key="t" class="flex items-center gap-2">
+            <span class="inline-block h-2 w-6 rounded" :style="{ backgroundColor: edgeColors[t] ?? '#cbd5e1' }" />
+            <span>{{ t }}</span>
+          </li>
+        </ul>
+      </details>
       <div v-if="data?.truncated" class="rounded bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
         Graph truncated. Adjust filters to narrow.
       </div>
