@@ -20,24 +20,62 @@ const message = computed(() => state.value.progress?.message ?? '')
 const isReady = computed(() => phase.value === 'ready')
 const isFailed = computed(() => phase.value === 'failed')
 
+// Chat
+const chat = useChat(workspaceId)
+const inputText = ref('')
+const openChunkId = ref<string | null>(null)
+const scroller = ref<HTMLDivElement | null>(null)
+
+async function submit(): Promise<void> {
+  if (chat.streaming.value || !inputText.value.trim()) return
+  const q = inputText.value
+  inputText.value = ''
+  await chat.send(q)
+  scrollToBottom()
+}
+
+function scrollToBottom(): void {
+  nextTick(() => {
+    scroller.value?.scrollTo({ top: scroller.value.scrollHeight, behavior: 'smooth' })
+  })
+}
+
+watch(
+  () => chat.messages.value.length,
+  () => scrollToBottom(),
+)
+watch(
+  () => chat.messages.value.at(-1)?.content,
+  () => scrollToBottom(),
+)
+
 useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — CodeGraph` }))
 </script>
 
 <template>
-  <div v-if="wsData" class="space-y-6">
+  <div v-if="wsData" class="space-y-4">
     <header class="space-y-1">
-      <h1 class="text-2xl font-bold">
-        {{ wsData.workspace.name }}
-      </h1>
-      <p class="text-sm text-muted-foreground">
-        <a
-          v-if="wsData.workspace.sourceUrl"
-          :href="wsData.workspace.sourceUrl"
-          target="_blank"
-          class="underline-offset-2 hover:underline"
-        >{{ wsData.workspace.sourceUrl }}</a>
-        <span v-else>Uploaded archive</span>
-      </p>
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold">
+            {{ wsData.workspace.name }}
+          </h1>
+          <p class="text-sm text-muted-foreground">
+            <a
+              v-if="wsData.workspace.sourceUrl"
+              :href="wsData.workspace.sourceUrl"
+              target="_blank"
+              class="underline-offset-2 hover:underline"
+            >{{ wsData.workspace.sourceUrl }}</a>
+            <span v-else>Uploaded archive</span>
+          </p>
+        </div>
+        <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/graph`">
+          <Button variant="outline" size="sm">
+            View graph
+          </Button>
+        </NuxtLink>
+      </div>
     </header>
 
     <section
@@ -62,19 +100,6 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
     </section>
 
     <section
-      v-else-if="isReady"
-      class="space-y-3 rounded-lg border border-border bg-card p-6"
-    >
-      <h2 class="text-lg font-semibold">
-        Ready
-      </h2>
-      <pre class="overflow-x-auto rounded bg-muted p-3 text-xs">{{ JSON.stringify(wsData.workspace.stats, null, 2) }}</pre>
-      <NuxtLink :to="`/w/${workspaceId}/graph`">
-        <Button>Open graph</Button>
-      </NuxtLink>
-    </section>
-
-    <section
       v-else-if="isFailed"
       class="space-y-2 rounded-lg border border-destructive bg-destructive/10 p-6"
     >
@@ -84,6 +109,51 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
       <p class="text-sm">
         {{ wsData.workspace.error ?? 'Unknown error' }}
       </p>
+    </section>
+
+    <section
+      v-else
+      class="flex h-[calc(100vh-14rem)] gap-3"
+    >
+      <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
+        <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4">
+          <p v-if="chat.messages.value.length === 0" class="text-center text-sm text-muted-foreground">
+            Ask anything about this repository.
+          </p>
+          <ChatMessage
+            v-for="(msg, i) in chat.messages.value"
+            :key="i"
+            :role="msg.role"
+            :content="msg.content"
+            :pending="msg.pending"
+            :invalid="msg.invalid"
+            @open-chunk="openChunkId = $event"
+          />
+        </div>
+        <form
+          class="flex items-center gap-2 border-t border-border p-3"
+          @submit.prevent="submit"
+        >
+          <input
+            v-model="inputText"
+            type="text"
+            placeholder="Ask about the repo…"
+            class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            :disabled="chat.streaming.value"
+          >
+          <Button type="submit" :disabled="chat.streaming.value || !inputText.trim()">
+            Send
+          </Button>
+        </form>
+      </div>
+
+      <div v-if="openChunkId" class="w-[420px] shrink-0">
+        <SourceViewerDrawer
+          :workspace-id="workspaceId"
+          :chunk-id="openChunkId"
+          @close="openChunkId = null"
+        />
+      </div>
     </section>
   </div>
 </template>

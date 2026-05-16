@@ -1,0 +1,114 @@
+<script setup lang="ts">
+import { marked } from 'marked'
+import DOMPurify from 'isomorphic-dompurify'
+
+interface Props {
+  role: 'user' | 'assistant'
+  content: string
+  pending?: boolean
+  invalid?: string[]
+}
+const props = defineProps<Props>()
+const emit = defineEmits<{ (e: 'open-chunk', chunkId: string): void }>()
+
+const html = computed(() => {
+  if (props.role === 'user') {
+    return escapeHtml(props.content)
+  }
+  // Replace [chunk:UUID] / [entity:UUID] markers with anchor placeholders
+  // that survive markdown rendering, then DOMPurify hardens the output.
+  const withPlaceholders = props.content.replace(
+    /\[(chunk|entity):([0-9a-f-]{36})\]/gi,
+    (_, kind: string, id: string) => {
+      const k = kind.toLowerCase()
+      const invalid = (props.invalid ?? []).includes(id.toLowerCase()) ? ' data-invalid="true"' : ''
+      return `<a class="cg-cite" data-kind="${k}" data-id="${id.toLowerCase()}"${invalid} href="#"></a>`
+    },
+  )
+  const rendered = marked.parse(withPlaceholders, { async: false }) as string
+  return DOMPurify.sanitize(rendered, {
+    ADD_ATTR: ['data-kind', 'data-id', 'data-invalid'],
+  })
+})
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function onClick(e: MouseEvent): void {
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  const anchor = target.closest<HTMLAnchorElement>('a.cg-cite')
+  if (!anchor) return
+  e.preventDefault()
+  const kind = anchor.getAttribute('data-kind')
+  const id = anchor.getAttribute('data-id')
+  if (kind === 'chunk' && id) emit('open-chunk', id)
+}
+</script>
+
+<template>
+  <div
+    class="rounded-lg border border-border px-4 py-3"
+    :class="role === 'user' ? 'bg-secondary' : 'bg-card'"
+  >
+    <div class="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+      {{ role === 'user' ? 'You' : 'CodeGraph' }}
+      <span v-if="pending" class="ml-2 animate-pulse">…</span>
+    </div>
+    <div class="cg-prose text-sm leading-relaxed" v-html="html" @click="onClick" />
+  </div>
+</template>
+
+<style>
+.cg-prose pre {
+  background: hsl(var(--muted));
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  margin: 0.5rem 0;
+}
+.cg-prose code {
+  background: hsl(var(--muted));
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+.cg-prose pre code {
+  background: transparent;
+  padding: 0;
+}
+.cg-prose p {
+  margin: 0.5rem 0;
+}
+.cg-prose ul {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  list-style: disc;
+}
+.cg-prose ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+.cg-prose a.cg-cite::before {
+  content: '↗';
+  display: inline-block;
+  font-size: 0.7em;
+  padding: 0.1em 0.3em;
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border-radius: 0.25rem;
+  margin: 0 0.15em;
+  cursor: pointer;
+}
+.cg-prose a.cg-cite[data-invalid="true"]::before {
+  background: hsl(var(--destructive) / 0.15);
+  color: hsl(var(--destructive));
+  content: '⚠';
+}
+</style>
