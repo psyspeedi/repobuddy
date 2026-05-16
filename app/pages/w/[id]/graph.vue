@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button'
 import Graph from 'graphology'
 import Sigma from 'sigma'
 import forceAtlas2 from 'graphology-layout-forceatlas2'
@@ -11,6 +10,7 @@ interface GraphNode {
   qualifiedName: string | null
   language: string | null
   filePath: string | null
+  isContext?: boolean
 }
 
 interface GraphEdge {
@@ -25,6 +25,7 @@ interface GraphResponse {
   edges: GraphEdge[]
   truncated: boolean
   stats: { type: string; count: number }[]
+  counts: { primary: number; context: number; edges: number }
 }
 
 const route = useRoute()
@@ -50,7 +51,7 @@ const typeColors: Record<string, string> = {
 }
 
 const selectedTypes = ref<string[]>(['file', 'class', 'function'])
-const selectedNode = ref<GraphNode | null>(null)
+const selectedNodeId = ref<string | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 let sigma: Sigma | null = null
 let graph: Graph | null = null
@@ -58,12 +59,29 @@ let graph: Graph | null = null
 const query = computed(() => ({
   types: selectedTypes.value.join(','),
   limit: 1500,
+  neighbors: '1',
 }))
 
 const { data, refresh, pending } = await useFetch<GraphResponse>(
   `/api/workspaces/${workspaceId}/graph`,
   { query, key: `graph-${workspaceId}` },
 )
+
+function nodeColor(node: GraphNode): string {
+  const base = typeColors[node.type] ?? '#888'
+  // Context nodes (pulled in only because a primary node touches them) get
+  // a desaturated colour so the eye locks on the user-requested set.
+  if (node.isContext) return base + '70' // ~44% alpha in hex
+  return base
+}
+
+function nodeSize(node: GraphNode): number {
+  if (node.isContext) return 3
+  if (node.type === 'class') return 8
+  if (node.type === 'file') return 6
+  if (node.type === 'commit') return 5
+  return 4
+}
 
 function rebuild(): void {
   if (!data.value || !containerRef.value) return
@@ -78,12 +96,13 @@ function rebuild(): void {
     seenIds.add(node.id)
     graph.addNode(node.id, {
       label: node.name,
-      size: node.type === 'file' ? 6 : node.type === 'class' ? 8 : 4,
-      color: typeColors[node.type] ?? '#888',
+      size: nodeSize(node),
+      color: nodeColor(node),
       x: Math.random(),
       y: Math.random(),
       nodeType: node.type,
       qualifiedName: node.qualifiedName,
+      isContext: !!node.isContext,
     })
   }
   for (const edge of data.value.edges) {
@@ -94,13 +113,13 @@ function rebuild(): void {
         size: 1,
         color: '#cbd5e1',
         label: edge.type,
+        edgeType: edge.type,
       })
     } catch {
       // duplicate key from multi-graph constraints
     }
   }
 
-  // Single-shot ForceAtlas2 layout.
   forceAtlas2.assign(graph, {
     iterations: 200,
     settings: {
@@ -120,10 +139,7 @@ function rebuild(): void {
   })
 
   sigma.on('clickNode', ({ node }) => {
-    const attrs = graph!.getNodeAttributes(node)
-    const original = data.value!.nodes.find((n) => n.id === node)
-    if (original) selectedNode.value = original
-    void attrs
+    selectedNodeId.value = node
   })
 }
 
@@ -146,6 +162,33 @@ function toggleType(t: string): void {
   if (i === -1) selectedTypes.value = [...selectedTypes.value, t]
   else selectedTypes.value = selectedTypes.value.filter((x) => x !== t)
   void refresh()
+}
+
+/**
+ * Focus an entity in the graph: pan + zoom + select.
+ * If the node isn't currently in the rendered subgraph, refresh and try
+ * again once the new payload arrives.
+ */
+async function focusEntity(id: string): Promise<void> {
+  if (!graph || !sigma) return
+  if (!graph.hasNode(id)) {
+    selectedNodeId.value = id
+    await refresh()
+    await nextTick()
+    if (graph.hasNode(id)) panTo(id)
+    return
+  }
+  selectedNodeId.value = id
+  panTo(id)
+}
+
+function panTo(id: string): void {
+  if (!graph || !sigma) return
+  const attrs = graph.getNodeAttributes(id)
+  sigma.getCamera().animate(
+    { x: attrs.x, y: attrs.y, ratio: 0.4 },
+    { duration: 400 },
+  )
 }
 
 useHead({ title: 'Graph — CodeGraph' })
@@ -175,6 +218,9 @@ useHead({ title: 'Graph — CodeGraph' })
           </label>
         </li>
       </ul>
+      <div v-if="data?.counts" class="text-[10px] text-muted-foreground">
+        {{ data.counts.primary }} primary, {{ data.counts.context }} context, {{ data.counts.edges }} edges
+      </div>
       <div v-if="data?.truncated" class="rounded bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
         Graph truncated. Adjust filters to narrow.
       </div>
@@ -193,30 +239,12 @@ useHead({ title: 'Graph — CodeGraph' })
       </div>
     </section>
 
-    <aside
-      v-if="selectedNode"
-      class="w-72 shrink-0 space-y-2 overflow-y-auto rounded-lg border border-border bg-card p-3"
-    >
-      <div class="flex items-start justify-between gap-2">
-        <h3 class="text-sm font-semibold break-all">
-          {{ selectedNode.name }}
-        </h3>
-        <Button variant="ghost" size="sm" @click="selectedNode = null">
-          ×
-        </Button>
-      </div>
-      <p class="text-xs text-muted-foreground">
-        type: {{ selectedNode.type }}
-      </p>
-      <p v-if="selectedNode.language" class="text-xs text-muted-foreground">
-        lang: {{ selectedNode.language }}
-      </p>
-      <p v-if="selectedNode.filePath" class="break-all text-xs text-muted-foreground">
-        path: {{ selectedNode.filePath }}
-      </p>
-      <p v-if="selectedNode.qualifiedName" class="break-all text-xs">
-        {{ selectedNode.qualifiedName }}
-      </p>
-    </aside>
+    <GraphNodeDetail
+      v-if="selectedNodeId"
+      :workspace-id="workspaceId"
+      :entity-id="selectedNodeId"
+      @close="selectedNodeId = null"
+      @focus="focusEntity"
+    />
   </div>
 </template>
