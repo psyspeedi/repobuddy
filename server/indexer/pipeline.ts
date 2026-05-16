@@ -21,6 +21,8 @@ import {
   createEmbeddingsProvider,
   type EmbeddingsProvider,
 } from '../providers/embeddings'
+import { annotateAndEmbed } from './annotate'
+import { type LLMProvider } from '../providers/llm'
 import { getTypeScriptParser } from './parsers/typescript'
 import { getPythonParser } from './parsers/python'
 import { getGoParser } from './parsers/go'
@@ -43,6 +45,11 @@ const log = getLogger().child({ component: 'indexer/pipeline' })
 
 export interface PipelineDeps {
   embeddings?: EmbeddingsProvider
+  llm?: LLMProvider
+  /** Skip the LLM annotation phase entirely (useful for tests / cost-control). */
+  skipAnnotation?: boolean
+  /** Hard cap on annotated entities (forwarded to annotateAndEmbed). */
+  maxAnnotated?: number
 }
 
 export async function runIndexPipeline(
@@ -244,6 +251,23 @@ export async function runIndexPipeline(
         },
       )
 
+      // 9c. LLM semantic annotation (phase 4).
+      let annotationStats = { annotated: 0, conceptsCreated: 0, patternsCreated: 0 }
+      if (!deps.skipAnnotation && deps.llm) {
+        await setWorkspaceProgress(db, workspaceId, {
+          phase: 'extracting',
+          percent: 92,
+          message: 'Running LLM semantic annotation…',
+        })
+        annotationStats = await annotateAndEmbed(
+          db,
+          workspaceId,
+          deps.llm,
+          embeddings,
+          { maxEntities: deps.maxAnnotated },
+        )
+      }
+
       // 10. Git history.
       await setWorkspaceProgress(db, workspaceId, {
         phase: 'embedding',
@@ -284,6 +308,9 @@ export async function runIndexPipeline(
         embeddedChunks: embeddedCount,
         commits: commitCount,
         warnings: warnings.length,
+        annotated: annotationStats.annotated,
+        concepts: annotationStats.conceptsCreated,
+        patterns: annotationStats.patternsCreated,
         tokensSpent: 0,
       })
 

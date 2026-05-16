@@ -76,7 +76,12 @@ beforeAll(async () => {
 
   worker = new Worker(
     INDEX_WORKSPACE_QUEUE,
-    async (job) => runIndexPipeline(db, job, { embeddings: mockEmbeddings }),
+    async (job) =>
+      runIndexPipeline(db, job, {
+        embeddings: mockEmbeddings,
+        // Annotation requires an LLM provider; pipeline tests skip it.
+        skipAnnotation: true,
+      }),
     { connection, concurrency: 1 },
   )
   events = new QueueEvents(INDEX_WORKSPACE_QUEUE, { connection })
