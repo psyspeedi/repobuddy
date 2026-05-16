@@ -276,6 +276,13 @@ function rebuild(): void {
 
 watch(data, () => rebuild(), { immediate: false })
 watch(highlightSet, () => rebuild())
+watch(selectedNodeId, () => {
+  // LOD nodeReducer reads selectedNodeId.value via closure — Sigma doesn't
+  // know the ref changed. Force re-evaluation so the newly selected node
+  // becomes visible (and the previously selected one fades back into
+  // degree-gated visibility).
+  sigma?.refresh()
+})
 
 onMounted(async () => {
   if (data.value) rebuild()
@@ -324,23 +331,51 @@ function matchPreset(types: string[]): string | null {
  * again once the new payload arrives.
  */
 async function focusEntity(id: string): Promise<void> {
-  if (!graph || !sigma) return
-  if (!graph.hasNode(id)) {
-    selectedNodeId.value = id
+  selectedNodeId.value = id
+  if (!graph || !sigma || !graph.hasNode(id)) {
+    // Node isn't in the current view. We don't know its type yet, so pull
+    // it from the search endpoint to learn what filter would have to include
+    // it, then ensure that type is selected before refetching.
+    const hit = await fetchEntityType(id)
+    if (hit?.type && !selectedTypes.value.includes(hit.type)) {
+      selectedTypes.value = [...selectedTypes.value, hit.type]
+      activePreset.value = matchPreset(selectedTypes.value)
+    }
     await refresh()
     await nextTick()
-    if (graph.hasNode(id)) panTo(id)
-    return
+    // wait one more frame so the watcher's rebuild() has actually run
+    await nextTick()
+    if (!graph || !sigma || !graph.hasNode(id)) return
   }
-  selectedNodeId.value = id
   panTo(id)
+  // The LOD reducer reads selectedNodeId.value via closure; Sigma doesn't
+  // know the value changed, so re-evaluate visibility explicitly.
+  sigma.refresh()
+}
+
+async function fetchEntityType(
+  id: string,
+): Promise<{ type: string } | null> {
+  try {
+    const res = await $fetch<{ entity: { type: string } }>(
+      `/api/workspaces/${workspaceId}/entity/${id}`,
+    )
+    return res.entity
+  } catch {
+    return null
+  }
 }
 
 function panTo(id: string): void {
   if (!graph || !sigma) return
-  const attrs = graph.getNodeAttributes(id)
+  // Sigma's camera.animate() takes coordinates in normalized camera space.
+  // Raw ForceAtlas2 attrs are in graph space — they'd send the camera
+  // off-canvas. getNodeDisplayData() returns the post-normalized {x, y}
+  // that the renderer is actually using.
+  const display = sigma.getNodeDisplayData(id)
+  if (!display) return
   sigma.getCamera().animate(
-    { x: attrs.x, y: attrs.y, ratio: 0.4 },
+    { x: display.x, y: display.y, ratio: 0.3 },
     { duration: 400 },
   )
 }
