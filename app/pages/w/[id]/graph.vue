@@ -172,9 +172,11 @@ const { data, refresh, pending } = await useFetch<GraphResponse>(
 
 function nodeColor(node: GraphNode): string {
   const base = typeColors[node.type] ?? '#888'
-  const hasHighlight = highlightSet.value.size > 0
-  if (hasHighlight) {
-    // If there's an active highlight set, fade everything not in it.
+  // Fade non-highlighted nodes only when the highlight set is a real
+  // reasoning trace (≥ 2 nodes) so the eye can follow it. For a single
+  // highlight (clicking one citation), we keep neighbours fully visible
+  // so the user actually sees what the entity connects to.
+  if (highlightSet.value.size >= 2) {
     if (highlightSet.value.has(node.id)) return base
     return base + '30' // ~19% alpha
   }
@@ -399,14 +401,20 @@ async function fetchEntityType(
 
 function panTo(id: string): void {
   if (!graph || !sigma) return
-  // Sigma's camera.animate() takes coordinates in normalized camera space.
-  // Raw ForceAtlas2 attrs are in graph space — they'd send the camera
-  // off-canvas. getNodeDisplayData() returns the post-normalized {x, y}
-  // that the renderer is actually using.
   const display = sigma.getNodeDisplayData(id)
   if (!display) return
+  // ratio scales with graph size: tiny subgraphs (e.g. one commit + one
+  // file) place every node near the origin, and a ratio of 0.3 zooms past
+  // the whole layout. For small graphs we use a wider ratio; for very small
+  // (≤ 3 nodes) we just reset to fit everything.
+  const total = graph.order
+  if (total <= 3) {
+    sigma.getCamera().animatedReset({ duration: 400 })
+    return
+  }
+  const ratio = total < 20 ? 1.0 : total < 100 ? 0.6 : 0.3
   sigma.getCamera().animate(
-    { x: display.x, y: display.y, ratio: 0.3 },
+    { x: display.x, y: display.y, ratio },
     { duration: 400 },
   )
 }
