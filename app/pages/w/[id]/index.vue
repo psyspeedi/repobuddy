@@ -170,7 +170,6 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           <Button
             variant="outline"
             size="sm"
-            :disabled="!openChunkId"
             :class="sidePanel === 'viewer' ? 'bg-accent' : ''"
             @click="sidePanel = 'viewer'"
           >
@@ -188,6 +187,13 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           :chunk-id="openChunkId"
           @close="sidePanel = 'inspector'"
         />
+        <aside
+          v-else-if="sidePanel === 'viewer' && !openChunkId"
+          class="flex h-full w-full items-center justify-center rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground"
+        >
+          Click a citation in the chat (the ↗ badge after a claim) to open the
+          referenced code here.
+        </aside>
       </div>
     </section>
   </div>

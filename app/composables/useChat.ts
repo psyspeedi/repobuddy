@@ -101,8 +101,18 @@ export function useChat(workspaceId: string) {
     let event = 'message'
     let data = ''
     for (const line of raw.split('\n')) {
-      if (line.startsWith('event:')) event = line.slice(6).trim()
-      else if (line.startsWith('data:')) data += line.slice(5).trimStart()
+      if (line.startsWith('event:')) {
+        event = line.slice(6).trim()
+      } else if (line.startsWith('data:')) {
+        // SSE spec: a single U+0020 SPACE after the colon is the field
+        // separator and must be removed. Any further leading whitespace
+        // is content and must be preserved. trimStart() ate every space,
+        // which is why streamed tokens like " hello" collapsed into "hello"
+        // and the answer came back with no spaces between tokens.
+        let value = line.slice(5)
+        if (value.startsWith(' ')) value = value.slice(1)
+        data += value
+      }
     }
     const last = messages.value.at(-1)
     if (!last || last.role !== 'assistant') return
