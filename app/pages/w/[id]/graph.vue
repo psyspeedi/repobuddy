@@ -102,9 +102,15 @@ const query = computed(() => ({
   neighbors: '1',
 }))
 
+// `watch: false` disables Nuxt's automatic refetch on reactive query
+// changes. We only refetch on EXPLICIT refresh() calls (toggleType,
+// applyPreset, loadMore, onMounted highlight expansion). Without this,
+// mutating selectedTypes triggered an auto-refetch in parallel with our
+// explicit refresh — two responses, two data mutations, two rebuilds,
+// camera fight, "graph flashes then disappears".
 const { data, refresh, pending } = await useFetch<GraphResponse>(
   `/api/workspaces/${workspaceId}/graph`,
-  { query, key: `graph-${workspaceId}`, watch: [query] },
+  { query, key: `graph-${workspaceId}`, watch: false },
 )
 
 // ---------- Diagnostic state (visible in dev) ----------
