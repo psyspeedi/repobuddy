@@ -24,7 +24,17 @@ const isFailed = computed(() => phase.value === 'failed')
 const chat = useChat(workspaceId)
 const inputText = ref('')
 const openChunkId = ref<string | null>(null)
+const sidePanel = ref<'inspector' | 'viewer' | null>('inspector')
 const scroller = ref<HTMLDivElement | null>(null)
+
+const lastAssistant = computed(() =>
+  [...chat.messages.value].reverse().find((m) => m.role === 'assistant') ?? null,
+)
+
+function onOpenChunk(chunkId: string): void {
+  openChunkId.value = chunkId
+  sidePanel.value = 'viewer'
+}
 
 async function submit(): Promise<void> {
   if (chat.streaming.value || !inputText.value.trim()) return
@@ -127,7 +137,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             :content="msg.content"
             :pending="msg.pending"
             :invalid="msg.invalid"
-            @open-chunk="openChunkId = $event"
+            @open-chunk="onOpenChunk"
           />
         </div>
         <form
@@ -147,11 +157,36 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
         </form>
       </div>
 
-      <div v-if="openChunkId" class="w-[420px] shrink-0">
+      <div v-if="sidePanel" class="flex w-[420px] shrink-0 flex-col gap-2">
+        <div class="flex gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            :class="sidePanel === 'inspector' ? 'bg-accent' : ''"
+            @click="sidePanel = 'inspector'"
+          >
+            Reasoning
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="!openChunkId"
+            :class="sidePanel === 'viewer' ? 'bg-accent' : ''"
+            @click="sidePanel = 'viewer'"
+          >
+            Source
+          </Button>
+        </div>
+        <ReasoningInspector
+          v-if="sidePanel === 'inspector'"
+          :plan="lastAssistant?.plan ?? null"
+          :trace="lastAssistant?.trace ?? null"
+        />
         <SourceViewerDrawer
+          v-else-if="sidePanel === 'viewer' && openChunkId"
           :workspace-id="workspaceId"
           :chunk-id="openChunkId"
-          @close="openChunkId = null"
+          @close="sidePanel = 'inspector'"
         />
       </div>
     </section>

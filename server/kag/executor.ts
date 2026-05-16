@@ -28,7 +28,7 @@ export class PlanExecutionError extends Error {
   constructor(
     readonly stepId: string,
     readonly op: string,
-    readonly cause: unknown,
+    override readonly cause: unknown,
   ) {
     const msg = cause instanceof Error ? cause.message : String(cause)
     super(`[${stepId} ${op}] ${msg}`)
