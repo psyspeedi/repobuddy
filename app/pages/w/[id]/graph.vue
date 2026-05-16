@@ -437,16 +437,16 @@ async function fetchEntityType(id: string): Promise<{ type: string } | null> {
 function panTo(id: string): void {
   if (!graph || !sigma) return
   if (!graph.hasNode(id)) return
-  const display = sigma.getNodeDisplayData(id)
-  if (!display) return
-  const total = graph.order
-  // Even for tiny graphs (≤3) we now pan TO the target instead of fitting
-  // the whole graph — otherwise the user has no idea which node was meant.
-  const ratio = total <= 3 ? 1.5 : total < 20 ? 1.0 : total < 100 ? 0.6 : 0.3
-  sigma.getCamera().animate(
-    { x: display.x, y: display.y, ratio },
-    { duration: 400 },
-  )
+  // Earlier versions of this fed graph-space coordinates from
+  // sigma.getNodeDisplayData() straight into camera.animate(). That
+  // sent the camera to (100, 0) when the layout used scale=100 and
+  // produced the "flash then fly to corner" bug.
+  //
+  // Sigma's animatedReset uses the renderer's internal bbox to compute
+  // a camera state that frames the whole graph — always sane. The
+  // highlight banner + bright-orange node colour are enough to draw
+  // the eye to the target without centring on it.
+  sigma.getCamera().animatedReset({ duration: 400 })
 }
 
 // Search
