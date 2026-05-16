@@ -188,6 +188,16 @@ describe('operators', () => {
     expect(result[0]?.id).toBe(ids.processPayment)
   })
 
+  it('find_symbol auto-falls-back to fuzzy when exact match is empty', async () => {
+    const { ctx, ids } = await seedTinyGraph()
+    // No entity is literally named "Order" — but OrderService, OrderRepository,
+    // and orders.ts all contain it. Exact match would return [].
+    const result = await findSymbol({ name: 'Order' }, ctx)
+    const ids_returned = new Set(result.map((r) => r.id))
+    expect(ids_returned.has(ids.orderClass!)).toBe(true)
+    expect(result.length).toBeGreaterThan(1)
+  })
+
   it('find_file resolves glob-like patterns', async () => {
     const { ctx } = await seedTinyGraph()
     const result = await findFile({ pathPattern: 'src/*.ts' }, ctx)

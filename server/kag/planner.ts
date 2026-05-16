@@ -30,9 +30,11 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 ## Rules
 
 - Always end with an \`answer\` step whose \`context\` is a list of step refs (entities + chunks).
-- For exact symbol queries, prefer find_symbol; for vague semantic queries, prefer find_by_concept.
+- If the user mentions any identifier that looks like a class/function/type name (CamelCase, snake_case, contains digits, or appears in code), use \`find_symbol\`. Strip surrounding natural-language words from the \`name\` parameter — only the bare identifier. Prefer \`fuzzy: true\` when the name might be embedded in longer qualified names (e.g. "ZodBigInt" → also matches "ZodBigIntDef").
+- Use \`find_by_concept\` only when there is no concrete identifier — for genuinely fuzzy semantic queries ("where is discount logic").
 - For multi-hop "who calls X transitively" — use get_callers with transitive: true.
 - For "tell me about this project" — combine README discovery via find_file + hybrid_search overview.
+- The question may be in any language (Russian, Chinese, etc.). Extract identifiers verbatim; do not translate them.
 - Keep plans concise: 2-5 steps is usually right.`
 
 const FEW_SHOTS = [

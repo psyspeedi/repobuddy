@@ -47,19 +47,40 @@ export async function findSymbol(
   ctx: OperatorContext,
 ): Promise<GraphEntity[]> {
   const limit = params.limit ?? 20
-  const conditions = [eq(entities.workspaceId, ctx.workspaceId)]
-  if (params.fuzzy) {
-    conditions.push(ilike(entities.normalizedName, `%${params.name.toLowerCase()}%`))
-  } else {
-    conditions.push(eq(entities.normalizedName, params.name.toLowerCase()))
-  }
-  if (params.type) conditions.push(eq(entities.type, params.type))
+  const needle = params.name.toLowerCase()
+
+  // Phase 1: exact match (unless caller already requested fuzzy).
+  const exactConditions = [
+    eq(entities.workspaceId, ctx.workspaceId),
+    params.fuzzy
+      ? ilike(entities.normalizedName, `%${needle}%`)
+      : eq(entities.normalizedName, needle),
+  ]
+  if (params.type) exactConditions.push(eq(entities.type, params.type))
 
   const rows = await ctx.db
     .select(entityProjection())
     .from(entities)
-    .where(and(...conditions))
+    .where(and(...exactConditions))
     .limit(limit)
+
+  // Phase 2: auto-fuzzy fallback. If the planner asked for an exact match
+  // and we found nothing, retry with substring match before giving up. This
+  // covers TypeScript declaration merging ("ZodBigInt" vs "ZodBigIntDef"),
+  // namespaced symbols, and minor casing/transliteration drift in user
+  // queries.
+  if (rows.length === 0 && !params.fuzzy) {
+    const fuzzyConditions = [
+      eq(entities.workspaceId, ctx.workspaceId),
+      ilike(entities.normalizedName, `%${needle}%`),
+    ]
+    if (params.type) fuzzyConditions.push(eq(entities.type, params.type))
+    return ctx.db
+      .select(entityProjection())
+      .from(entities)
+      .where(and(...fuzzyConditions))
+      .limit(limit)
+  }
   return rows
 }
 
