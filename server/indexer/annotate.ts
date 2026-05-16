@@ -70,81 +70,96 @@ export async function annotateAndEmbed(
   let annotated = 0
   let conceptsCreated = 0
   let patternsCreated = 0
+  // Parallelism cap: gpt-4o-mini sustains many concurrent requests, but we
+  // also write to the DB on each completion. 8 is a safe default that cuts
+  // a 500-entity run from ~15 min to ~2 min without tripping rate limits.
+  const CONCURRENCY = Number(process.env.ANNOTATION_CONCURRENCY ?? 8)
+  let cursor = 0
 
-  for (const entity of subset) {
-    const code = await fetchEntityCode(db, workspaceId, entity)
-    if (!code) {
-      onProgress?.(++annotated, subset.length)
-      continue
-    }
-    try {
-      const annotation = await llm.structured<SemanticAnnotation>(
-        [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: `Entity ${entity.qualifiedName} (${entity.type}, ${entity.language}):\n\n${code}`,
-          },
-        ],
-        { schema: SemanticAnnotationSchema, schemaName: 'semantic_annotation' },
-      )
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const i = cursor++
+      if (i >= subset.length) return
+      const entity = subset[i]
+      if (!entity) return
 
-      await db
-        .update(entities)
-        .set({ description: annotation.description })
-        .where(eq(entities.id, entity.id))
-
-      // Concepts.
-      for (const c of annotation.concepts) {
-        const conceptId = await upsertSemanticEntity(db, workspaceId, {
-          type: 'concept',
-          name: c.name,
-        })
-        if (conceptId) {
-          await db
-            .insert(relations)
-            .values({
-              workspaceId,
-              fromEntityId: entity.id,
-              toEntityId: conceptId,
-              type: 'implements_concept',
-              evidenceQuote: c.evidenceQuote,
-            })
-            .onConflictDoNothing()
-          conceptsCreated++
-        }
+      const code = await fetchEntityCode(db, workspaceId, entity)
+      if (!code) {
+        annotated++
+        onProgress?.(annotated, subset.length)
+        continue
       }
-      // Patterns.
-      for (const p of annotation.patterns) {
-        const patternId = await upsertSemanticEntity(db, workspaceId, {
-          type: 'pattern',
-          name: p.name,
-        })
-        if (patternId) {
-          await db
-            .insert(relations)
-            .values({
-              workspaceId,
-              fromEntityId: entity.id,
-              toEntityId: patternId,
-              type: 'follows_pattern',
-              evidenceQuote: p.evidenceQuote,
-              metadata: { confidence: p.confidence },
-            })
-            .onConflictDoNothing()
-          patternsCreated++
+      try {
+        const annotation = await llm.structured<SemanticAnnotation>(
+          [
+            { role: 'system', content: SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: `Entity ${entity.qualifiedName} (${entity.type}, ${entity.language}):\n\n${code}`,
+            },
+          ],
+          { schema: SemanticAnnotationSchema, schemaName: 'semantic_annotation' },
+        )
+
+        await db
+          .update(entities)
+          .set({ description: annotation.description })
+          .where(eq(entities.id, entity.id))
+
+        for (const c of annotation.concepts) {
+          const conceptId = await upsertSemanticEntity(db, workspaceId, {
+            type: 'concept',
+            name: c.name,
+          })
+          if (conceptId) {
+            await db
+              .insert(relations)
+              .values({
+                workspaceId,
+                fromEntityId: entity.id,
+                toEntityId: conceptId,
+                type: 'implements_concept',
+                evidenceQuote: c.evidenceQuote,
+              })
+              .onConflictDoNothing()
+            conceptsCreated++
+          }
         }
+        for (const p of annotation.patterns) {
+          const patternId = await upsertSemanticEntity(db, workspaceId, {
+            type: 'pattern',
+            name: p.name,
+          })
+          if (patternId) {
+            await db
+              .insert(relations)
+              .values({
+                workspaceId,
+                fromEntityId: entity.id,
+                toEntityId: patternId,
+                type: 'follows_pattern',
+                evidenceQuote: p.evidenceQuote,
+                metadata: { confidence: p.confidence },
+              })
+              .onConflictDoNothing()
+            patternsCreated++
+          }
+        }
+      } catch (err) {
+        log.warn(
+          { err, qualifiedName: entity.qualifiedName },
+          'annotation failed for entity',
+        )
+      } finally {
+        annotated++
+        onProgress?.(annotated, subset.length)
       }
-    } catch (err) {
-      log.warn(
-        { err, qualifiedName: entity.qualifiedName },
-        'annotation failed for entity',
-      )
-    } finally {
-      annotated++
-      onProgress?.(annotated, subset.length)
     }
   }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, subset.length) }, () => worker()),
+  )
 
   // Phase 4.2: embed descriptions.
   await embedEntityDescriptions(db, workspaceId, embeddings)

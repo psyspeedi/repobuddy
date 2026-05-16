@@ -261,12 +261,27 @@ export async function runIndexPipeline(
           percent: 92,
           message: 'Running LLM semantic annotation…',
         })
+        // Throttle progress writes to ~once per 5 entities or 1s so we don't
+        // hammer the DB on a fast run.
+        let lastProgressWrite = 0
         annotationStats = await annotateAndEmbed(
           db,
           workspaceId,
           deps.llm,
           embeddings,
           { maxEntities: deps.maxAnnotated },
+          async (done, total) => {
+            const now = Date.now()
+            if (done < total && now - lastProgressWrite < 1000 && done % 5 !== 0) {
+              return
+            }
+            lastProgressWrite = now
+            await setWorkspaceProgress(db, workspaceId, {
+              phase: 'extracting',
+              percent: 92 + Math.round((done / total) * 3),
+              message: `Annotating ${done}/${total} entities (LLM)…`,
+            })
+          },
         )
         await setWorkspaceProgress(db, workspaceId, {
           phase: 'extracting',
