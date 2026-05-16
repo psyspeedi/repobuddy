@@ -109,7 +109,38 @@ const VIEW_PRESETS: ViewPreset[] = [
 
 const activePreset = ref<string | null>('code')
 
-const selectedTypes = ref<string[]>([...(VIEW_PRESETS[0]?.types ?? [])])
+// When arriving with ?highlight=<csv>, we have to know the types of those
+// entities BEFORE the first /graph fetch fires — otherwise the default
+// preset (Code) doesn't include commits/persons/concepts, the initial
+// payload is missing them, and the user sees an "empty" highlighted set.
+// Detect the types synchronously up-front and union them into selectedTypes.
+const initialHighlightIds =
+  typeof route.query.highlight === 'string'
+    ? route.query.highlight.split(',').map((s) => s.trim()).filter(Boolean)
+    : []
+
+const initialTypes = new Set<string>(VIEW_PRESETS[0]?.types ?? [])
+if (initialHighlightIds.length > 0) {
+  const detected = await Promise.all(
+    initialHighlightIds.map(async (id) => {
+      try {
+        const res = await $fetch<{ entity: { type: string } }>(
+          `/api/workspaces/${workspaceId}/entity/${id}`,
+        )
+        return res.entity.type
+      } catch {
+        return null
+      }
+    }),
+  )
+  for (const t of detected) {
+    if (t) initialTypes.add(t)
+  }
+  // Once the user filters away from the highlight, drop "code"-only mindset.
+  activePreset.value = null
+}
+
+const selectedTypes = ref<string[]>([...initialTypes])
 const selectedNodeId = ref<string | null>(null)
 const hoveredEdgeId = ref<string | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
