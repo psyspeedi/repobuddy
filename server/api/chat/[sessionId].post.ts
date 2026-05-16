@@ -6,6 +6,7 @@ import {
   chatSessions,
   chunks as chunksTable,
   entities as entitiesTable,
+  entityChunks,
   workspaces,
 } from '../../db/schema'
 import { createEmbeddingsProvider } from '../../providers/embeddings'
@@ -92,6 +93,11 @@ export default defineEventHandler(async (event) => {
       // their message/author/date/files all live in metadata.
       const citedIds = extractEntityIdsFromQuestion(body.question)
       const pinnedEntities = citedIds.length > 0 ? await loadPinnedEntities(db, body.workspaceId, citedIds) : []
+      // Also pull chunks linked to those entities via entity_chunks. For a
+      // commit this returns its per-file diff chunks; for a function/class,
+      // its code chunk. Giving the model citable [chunk:UUID] anchors means
+      // the answer ends with ↗ → source viewer, not ◆ → graph.
+      const pinnedChunks = citedIds.length > 0 ? await loadPinnedChunks(db, body.workspaceId, citedIds) : []
 
       // 1) Plan.
       const plan = await planQuestion(llm, body.question, {
@@ -114,6 +120,7 @@ export default defineEventHandler(async (event) => {
         },
         llm,
         pinnedEntities,
+        pinnedChunks,
       })
 
       // Emit trace early so the inspector can render even while the answer streams.
@@ -242,6 +249,53 @@ async function loadPinnedEntities(
         inArray(entitiesTable.id, ids),
       ),
     )
+  return rows.map((r) => ({
+    ...r,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+  }))
+}
+
+/**
+ * Fetch chunks linked to the cited entities via the mutual index.
+ * For a commit this returns its per-file diff chunks; for a class/function
+ * this returns its source chunk. Capped at 12 to keep prompt bounded for
+ * pathological hub entities.
+ */
+async function loadPinnedChunks(
+  db: ReturnType<typeof getDb>,
+  workspaceId: string,
+  entityIds: string[],
+): Promise<
+  {
+    id: string
+    text: string
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    sourceType: string
+    metadata: Record<string, unknown> | null
+  }[]
+> {
+  if (entityIds.length === 0) return []
+  const rows = await db
+    .select({
+      id: chunksTable.id,
+      text: chunksTable.text,
+      filePath: chunksTable.filePath,
+      startLine: chunksTable.startLine,
+      endLine: chunksTable.endLine,
+      sourceType: chunksTable.sourceType,
+      metadata: chunksTable.metadata,
+    })
+    .from(chunksTable)
+    .innerJoin(entityChunks, eq(entityChunks.chunkId, chunksTable.id))
+    .where(
+      and(
+        eq(chunksTable.workspaceId, workspaceId),
+        inArray(entityChunks.entityId, entityIds),
+      ),
+    )
+    .limit(12)
   return rows.map((r) => ({
     ...r,
     metadata: (r.metadata as Record<string, unknown> | null) ?? null,

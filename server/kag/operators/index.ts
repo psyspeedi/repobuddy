@@ -44,6 +44,20 @@ export interface OperatorContext {
     language: string | null
     signature: string | null
   }[]
+  /**
+   * Chunks linked to pinned entities via entity_chunks. Loaded by the chat
+   * endpoint so the model cites the per-file diff / code chunk (↗ → opens
+   * source viewer) instead of falling back to the entity (◆ → jumps to graph).
+   */
+  pinnedChunks?: {
+    id: string
+    text: string
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    sourceType?: string
+    metadata?: Record<string, unknown> | null
+  }[]
 }
 
 // ---------- Entity shape exposed to ops ----------
@@ -552,12 +566,34 @@ export async function* answerOp(
   }[] = []
 
   const seenEntityIds = new Set<string>()
+  const seenChunkIds = new Set<string>()
 
-  // 1) Pinned entities from the user's [entity:UUID] citations always go
-  //    in first — they're the most likely thing the user wants summarised.
+  // 1a) Pinned entities from the user's [entity:UUID] citations always go
+  //     in first — they're the most likely thing the user wants summarised.
+  //     We strip metadata.diff because the per-file content is also coming
+  //     in as pinned chunks below; duplicating it would inflate the prompt
+  //     and bias the model to cite the entity (◆) instead of the chunks (↗).
   for (const pinned of ctx.pinnedEntities ?? []) {
     seenEntityIds.add(pinned.id)
-    entitiesContext.push(pinned)
+    const cleanedMeta = pinned.metadata
+      ? stripInlineDiff(pinned.metadata)
+      : pinned.metadata
+    entitiesContext.push({ ...pinned, metadata: cleanedMeta })
+  }
+
+  // 1b) Pinned chunks (those linked to pinned entities via entity_chunks).
+  //     These give the model citable [chunk:UUID] anchors that resolve to
+  //     the source viewer rather than the graph.
+  for (const pc of ctx.pinnedChunks ?? []) {
+    if (seenChunkIds.has(pc.id)) continue
+    seenChunkIds.add(pc.id)
+    chunks.push({
+      id: pc.id,
+      text: pc.text,
+      filePath: pc.filePath,
+      startLine: pc.startLine,
+      endLine: pc.endLine,
+    })
   }
 
   for (const item of params.context.flat(2)) {
@@ -572,6 +608,8 @@ export async function* answerOp(
           ? obj.chunkId
           : null
     if (typeof obj.text === 'string' && chunkId) {
+      if (seenChunkIds.has(chunkId)) continue
+      seenChunkIds.add(chunkId)
       chunks.push({
         id: chunkId,
         text: obj.text as string,
@@ -633,6 +671,22 @@ export async function* answerOp(
   })) {
     yield evt
   }
+}
+
+/**
+ * Drop the inline `diff` field (and `diffTruncated` flag) from a commit's
+ * metadata when we're also passing the same content as separate chunks.
+ * Keeps message/sha/author/date/filesChanged so the entity card still has
+ * its identifying info.
+ */
+function stripInlineDiff(
+  metadata: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!('diff' in metadata)) return metadata
+  const { diff, diffTruncated, ...rest } = metadata
+  void diff
+  void diffTruncated
+  return rest
 }
 
 // ---------- helpers ----------
