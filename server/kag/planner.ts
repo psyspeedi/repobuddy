@@ -4,7 +4,13 @@ import { getLogger } from '../lib/logger'
 
 const log = getLogger().child({ component: 'kag/planner' })
 
-const SYSTEM_PROMPT = `You are CodeGraph's query planner. You receive a user question about a codebase and produce a JSON plan whose steps will be executed by a graph engine.
+const SYSTEM_PROMPT = `You are CodeGraph's query planner. You receive a user question about a codebase and respond ONLY with a single JSON object — a plan whose steps will be executed by a graph engine. No surrounding prose, no markdown fences.
+
+The JSON object MUST have this top-level shape:
+{
+  "reasoning": "1-3 sentences explaining the strategy",
+  "steps": [ { "id": "s1", "op": "operator_name", "params": { ... } }, ... ]
+}
 
 ## Available operators
 
@@ -145,11 +151,11 @@ export async function planQuestion(
       { schema: PlanSchema, schemaName: 'kag_plan' },
     )
   } catch (firstErr) {
+    const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr)
     log.warn(
-      { err: firstErr instanceof Error ? firstErr.message : String(firstErr) },
+      { err: errMsg, question: question.slice(0, 200) },
       'planner first attempt failed, retrying with feedback',
     )
-    const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr)
     try {
       return await llm.structured<Plan>(
         [
@@ -158,14 +164,19 @@ export async function planQuestion(
           { role: 'user', content: userMessage },
           {
             role: 'user',
-            content: `Your previous response failed validation: ${errMsg}\nReturn a plan that satisfies the schema exactly. Ensure every step id is "s<N>", every op is one of the listed operators, and references use "$sN" or "$sN.field".`,
+            content: `Your previous response failed validation: ${errMsg}\nReturn a plan that satisfies the schema exactly. Respond with ONLY a JSON object — no prose. Ensure every step id is "s<N>", every op is one of the listed operators, and references use "$sN" or "$sN.field".`,
           },
         ],
         { schema: PlanSchema, schemaName: 'kag_plan' },
       )
     } catch (secondErr) {
-      log.warn(
-        { err: secondErr instanceof Error ? secondErr.message : String(secondErr) },
+      const secondMsg = secondErr instanceof Error ? secondErr.message : String(secondErr)
+      log.error(
+        {
+          firstErr: errMsg,
+          secondErr: secondMsg,
+          question: question.slice(0, 200),
+        },
         'planner retry failed; falling back to hybrid RAG plan',
       )
       // Final fallback: a deterministic plan that runs hybrid_search + answer.

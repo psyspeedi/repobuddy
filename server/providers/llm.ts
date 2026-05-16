@@ -81,29 +81,53 @@ class OpenAILLMProvider implements LLMProvider {
     messages: ChatMessage[],
     opts: StructuredOutputOptions<T>,
   ): Promise<T> {
-    // OpenAI's `chat.completions.parse` with `zodResponseFormat` (beta API)
-    // is the supported path for Zod-typed responses.
-    const parsed = await this.client.chat.completions.parse({
+    // We use response_format: json_object (loose mode) + client-side Zod
+    // validation rather than json_schema (strict mode). Strict mode rejects
+    // schemas containing z.record(z.unknown()) — which our PlanSchema needs
+    // for the per-operator params bag. json_object guarantees parseable
+    // JSON; Zod enforces the actual shape on our side. Retry-with-feedback
+    // is handled by the caller (see kag/planner.ts).
+    const completion = await this.client.chat.completions.create({
       model: this.model,
       messages,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: opts.schemaName,
-          strict: true,
-          schema: zodToOpenAIJsonSchema(opts.schema),
-        },
-      } as never,
-    } as never)
-    const raw = parsed.choices[0]?.message.content
-    if (!raw) throw new Error('LLM returned empty content')
-    try {
-      const json = JSON.parse(raw)
-      return opts.schema.parse(json)
-    } catch (err) {
-      log.error({ err, raw: raw.slice(0, 500) }, 'structured output parse failed')
-      throw err
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+    })
+    const choice = completion.choices[0]
+    if (!choice) throw new Error('LLM returned no choices')
+    const raw = choice.message.content
+    if (!raw) {
+      throw new Error('LLM returned empty content for structured output')
     }
+    let json: unknown
+    try {
+      json = JSON.parse(raw)
+    } catch (err) {
+      log.error(
+        { err, raw: raw.slice(0, 500), schemaName: opts.schemaName },
+        'structured output: invalid JSON',
+      )
+      throw new Error(
+        `LLM returned non-JSON content for ${opts.schemaName}: ${(err as Error).message}`,
+      )
+    }
+    const result = opts.schema.safeParse(json)
+    if (!result.success) {
+      log.error(
+        {
+          schemaName: opts.schemaName,
+          issues: result.error.issues,
+          raw: raw.slice(0, 500),
+        },
+        'structured output: Zod validation failed',
+      )
+      throw new Error(
+        `LLM output failed ${opts.schemaName} schema: ${result.error.issues
+          .map((i) => `${i.path.join('.')}: ${i.message}`)
+          .join('; ')}`,
+      )
+    }
+    return result.data
   }
 }
 
@@ -162,57 +186,3 @@ export function createLLMProvider(
   return new OpenAILLMProvider({ apiKey, model: opts.model })
 }
 
-/**
- * Minimal Zod → OpenAI JSON schema converter for our specific shapes
- * (object with primitive fields, arrays, optional unions). For complex
- * schemas, swap this for `zod-to-json-schema` later.
- */
-function zodToOpenAIJsonSchema(schema: z.ZodTypeAny): unknown {
-  return convert(schema)
-}
-
-function convert(s: z.ZodTypeAny): Record<string, unknown> {
-  if (s instanceof z.ZodString) return { type: 'string' }
-  if (s instanceof z.ZodNumber) return { type: 'number' }
-  if (s instanceof z.ZodBoolean) return { type: 'boolean' }
-  if (s instanceof z.ZodLiteral) {
-    return { type: typeof s.value, enum: [s.value] }
-  }
-  if (s instanceof z.ZodEnum) {
-    return { type: 'string', enum: [...s.options] }
-  }
-  if (s instanceof z.ZodArray) {
-    return { type: 'array', items: convert(s.element) }
-  }
-  if (s instanceof z.ZodOptional) return convert(s.unwrap())
-  if (s instanceof z.ZodNullable) {
-    const inner = convert(s.unwrap())
-    return { anyOf: [inner, { type: 'null' }] }
-  }
-  if (s instanceof z.ZodObject) {
-    const shape = s.shape as Record<string, z.ZodTypeAny>
-    const properties: Record<string, unknown> = {}
-    const required: string[] = []
-    for (const [key, val] of Object.entries(shape)) {
-      properties[key] = convert(val)
-      if (!(val instanceof z.ZodOptional)) required.push(key)
-    }
-    return {
-      type: 'object',
-      properties,
-      required,
-      additionalProperties: false,
-    }
-  }
-  if (s instanceof z.ZodUnion) {
-    return { anyOf: s.options.map((o: z.ZodTypeAny) => convert(o)) }
-  }
-  if (s instanceof z.ZodDiscriminatedUnion) {
-    return { anyOf: [...s.options.values()].map((o: z.ZodTypeAny) => convert(o)) }
-  }
-  if (s instanceof z.ZodRecord) {
-    return { type: 'object', additionalProperties: convert(s.valueSchema) }
-  }
-  if (s instanceof z.ZodUnknown || s instanceof z.ZodAny) return {}
-  return {} // best-effort
-}

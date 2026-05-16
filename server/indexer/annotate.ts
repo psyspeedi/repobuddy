@@ -14,13 +14,17 @@ const log = getLogger().child({ component: 'indexer/annotate' })
 const ANNOTATABLE_TYPES = ['class', 'function', 'module'] as const
 const MIN_LINES_FOR_ANNOTATION = 8
 
-const SYSTEM_PROMPT = `You analyse a code entity (class, function, or module) and produce:
-- description: 1-3 sentences explaining what it does, in plain English.
-- concepts: business or domain concepts implemented (e.g. "order processing").
-  Each must include a short evidence quote from the code.
-- patterns: architectural / design patterns observed (e.g. "Repository").
-  Each must include confidence (low/medium/high) and an evidence quote.
-Be conservative — empty arrays are fine when nothing applies.`
+const SYSTEM_PROMPT = `You analyse a code entity (class, function, or module) and respond ONLY with a single JSON object matching this shape:
+{
+  "description": "1-3 sentences in plain English describing what the entity does",
+  "concepts": [{ "name": "concept name", "evidenceQuote": "quote copied from the code" }],
+  "patterns": [{ "name": "pattern name", "confidence": "low|medium|high", "evidenceQuote": "quote" }]
+}
+
+- concepts: business / domain concepts implemented (e.g. "order processing"). Each must include a short evidence quote copied verbatim from the source.
+- patterns: architectural / design patterns observed (e.g. "Repository"). Each must include confidence (low/medium/high) and an evidence quote.
+
+Be conservative — empty arrays for concepts/patterns are fine when nothing clear applies. Output ONLY the JSON object, no surrounding prose.`
 
 export interface AnnotateOptions {
   /** Hard cap on number of entities to annotate (to control cost). */
