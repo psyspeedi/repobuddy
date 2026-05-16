@@ -329,13 +329,18 @@ function rebuild(): void {
   })
 }
 
-watch(data, () => rebuild(), { immediate: false })
-watch(highlightSet, () => rebuild())
+// Set to true once dynamic imports resolve. Watches are gated by this so
+// we don't half-build a sigma instance from a watch firing mid-import,
+// which previously caused the graph to render briefly then disappear.
+const libsLoaded = ref(false)
+
+watch(data, () => {
+  if (libsLoaded.value) rebuild()
+})
+watch(highlightSet, () => {
+  if (libsLoaded.value) rebuild()
+})
 watch(selectedNodeId, () => {
-  // LOD nodeReducer reads selectedNodeId.value via closure — Sigma doesn't
-  // know the ref changed. Force re-evaluation so the newly selected node
-  // becomes visible (and the previously selected one fades back into
-  // degree-gated visibility).
   sigma?.refresh()
 })
 
@@ -351,7 +356,11 @@ onMounted(async () => {
   SigmaCtor = sigmaMod.default as unknown as SigmaCtor
   fa2 = fa2Mod.default as unknown as typeof fa2
   circularLayout = { assign: layoutMod.circular.assign } as unknown as typeof circularLayout
+  libsLoaded.value = true
 
+  // First render after libs are ready. If data already settled (it usually
+  // has by now thanks to the top-level await useFetch), rebuild once.
+  await nextTick()
   if (data.value) rebuild()
   await nextTick()
   const first = [...highlightSet.value][0]
