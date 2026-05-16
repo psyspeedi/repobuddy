@@ -197,11 +197,22 @@ export function useChat(workspaceId: string) {
     historyLoaded.value = true
   }
 
+  /** Switch to an existing persisted session and load its history. */
+  async function switchSession(id: string): Promise<void> {
+    if (id === sessionId.value) return
+    sessionId.value = id
+    writePersistedSession(workspaceId, id)
+    messages.value = []
+    historyLoaded.value = false
+    await loadHistory()
+  }
+
   return {
     sessionId,
     messages,
     streaming,
     historyLoaded,
+    switchSession,
     send,
     loadHistory,
     newSession,

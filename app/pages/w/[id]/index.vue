@@ -22,6 +22,7 @@ const isFailed = computed(() => phase.value === 'failed')
 
 // Chat
 const chat = useChat(workspaceId)
+const chatSessions = useChatSessions(workspaceId)
 const inputText = ref('')
 const openChunkId = ref<string | null>(null)
 const sidePanel = ref<'inspector' | 'viewer' | null>('inspector')
@@ -31,8 +32,9 @@ const lastAssistant = computed(() =>
   [...chat.messages.value].reverse().find((m) => m.role === 'assistant') ?? null,
 )
 
-onMounted(() => {
-  void chat.loadHistory().then(() => scrollToBottom())
+onMounted(async () => {
+  await Promise.all([chat.loadHistory(), chatSessions.refresh()])
+  scrollToBottom()
 })
 
 function onOpenChunk(chunkId: string): void {
@@ -43,6 +45,20 @@ function onOpenChunk(chunkId: string): void {
 function startNewChat(): void {
   chat.newSession()
   openChunkId.value = null
+  void chatSessions.refresh()
+}
+
+async function selectSession(id: string): Promise<void> {
+  await chat.switchSession(id)
+  openChunkId.value = null
+  scrollToBottom()
+}
+
+async function deleteSession(id: string): Promise<void> {
+  await chatSessions.remove(id)
+  if (id === chat.sessionId.value) {
+    chat.newSession()
+  }
 }
 
 async function submit(): Promise<void> {
@@ -51,6 +67,7 @@ async function submit(): Promise<void> {
   inputText.value = ''
   await chat.send(q)
   scrollToBottom()
+  void chatSessions.refresh()
 }
 
 function scrollToBottom(): void {
@@ -134,6 +151,14 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
       v-else
       class="flex h-[calc(100vh-14rem)] gap-3"
     >
+      <ChatSessionsList
+        :sessions="chatSessions.sessions.value"
+        :loading="chatSessions.loading.value"
+        :active-session-id="chat.sessionId.value"
+        @new="startNewChat"
+        @select="selectSession"
+        @delete="deleteSession"
+      />
       <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
         <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4">
           <p v-if="chat.messages.value.length === 0" class="text-center text-sm text-muted-foreground">
@@ -162,15 +187,6 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           >
           <Button type="submit" :disabled="chat.streaming.value || !inputText.trim()">
             Send
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            :disabled="chat.streaming.value"
-            title="Start a new chat session (clears the current conversation)"
-            @click="startNewChat"
-          >
-            New
           </Button>
         </form>
       </div>
