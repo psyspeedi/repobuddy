@@ -74,7 +74,38 @@ const edgeColors: Record<string, string> = {
 }
 const DEFAULT_EDGE_COLOR = '#cbd5e1'
 
-const selectedTypes = ref<string[]>(['file', 'class', 'function'])
+// View presets — one click swaps the type filter to a curated set.
+interface ViewPreset {
+  id: string
+  label: string
+  types: string[]
+  description: string
+}
+
+const VIEW_PRESETS: ViewPreset[] = [
+  {
+    id: 'code',
+    label: 'Code',
+    types: ['file', 'module', 'class', 'function', 'type'],
+    description: 'Files, classes, functions, types — and edges between them',
+  },
+  {
+    id: 'git',
+    label: 'Git',
+    types: ['commit', 'person', 'file'],
+    description: 'Commits, authors, modified files',
+  },
+  {
+    id: 'semantic',
+    label: 'Semantic',
+    types: ['class', 'function', 'module', 'concept', 'pattern'],
+    description: 'Domain concepts and architectural patterns over code',
+  },
+]
+
+const activePreset = ref<string | null>('code')
+
+const selectedTypes = ref<string[]>([...(VIEW_PRESETS[0]?.types ?? [])])
 const selectedNodeId = ref<string | null>(null)
 const hoveredEdgeId = ref<string | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -214,7 +245,23 @@ function toggleType(t: string): void {
   const i = selectedTypes.value.indexOf(t)
   if (i === -1) selectedTypes.value = [...selectedTypes.value, t]
   else selectedTypes.value = selectedTypes.value.filter((x) => x !== t)
+  // Manual checkbox edit means we're no longer matching any preset exactly.
+  activePreset.value = matchPreset(selectedTypes.value)
   void refresh()
+}
+
+function applyPreset(p: ViewPreset): void {
+  selectedTypes.value = [...p.types]
+  activePreset.value = p.id
+  void refresh()
+}
+
+function matchPreset(types: string[]): string | null {
+  const sorted = [...types].sort().join(',')
+  for (const p of VIEW_PRESETS) {
+    if ([...p.types].sort().join(',') === sorted) return p.id
+  }
+  return null
 }
 
 /**
@@ -250,8 +297,31 @@ useHead({ title: 'Graph — CodeGraph' })
 <template>
   <div class="flex h-[calc(100vh-12rem)] gap-4">
     <aside class="w-56 shrink-0 space-y-3 overflow-y-auto rounded-lg border border-border bg-card p-3">
-      <h2 class="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-        Filters
+      <div class="space-y-1">
+        <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          View
+        </h2>
+        <div class="flex flex-wrap gap-1">
+          <button
+            v-for="p in VIEW_PRESETS"
+            :key="p.id"
+            type="button"
+            class="rounded-md border px-2 py-1 text-xs transition"
+            :class="
+              activePreset === p.id
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border hover:bg-accent'
+            "
+            :title="p.description"
+            @click="applyPreset(p)"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+      </div>
+
+      <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Types
       </h2>
       <ul class="space-y-1 text-sm">
         <li v-for="s in stats" :key="s.type">
