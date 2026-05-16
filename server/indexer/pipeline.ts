@@ -22,6 +22,7 @@ import {
   type EmbeddingsProvider,
 } from '../providers/embeddings'
 import { annotateAndEmbed } from './annotate'
+import { resolveEntities } from './resolution'
 import { type LLMProvider } from '../providers/llm'
 import { getTypeScriptParser } from './parsers/typescript'
 import { getPythonParser } from './parsers/python'
@@ -253,6 +254,7 @@ export async function runIndexPipeline(
 
       // 9c. LLM semantic annotation (phase 4).
       let annotationStats = { annotated: 0, conceptsCreated: 0, patternsCreated: 0 }
+      let resolutionStats = { merged: 0, flagged: 0 }
       if (!deps.skipAnnotation && deps.llm) {
         await setWorkspaceProgress(db, workspaceId, {
           phase: 'extracting',
@@ -266,6 +268,12 @@ export async function runIndexPipeline(
           embeddings,
           { maxEntities: deps.maxAnnotated },
         )
+        await setWorkspaceProgress(db, workspaceId, {
+          phase: 'extracting',
+          percent: 95,
+          message: 'Deduplicating concepts and patterns…',
+        })
+        resolutionStats = await resolveEntities(db, workspaceId)
       }
 
       // 10. Git history.
@@ -311,6 +319,8 @@ export async function runIndexPipeline(
         annotated: annotationStats.annotated,
         concepts: annotationStats.conceptsCreated,
         patterns: annotationStats.patternsCreated,
+        mergedDuplicates: resolutionStats.merged,
+        flaggedDuplicates: resolutionStats.flagged,
         tokensSpent: 0,
       })
 
