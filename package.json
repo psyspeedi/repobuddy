@@ -21,7 +21,17 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "db:up": "docker compose up -d postgres redis",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d postgres redis",
+    "db:logs": "docker compose logs -f postgres",
+    "db:psql": "docker compose exec postgres psql -U codegraph -d codegraph",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "dev:worker": "tsx watch server/workers/index.ts",
+    "build:worker": "tsx server/workers/build.ts"
   },
   "dependencies": {
     "@nuxtjs/color-mode": "^3.5.2",

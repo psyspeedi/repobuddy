@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: codegraph-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      POSTGRES_DB: ${POSTGRES_DB:?required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ./docker/backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: codegraph-redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runner
+    container_name: codegraph-app
+    restart: always
+    environment:
+      PROCESS_ROLE: web
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?required}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?required}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?required}
+      NUXT_SESSION_PASSWORD: ${NUXT_SESSION_PASSWORD:?required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
+      APP_URL: ${APP_URL:?required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["node", ".output/server/index.mjs"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runner
+    container_name: codegraph-worker
+    restart: always
+    environment:
+      PROCESS_ROLE: worker
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["node", ".worker/index.mjs"]
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: codegraph-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

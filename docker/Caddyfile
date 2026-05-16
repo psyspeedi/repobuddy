@@ -1,0 +1,14 @@
+{$APP_DOMAIN} {
+    encode gzip zstd
+
+    # SSE / streaming: disable buffering for /api/* event-stream endpoints
+    @sse {
+        path /api/*
+        header Accept text/event-stream
+    }
+    reverse_proxy @sse app:3000 {
+        flush_interval -1
+    }
+
+    reverse_proxy app:3000
+}
