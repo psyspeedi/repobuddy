@@ -14,6 +14,13 @@ export interface AnswerContextEntity {
   type: string
   description?: string | null
   qualifiedName?: string | null
+  /** Raw metadata jsonb — commits carry message/author/date/filesChanged here, files carry hotness, persons carry email/commitCount, etc. */
+  metadata?: Record<string, unknown> | null
+  filePath?: string | null
+  startLine?: number | null
+  endLine?: number | null
+  language?: string | null
+  signature?: string | null
 }
 
 export interface AnswerWorkspaceMeta {
@@ -105,10 +112,7 @@ function renderUserMessage(params: AnswerParams): string {
   if (params.entities && params.entities.length > 0) {
     lines.push('## Entities in scope')
     for (const e of params.entities) {
-      const desc = e.description ? ` — ${e.description}` : ''
-      lines.push(
-        `- [entity:${e.id}] **${e.name}** (${e.type})${e.qualifiedName ? ` \`${e.qualifiedName}\`` : ''}${desc}`,
-      )
+      lines.push(...renderEntity(e))
     }
     lines.push('')
   }
@@ -133,6 +137,74 @@ function renderUserMessage(params: AnswerParams): string {
     lines.push('Keep your answer focused and tight.')
   }
   return lines.join('\n')
+}
+
+/**
+ * Render one entity into prompt lines. Type-specific metadata (commit
+ * message, file hotness, person commit count, etc.) is unpacked here so
+ * the model sees the actual content, not just a name + type. Without this
+ * the answer for "tell me about this commit" said "context insufficient".
+ */
+function renderEntity(e: AnswerContextEntity): string[] {
+  const out: string[] = []
+  const header = `### [entity:${e.id}] ${e.name} (${e.type})`
+  out.push(header)
+  if (e.qualifiedName) out.push(`- qualified: \`${e.qualifiedName}\``)
+  if (e.filePath) {
+    const range = e.startLine ? `:${e.startLine}-${e.endLine ?? e.startLine}` : ''
+    out.push(`- location: \`${e.filePath}${range}\``)
+  }
+  if (e.language) out.push(`- language: ${e.language}`)
+  if (e.signature) out.push(`- signature: \`${e.signature.slice(0, 240)}\``)
+  if (e.description) out.push(`- description: ${e.description}`)
+
+  const meta = e.metadata
+  if (meta && typeof meta === 'object') {
+    if (e.type === 'commit') {
+      const m = meta as {
+        sha?: string
+        author?: string
+        email?: string
+        date?: string
+        message?: string
+        filesChanged?: string[]
+      }
+      if (m.sha) out.push(`- sha: ${m.sha}`)
+      if (m.author) out.push(`- author: ${m.author}${m.email ? ` <${m.email}>` : ''}`)
+      if (m.date) out.push(`- date: ${m.date}`)
+      if (m.message) {
+        out.push(`- message:`)
+        for (const line of m.message.split('\n')) out.push(`    ${line}`)
+      }
+      if (m.filesChanged && m.filesChanged.length > 0) {
+        out.push(`- files changed (${m.filesChanged.length}):`)
+        for (const f of m.filesChanged.slice(0, 30)) out.push(`    - ${f}`)
+        if (m.filesChanged.length > 30) {
+          out.push(`    - … and ${m.filesChanged.length - 30} more`)
+        }
+      }
+    } else if (e.type === 'person') {
+      const m = meta as { email?: string; commitCount?: number }
+      if (m.email) out.push(`- email: ${m.email}`)
+      if (typeof m.commitCount === 'number') out.push(`- commits: ${m.commitCount}`)
+    } else if (e.type === 'file') {
+      const m = meta as { hotness?: number }
+      if (typeof m.hotness === 'number') {
+        out.push(`- hotness: ${m.hotness} modification(s) in last 90 days`)
+      }
+    } else {
+      // Generic fallback — dump non-trivial metadata.
+      const entries = Object.entries(meta).filter(([, v]) => v !== null && v !== '')
+      if (entries.length > 0 && entries.length <= 12) {
+        out.push(`- metadata:`)
+        for (const [k, v] of entries) {
+          const repr = typeof v === 'string' ? v : JSON.stringify(v)
+          out.push(`    - ${k}: ${repr.slice(0, 200)}`)
+        }
+      }
+    }
+  }
+  return out
 }
 
 /**

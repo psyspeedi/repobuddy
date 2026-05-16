@@ -1,10 +1,11 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 import { getDb } from '../../db/client'
 import {
   chatMessages,
   chatSessions,
   chunks as chunksTable,
+  entities as entitiesTable,
   workspaces,
 } from '../../db/schema'
 import { createEmbeddingsProvider } from '../../providers/embeddings'
@@ -84,6 +85,14 @@ export default defineEventHandler(async (event) => {
         model: config.openaiModelPlanning as string,
       })
 
+      // Pre-load any [entity:UUID] the user typed into the prompt. Plan
+      // execution might never look at them (e.g. planner picks
+      // hybrid_search), but we want the answer operator to always see the
+      // entity row with full metadata. Critical for commit references —
+      // their message/author/date/files all live in metadata.
+      const citedIds = extractEntityIdsFromQuestion(body.question)
+      const pinnedEntities = citedIds.length > 0 ? await loadPinnedEntities(db, body.workspaceId, citedIds) : []
+
       // 1) Plan.
       const plan = await planQuestion(llm, body.question, {
         workspaceName: ws.name,
@@ -104,6 +113,7 @@ export default defineEventHandler(async (event) => {
           stats: ws.stats as Record<string, number> | null,
         },
         llm,
+        pinnedEntities,
       })
 
       // Emit trace early so the inspector can render even while the answer streams.
@@ -180,3 +190,60 @@ export default defineEventHandler(async (event) => {
 
   return stream.send()
 })
+
+const ENTITY_CITATION_RE = /\[entity:([0-9a-f-]{36})\]/gi
+
+function extractEntityIdsFromQuestion(question: string): string[] {
+  const ids = new Set<string>()
+  for (const m of question.matchAll(ENTITY_CITATION_RE)) {
+    if (m[1]) ids.add(m[1].toLowerCase())
+  }
+  return [...ids]
+}
+
+async function loadPinnedEntities(
+  db: ReturnType<typeof getDb>,
+  workspaceId: string,
+  ids: string[],
+): Promise<
+  {
+    id: string
+    name: string
+    type: string
+    qualifiedName: string | null
+    description: string | null
+    metadata: Record<string, unknown> | null
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    language: string | null
+    signature: string | null
+  }[]
+> {
+  if (ids.length === 0) return []
+  const rows = await db
+    .select({
+      id: entitiesTable.id,
+      name: entitiesTable.name,
+      type: entitiesTable.type,
+      qualifiedName: entitiesTable.qualifiedName,
+      description: entitiesTable.description,
+      metadata: entitiesTable.metadata,
+      filePath: entitiesTable.filePath,
+      startLine: entitiesTable.startLine,
+      endLine: entitiesTable.endLine,
+      language: entitiesTable.language,
+      signature: entitiesTable.signature,
+    })
+    .from(entitiesTable)
+    .where(
+      and(
+        eq(entitiesTable.workspaceId, workspaceId),
+        inArray(entitiesTable.id, ids),
+      ),
+    )
+  return rows.map((r) => ({
+    ...r,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+  }))
+}

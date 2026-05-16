@@ -26,6 +26,24 @@ export interface OperatorContext {
     languages: string[]
     stats?: Record<string, number> | null
   }
+  /**
+   * Entities the user explicitly referenced via [entity:UUID] in the
+   * question. The answer operator always includes them in its context
+   * regardless of what the plan retrieved, with full metadata.
+   */
+  pinnedEntities?: {
+    id: string
+    name: string
+    type: string
+    qualifiedName: string | null
+    description: string | null
+    metadata: Record<string, unknown> | null
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    language: string | null
+    signature: string | null
+  }[]
 }
 
 // ---------- Entity shape exposed to ops ----------
@@ -519,7 +537,28 @@ export async function* answerOp(
   ctx: OperatorContext,
 ): AsyncGenerator<AnswerStreamChunk> {
   const chunks: { id: string; text: string; filePath?: string | null; startLine?: number | null; endLine?: number | null }[] = []
-  const entitiesContext: { id: string; name: string; type: string; description?: string | null; qualifiedName?: string | null }[] = []
+  const entitiesContext: {
+    id: string
+    name: string
+    type: string
+    description?: string | null
+    qualifiedName?: string | null
+    metadata?: Record<string, unknown> | null
+    filePath?: string | null
+    startLine?: number | null
+    endLine?: number | null
+    language?: string | null
+    signature?: string | null
+  }[] = []
+
+  const seenEntityIds = new Set<string>()
+
+  // 1) Pinned entities from the user's [entity:UUID] citations always go
+  //    in first — they're the most likely thing the user wants summarised.
+  for (const pinned of ctx.pinnedEntities ?? []) {
+    seenEntityIds.add(pinned.id)
+    entitiesContext.push(pinned)
+  }
 
   for (const item of params.context.flat(2)) {
     if (!item || typeof item !== 'object') continue
@@ -541,12 +580,21 @@ export async function* answerOp(
         endLine: (obj.endLine as number | null) ?? null,
       })
     } else if (typeof obj.name === 'string' && typeof obj.id === 'string' && typeof obj.type === 'string') {
+      const id = obj.id as string
+      if (seenEntityIds.has(id)) continue
+      seenEntityIds.add(id)
       entitiesContext.push({
-        id: obj.id as string,
+        id,
         name: obj.name as string,
         type: obj.type as string,
         description: (obj.description as string | null) ?? null,
         qualifiedName: (obj.qualifiedName as string | null) ?? null,
+        metadata: (obj.metadata as Record<string, unknown> | null) ?? null,
+        filePath: (obj.filePath as string | null) ?? null,
+        startLine: (obj.startLine as number | null) ?? null,
+        endLine: (obj.endLine as number | null) ?? null,
+        language: (obj.language as string | null) ?? null,
+        signature: (obj.signature as string | null) ?? null,
       })
     }
   }
