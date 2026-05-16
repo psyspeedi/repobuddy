@@ -9,6 +9,9 @@
     "node": ">=22.0.0",
     "pnpm": ">=9.0.0"
   },
+  "imports": {
+    "#shared/*": "./shared/*"
+  },
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
