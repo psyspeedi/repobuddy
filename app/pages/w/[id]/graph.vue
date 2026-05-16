@@ -1,8 +1,21 @@
 <script setup lang="ts">
-import Graph from 'graphology'
-import Sigma from 'sigma'
-import forceAtlas2 from 'graphology-layout-forceatlas2'
-import { circular } from 'graphology-layout'
+// Sigma needs WebGL and the other graph libs reach for browser APIs at
+// module load. Dynamic-import them inside onMounted so this page is
+// SSR-safe. Only type-imports stay at the top.
+import type Graph from 'graphology'
+import type Sigma from 'sigma'
+
+// Runtime handles for the graph libs, filled in onMounted on the client.
+type GraphCtor = new (opts?: { multi?: boolean }) => Graph
+type SigmaCtor = new (
+  graph: Graph,
+  container: HTMLElement,
+  settings?: Record<string, unknown>,
+) => Sigma
+let GraphCtor: GraphCtor | null = null
+let SigmaCtor: SigmaCtor | null = null
+let fa2: { assign(g: Graph, opts: { iterations: number; settings: Record<string, unknown> }): void } | null = null
+let circularLayout: { assign(g: Graph, opts?: { scale?: number }): void } | null = null
 
 interface GraphNode {
   id: string
@@ -207,11 +220,12 @@ const highlightSet = computed(() => {
 
 function rebuild(): void {
   if (!data.value || !containerRef.value) return
+  if (!GraphCtor || !SigmaCtor || !fa2 || !circularLayout) return
   if (sigma) {
     sigma.kill()
     sigma = null
   }
-  graph = new Graph({ multi: true })
+  graph = new GraphCtor({ multi: true })
   const seenIds = new Set<string>()
   for (const node of data.value.nodes) {
     if (seenIds.has(node.id)) continue
@@ -246,9 +260,9 @@ function rebuild(): void {
   // which makes the rendered graph look empty. Use a deterministic circular
   // layout for tiny graphs; FA2 for everything else.
   if (graph.order <= 10) {
-    circular.assign(graph, { scale: 100 })
+    circularLayout.assign(graph, { scale: 100 })
   } else {
-    forceAtlas2.assign(graph, {
+    fa2.assign(graph, {
       iterations: 200,
       settings: {
         gravity: 1,
@@ -259,7 +273,7 @@ function rebuild(): void {
     })
   }
 
-  sigma = new Sigma(graph, containerRef.value, {
+  sigma = new SigmaCtor(graph, containerRef.value, {
     // Edge labels are rendered globally only for hovered edge — see
     // edgeReducer below. Setting renderEdgeLabels: true is required for
     // the reducer's `label` field to actually paint.
@@ -326,10 +340,19 @@ watch(selectedNodeId, () => {
 })
 
 onMounted(async () => {
+  // Client-only dynamic import — these libs touch WebGL/window at module load.
+  const [graphologyMod, sigmaMod, fa2Mod, layoutMod] = await Promise.all([
+    import('graphology'),
+    import('sigma'),
+    import('graphology-layout-forceatlas2'),
+    import('graphology-layout'),
+  ])
+  GraphCtor = graphologyMod.default as unknown as GraphCtor
+  SigmaCtor = sigmaMod.default as unknown as SigmaCtor
+  fa2 = fa2Mod.default as unknown as typeof fa2
+  circularLayout = { assign: layoutMod.circular.assign } as unknown as typeof circularLayout
+
   if (data.value) rebuild()
-  // If we arrived with ?highlight=…, focus the first highlighted node once
-  // the graph is laid out. This makes the chat → graph hand-off feel
-  // intentional rather than dropping the user at a random viewport.
   await nextTick()
   const first = [...highlightSet.value][0]
   if (first) await focusEntity(first)
