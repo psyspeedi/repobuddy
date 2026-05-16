@@ -12,6 +12,7 @@ import { createLLMProvider } from '../../providers/llm'
 import { planQuestion } from '../../kag/planner'
 import { executePlan } from '../../kag/executor'
 import { extractCitations } from '../../kag/operators/answer'
+import { requireValidUser } from '../../lib/auth'
 import { getLogger } from '../../lib/logger'
 
 const log = getLogger().child({ component: 'api/chat' })
@@ -22,7 +23,7 @@ const BodySchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const user = await requireValidUser(event)
   const sessionId = getRouterParam(event, 'sessionId')
   if (!sessionId) throw createError({ statusCode: 400, statusMessage: 'sessionId required' })
 

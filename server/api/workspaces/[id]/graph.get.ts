@@ -1,11 +1,12 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { getDb } from '../../../db/client'
 import { entities, relations, workspaces } from '../../../db/schema'
+import { requireValidUser } from '../../../lib/auth'
 
 const DEFAULT_LIMIT = 2000
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const user = await requireValidUser(event)
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id required' })
 

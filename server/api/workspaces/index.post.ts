@@ -2,12 +2,13 @@ import { getDb } from '../../db/client'
 import { workspaces } from '../../db/schema'
 import { getIndexWorkspaceQueue } from '../../queues'
 import { CreateWorkspaceSchema } from '#shared/schemas/workspace'
+import { requireValidUser } from '../../lib/auth'
 import { getLogger } from '../../lib/logger'
 
 const log = getLogger().child({ component: 'api/workspaces/create' })
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const user = await requireValidUser(event)
   const config = useRuntimeConfig(event)
   const body = await readBody(event)
   const parsed = CreateWorkspaceSchema.safeParse(body)

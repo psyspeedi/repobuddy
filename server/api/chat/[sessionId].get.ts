@@ -1,9 +1,10 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { getDb } from '../../db/client'
 import { chatMessages, chatSessions } from '../../db/schema'
+import { requireValidUser } from '../../lib/auth'
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const user = await requireValidUser(event)
   const sessionId = getRouterParam(event, 'sessionId')
   if (!sessionId) throw createError({ statusCode: 400, statusMessage: 'sessionId required' })
 
