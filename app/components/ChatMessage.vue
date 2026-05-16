@@ -30,19 +30,32 @@ const html = computed(() => {
   if (props.role === 'user') {
     return escapeHtml(props.content)
   }
-  // Replace [chunk:UUID] / [entity:UUID] markers with anchor placeholders
-  // that survive markdown rendering, then DOMPurify hardens the output.
+  // Replace [chunk:UUID] / [entity:UUID] markers with visible anchor badges.
+  // We keep the glyph as direct text content rather than CSS ::before — the
+  // pseudo-element approach broke for two reasons:
+  // 1) v-html-injected nodes don't carry the [data-v-…] attribute Vue's
+  //    scoped styles add, so the ::before rule didn't paint
+  // 2) an anchor with zero rendered content has zero clickable hit area
+  const invalidSet = new Set((props.invalid ?? []).map((s) => s.toLowerCase()))
   const withPlaceholders = props.content.replace(
     /\[(chunk|entity):([0-9a-f-]{36})\]/gi,
     (_, kind: string, id: string) => {
       const k = kind.toLowerCase()
-      const invalid = (props.invalid ?? []).includes(id.toLowerCase()) ? ' data-invalid="true"' : ''
-      return `<a class="cg-cite" data-kind="${k}" data-id="${id.toLowerCase()}"${invalid} href="#"></a>`
+      const lid = id.toLowerCase()
+      const isInvalid = invalidSet.has(lid)
+      const glyph = isInvalid ? '⚠' : k === 'chunk' ? '↗' : '◆'
+      const label = isInvalid
+        ? 'invalid citation'
+        : k === 'chunk'
+          ? 'open source chunk'
+          : 'show entity on graph'
+      const invalidAttr = isInvalid ? ' data-invalid="true"' : ''
+      return `<a class="cg-cite" data-kind="${k}" data-id="${lid}" title="${label}"${invalidAttr} href="#">${glyph}</a>`
     },
   )
   const rendered = marked.parse(withPlaceholders, { async: false }) as string
   return DOMPurify.sanitize(rendered, {
-    ADD_ATTR: ['data-kind', 'data-id', 'data-invalid'],
+    ADD_ATTR: ['data-kind', 'data-id', 'data-invalid', 'title'],
   })
 })
 
@@ -61,7 +74,15 @@ function onClick(e: MouseEvent): void {
   e.preventDefault()
   const kind = anchor.getAttribute('data-kind')
   const id = anchor.getAttribute('data-id')
-  if (kind === 'chunk' && id) emit('open-chunk', id)
+  if (!id) return
+  if (kind === 'chunk') {
+    emit('open-chunk', id)
+  } else if (kind === 'entity' && props.workspaceId) {
+    // Entity citation → jump to graph with this node highlighted.
+    void navigateTo(
+      `/w/${props.workspaceId}/graph?highlight=${encodeURIComponent(id)}`,
+    )
+  }
 }
 </script>
 
@@ -120,20 +141,24 @@ function onClick(e: MouseEvent): void {
   padding-left: 1.25rem;
   list-style: decimal;
 }
-.cg-prose a.cg-cite::before {
-  content: '↗';
+.cg-prose a.cg-cite {
   display: inline-block;
-  font-size: 0.7em;
-  padding: 0.1em 0.3em;
+  font-size: 0.75em;
+  line-height: 1;
+  padding: 0.15em 0.35em;
   background: hsl(var(--primary) / 0.15);
   color: hsl(var(--primary));
   border-radius: 0.25rem;
   margin: 0 0.15em;
   cursor: pointer;
+  text-decoration: none;
+  vertical-align: baseline;
 }
-.cg-prose a.cg-cite[data-invalid="true"]::before {
+.cg-prose a.cg-cite:hover {
+  background: hsl(var(--primary) / 0.3);
+}
+.cg-prose a.cg-cite[data-invalid="true"] {
   background: hsl(var(--destructive) / 0.15);
   color: hsl(var(--destructive));
-  content: '⚠';
 }
 </style>
