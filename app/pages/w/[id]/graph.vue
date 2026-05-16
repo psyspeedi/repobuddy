@@ -142,17 +142,15 @@ let graph: Graph | null = null
 const HIGHLIGHT_COLOR = '#f97316'
 const HIGHLIGHT_SIZE = 16
 
-function nodeColor(node: GraphNode): string {
-  if (highlightSet.value.has(node.id)) return HIGHLIGHT_COLOR
+// Base (un-highlighted) color/size by node type. The reducer below
+// applies the highlight overlay on top of these so the original look
+// is preserved exactly when the highlight is cleared.
+function baseNodeColor(node: GraphNode): string {
   const base = typeColors[node.type] ?? '#888'
-  if (highlightSet.value.size >= 2) {
-    return base + '30'
-  }
   if (node.isContext) return base + '70'
   return base
 }
-function nodeSize(node: GraphNode): number {
-  if (highlightSet.value.has(node.id)) return HIGHLIGHT_SIZE
+function baseNodeSize(node: GraphNode): number {
   if (node.isContext) return 3
   if (node.type === 'class') return 8
   if (node.type === 'file') return 6
@@ -194,10 +192,15 @@ function rebuild(): void {
     for (const node of data.value.nodes) {
       if (seenIds.has(node.id)) continue
       seenIds.add(node.id)
+      const c = baseNodeColor(node)
+      const s = baseNodeSize(node)
       graph.addNode(node.id, {
         label: node.name,
-        size: nodeSize(node),
-        color: nodeColor(node),
+        size: s,
+        color: c,
+        // Store the base look so the reducer can revert when highlight clears.
+        baseColor: c,
+        baseSize: s,
         x: Math.random(),
         y: Math.random(),
         nodeType: node.type,
@@ -246,17 +249,45 @@ function rebuild(): void {
     })
     diag.sigmaPresent = true
 
-    if (graph.order > LOD_THRESHOLD) {
-      const degreeByNode = new Map<string, number>()
+    // Universal node reducer: applies highlight overlay AND optional LOD
+    // culling. Runs on every refresh, so reverting the highlight is just
+    // a sigma.refresh() away — no rebuild needed.
+    const lodActive = graph.order > LOD_THRESHOLD
+    const degreeByNode = new Map<string, number>()
+    if (lodActive) {
       graph.forEachNode((n) => degreeByNode.set(n, graph!.degree(n)))
-      sigma.setSetting('nodeReducer', (node, attrs) => {
-        if (highlightSet.value.has(node) || node === selectedNodeId.value) return attrs
+    }
+    sigma.setSetting('nodeReducer', (node, attrs) => {
+      const hl = highlightSet.value
+      const isHighlighted = hl.has(node)
+      const isSelected = node === selectedNodeId.value
+
+      // Always start from the stored base color/size so the node returns
+      // to its original look the moment highlight clears.
+      const baseColor = (attrs.baseColor as string | undefined) ?? attrs.color
+      const baseSize = (attrs.baseSize as number | undefined) ?? attrs.size
+
+      let color: string = baseColor
+      let size: number = baseSize
+      if (isHighlighted) {
+        color = HIGHLIGHT_COLOR
+        size = HIGHLIGHT_SIZE
+      } else if (hl.size >= 2) {
+        // Faded — part of a multi-node reasoning trace but not THIS node.
+        color = baseColor + '30'
+      }
+
+      let hidden = false
+      if (lodActive && !isHighlighted && !isSelected) {
         const ratio = sigma!.getCamera().ratio
         const degreeFloor = Math.max(1, Math.round(ratio * 5))
         const deg = degreeByNode.get(node) ?? 0
-        if (deg < degreeFloor) return { ...attrs, hidden: true }
-        return attrs
-      })
+        if (deg < degreeFloor) hidden = true
+      }
+
+      return { ...attrs, color, size, hidden }
+    })
+    if (lodActive) {
       sigma.getCamera().on('updated', () => sigma?.refresh())
     }
 
@@ -505,6 +536,10 @@ function clearHighlight(): void {
   const q = { ...route.query }
   delete q.highlight
   void navigateTo({ path: route.path, query: q }, { replace: true })
+  // The watch(highlightSet) handler triggers sigma.refresh, which re-runs
+  // the nodeReducer with an empty highlight set → nodes revert to baseColor.
+  // We also re-fit the camera since the user wanted a "clear" view.
+  sigma?.getCamera().animatedReset({ duration: 300 })
 }
 
 useHead({ title: 'Graph — CodeGraph' })
