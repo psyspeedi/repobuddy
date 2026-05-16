@@ -71,6 +71,9 @@ importers:
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.1
+      tree-sitter-wasms:
+        specifier: 0.1.13
+        version: 0.1.13
       ts-morph:
         specifier: ^28.0.0
         version: 28.0.0
@@ -83,6 +86,9 @@ importers:
       vue-router:
         specifier: ^5.0.7
         version: 5.0.7(@vue/compiler-sfc@3.5.34)(vue@3.5.34(typescript@5.9.3))
+      web-tree-sitter:
+        specifier: 0.20.8
+        version: 0.20.8
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -5292,6 +5298,9 @@ packages:
   tr46@0.0.3:
     resolution: {integrity: sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==}
 
+  tree-sitter-wasms@0.1.13:
+    resolution: {integrity: sha512-wT+cR6DwaIz80/vho3AvSF0N4txuNx/5bcRKoXouOfClpxh/qqrF4URNLQXbbt8MaAxeksZcZd1j8gcGjc+QxQ==}
+
   ts-api-utils@2.5.0:
     resolution: {integrity: sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA==}
     engines: {node: '>=18.12'}
@@ -5737,6 +5746,9 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
+
+  web-tree-sitter@0.20.8:
+    resolution: {integrity: sha512-weOVgZ3aAARgdnb220GqYuh7+rZU0Ka9k9yfKtGAzEYMa6GgiCzW9JjQRJyCJakvibQW+dfjJdihjInKuuCAUQ==}
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -11087,6 +11099,8 @@ snapshots:
 
   tr46@0.0.3: {}
 
+  tree-sitter-wasms@0.1.13: {}
+
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
       typescript: 5.9.3
@@ -11530,6 +11544,8 @@ snapshots:
       '@vue/shared': 3.5.34
     optionalDependencies:
       typescript: 5.9.3
+
+  web-tree-sitter@0.20.8: {}
 
   webidl-conversions@3.0.1: {}
 
