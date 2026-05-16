@@ -270,15 +270,11 @@ function rebuild(): void {
       selectedNodeId.value = node
     })
 
-    // Force a paint on the next frame. If there's no highlight, fit the
-    // whole graph; otherwise leave the camera alone so the subsequent
-    // panTo to the highlighted node isn't immediately overridden.
-    requestAnimationFrame(() => {
-      sigma?.refresh()
-      if (highlightSet.value.size === 0) {
-        sigma?.getCamera().animatedReset({ duration: 0 })
-      }
-    })
+    // Force a paint on the next frame. We do NOT touch the camera here —
+    // any positioning is the caller's job (panTo or fit-on-mount). This
+    // avoids racing with a subsequent panTo when both rebuild and panTo
+    // try to animate the camera within a few ms of each other.
+    requestAnimationFrame(() => sigma?.refresh())
 
     diag.rebuildCount++
     diag.lastError = ''
@@ -301,10 +297,12 @@ onMounted(async () => {
     SigmaCtor = sigmaMod.default as unknown as SigmaCtor
     fa2 = fa2Mod.default as unknown as typeof fa2
     circularLayout = { assign: layoutMod.circular.assign } as unknown as typeof circularLayout
-    diag.libsLoaded = true
 
-    // If we arrived with ?highlight, expand selectedTypes BEFORE building.
+    // If we arrived with ?highlight, expand selectedTypes BEFORE flipping
+    // libsLoaded — that way the data watcher won't fire on stale data,
+    // and the refresh() that follows will trigger exactly one rebuild.
     const ids = [...highlightSet.value]
+    let willRefresh = false
     if (ids.length > 0) {
       const types = await Promise.all(
         ids.map(async (id) => {
@@ -318,28 +316,37 @@ onMounted(async () => {
           }
         }),
       )
-      let changed = false
       for (const t of types) {
         if (t && !selectedTypes.value.includes(t)) {
           selectedTypes.value = [...selectedTypes.value, t]
-          changed = true
+          willRefresh = true
         }
       }
-      if (changed) {
-        activePreset.value = null
-        await refresh()
-        await nextTick()
-      }
+      if (willRefresh) activePreset.value = null
     }
 
-    // First build.
-    await nextTick()
-    if (data.value) rebuild()
+    diag.libsLoaded = true
 
-    // Focus highlight target.
-    await nextTick()
+    if (willRefresh) {
+      // Trigger refresh; the data watcher will rebuild on response.
+      await refresh()
+      await nextTick()
+      await nextTick()
+    } else if (data.value) {
+      // No refresh needed — watcher won't fire because data didn't change.
+      // Build once manually.
+      rebuild()
+      await nextTick()
+    }
+
+    // Now the canvas has the right scene; position the camera.
     const first = ids[0]
-    if (first) panTo(first)
+    if (first && graph?.hasNode(first)) {
+      panTo(first)
+    } else if (!first) {
+      // No highlight — fit the whole graph.
+      sigma?.getCamera().animatedReset({ duration: 0 })
+    }
   } catch (err) {
     diag.lastError = `onMounted: ${err instanceof Error ? err.message : String(err)}`
   }
