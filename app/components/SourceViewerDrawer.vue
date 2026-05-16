@@ -21,11 +21,11 @@ interface ChunkResponse {
     filePath: string | null
     startLine: number | null
     endLine: number | null
-    metadata: { language?: string } | null
+    metadata: { language?: string; kind?: string; sha?: string; shortSha?: string } | null
   }
 }
 
-type RenderMode = 'markdown' | 'code'
+type RenderMode = 'markdown' | 'code' | 'diff'
 
 const data = ref<ChunkResponse | null>(null)
 const html = ref<string>('')
@@ -51,6 +51,10 @@ async function load(): Promise<void> {
 }
 
 function detectMode(chunk: ChunkResponse['chunk']): RenderMode {
+  // Per-commit diff chunks are written with source_type='doc' (to ride the
+  // tsvector index) but tagged metadata.kind='diff'. They're not markdown —
+  // render them with Shiki's `diff` grammar for proper +/- coloring.
+  if (chunk.metadata?.kind === 'diff') return 'diff'
   if (chunk.sourceType === 'doc') return 'markdown'
   if (chunk.filePath && /\.(md|mdx|markdown)$/i.test(chunk.filePath)) return 'markdown'
   return 'code'
@@ -64,6 +68,12 @@ async function renderChunk(
     const rendered = marked.parse(chunk.text, { async: false }) as string
     return DOMPurify.sanitize(rendered)
   }
+  if (forMode === 'diff') {
+    return codeToHtml(chunk.text, {
+      lang: 'diff',
+      theme: colorMode.value === 'dark' ? 'github-dark' : 'github-light',
+    })
+  }
   const lang = chunk.metadata?.language ?? 'plaintext'
   return codeToHtml(chunk.text, {
     lang: shikiLang(lang),
@@ -73,6 +83,8 @@ async function renderChunk(
 
 async function toggleMode(): Promise<void> {
   if (!data.value) return
+  // Toggle only makes sense for markdown ↔ raw code. Diff stays diff.
+  if (mode.value === 'diff') return
   mode.value = mode.value === 'markdown' ? 'code' : 'markdown'
   html.value = await renderChunk(data.value.chunk, mode.value)
 }
@@ -92,7 +104,12 @@ function shikiLang(lang: string): string {
   <aside class="flex h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-card">
     <header class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
       <div class="min-w-0 flex-1 text-sm">
-        <p v-if="data?.chunk" class="truncate font-mono">
+        <p v-if="data?.chunk && mode === 'diff'" class="truncate font-mono">
+          <span class="rounded bg-pink-500/15 px-1 py-0.5 text-[10px] uppercase tracking-wide text-pink-700 dark:text-pink-300">diff</span>
+          <span class="ml-1">{{ data.chunk.filePath }}</span>
+          <span v-if="data.chunk.metadata?.shortSha" class="ml-1 text-muted-foreground">@ {{ data.chunk.metadata.shortSha }}</span>
+        </p>
+        <p v-else-if="data?.chunk" class="truncate font-mono">
           {{ data.chunk.filePath }}
           <span v-if="data.chunk.startLine" class="text-muted-foreground">
             :{{ data.chunk.startLine }}-{{ data.chunk.endLine }}
@@ -103,7 +120,7 @@ function shikiLang(lang: string): string {
         </p>
       </div>
       <Button
-        v-if="data?.chunk"
+        v-if="data?.chunk && mode !== 'diff'"
         variant="ghost"
         size="sm"
         :title="mode === 'markdown' ? 'Show raw markdown' : 'Render as markdown'"
