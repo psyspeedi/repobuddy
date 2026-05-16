@@ -351,6 +351,104 @@ export async function hybridSearchOp(
   })
 }
 
+// ---------- search_docs ----------
+// Same retrieval mechanics as hybrid_search but restricted to chunks whose
+// source_type is 'doc' (markdown / PR descriptions). Used by the planner for
+// broad / architectural / "tell me about X" questions where README and design
+// notes are likelier to ground a good answer than raw code.
+export async function searchDocs(
+  params: { query: string; limit?: number },
+  ctx: OperatorContext,
+): Promise<
+  {
+    id: string
+    text: string
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    score: number
+  }[]
+> {
+  const limit = params.limit ?? 12
+  const fetchLimit = limit * 4
+  const [vec] = await ctx.embeddings.embedBatch([params.query])
+  if (!vec) return []
+  const vecLiteral = `[${vec.join(',')}]`
+
+  const vectorRows = await ctx.db.execute<{
+    id: string
+    text: string
+    file_path: string | null
+    start_line: number | null
+    end_line: number | null
+    rank: number
+  }>(sql`
+    SELECT id, text, file_path, start_line, end_line,
+           row_number() OVER (ORDER BY embedding <=> ${vecLiteral}::vector ASC) AS rank
+    FROM ${chunks}
+    WHERE workspace_id = ${ctx.workspaceId}
+      AND source_type = 'doc'
+      AND embedding IS NOT NULL
+    ORDER BY embedding <=> ${vecLiteral}::vector ASC
+    LIMIT ${fetchLimit}
+  `)
+
+  const textRows = await ctx.db.execute<{
+    id: string
+    text: string
+    file_path: string | null
+    start_line: number | null
+    end_line: number | null
+    rank: number
+  }>(sql`
+    SELECT id, text, file_path, start_line, end_line,
+           row_number() OVER (
+             ORDER BY ts_rank(text_tsv, websearch_to_tsquery('english', ${params.query})) DESC
+           ) AS rank
+    FROM ${chunks}
+    WHERE workspace_id = ${ctx.workspaceId}
+      AND source_type = 'doc'
+      AND text_tsv @@ websearch_to_tsquery('english', ${params.query})
+    ORDER BY ts_rank(text_tsv, websearch_to_tsquery('english', ${params.query})) DESC
+    LIMIT ${fetchLimit}
+  `)
+
+  const RRF_K = 60
+  const merged = new Map<string, {
+    text: string
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    score: number
+  }>()
+  for (const row of vectorRows) {
+    merged.set(row.id, {
+      text: row.text,
+      filePath: row.file_path,
+      startLine: row.start_line,
+      endLine: row.end_line,
+      score: 1 / (RRF_K + Number(row.rank)),
+    })
+  }
+  for (const row of textRows) {
+    const rank = Number(row.rank)
+    const existing = merged.get(row.id)
+    if (existing) existing.score += 1 / (RRF_K + rank)
+    else
+      merged.set(row.id, {
+        text: row.text,
+        filePath: row.file_path,
+        startLine: row.start_line,
+        endLine: row.end_line,
+        score: 1 / (RRF_K + rank),
+      })
+  }
+  return [...merged.entries()]
+    .map(([id, v]) => ({ id, ...v }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+}
+
 // ---------- retrieve_code_chunks ----------
 export interface RetrieveCodeChunksParams {
   entities: GraphEntity | GraphEntity[]
@@ -426,9 +524,17 @@ export async function* answerOp(
   for (const item of params.context.flat(2)) {
     if (!item || typeof item !== 'object') continue
     const obj = item as Record<string, unknown>
-    if (typeof obj.text === 'string' && typeof obj.id === 'string') {
+    // Chunks come back with either `id` (search_docs, vector_search_chunks,
+    // retrieve_code_chunks) or `chunkId` (hybrid_search) — accept both.
+    const chunkId =
+      typeof obj.id === 'string'
+        ? obj.id
+        : typeof obj.chunkId === 'string'
+          ? obj.chunkId
+          : null
+    if (typeof obj.text === 'string' && chunkId) {
       chunks.push({
-        id: obj.id,
+        id: chunkId,
         text: obj.text as string,
         filePath: (obj.filePath as string | null) ?? null,
         startLine: (obj.startLine as number | null) ?? null,
@@ -515,6 +621,7 @@ export type OperatorName =
   | 'find_by_concept'
   | 'vector_search_chunks'
   | 'hybrid_search'
+  | 'search_docs'
   | 'retrieve_code_chunks'
   | 'get_summary'
   | 'answer'
@@ -534,6 +641,7 @@ export const OPERATORS: Record<
   find_by_concept: findByConcept as never,
   vector_search_chunks: vectorSearchChunks as never,
   hybrid_search: hybridSearchOp as never,
+  search_docs: searchDocs as never,
   retrieve_code_chunks: retrieveCodeChunks as never,
   get_summary: getSummary as never,
   answer: answerOp as never,

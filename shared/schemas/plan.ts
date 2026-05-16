@@ -12,6 +12,7 @@ export const OPERATOR_NAMES = [
   'find_by_concept',
   'vector_search_chunks',
   'hybrid_search',
+  'search_docs',
   'retrieve_code_chunks',
   'get_summary',
   'answer',

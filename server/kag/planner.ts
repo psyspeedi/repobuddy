@@ -24,7 +24,8 @@ The JSON object MUST have this top-level shape:
 - git_history({ entity, since?, limit? }) → Commit[]
 - find_by_concept({ query, limit? }) → Entity[]   (semantic search over entity descriptions)
 - vector_search_chunks({ query, limit? }) → Chunk[]
-- hybrid_search({ query, limit? }) → Chunk[]
+- hybrid_search({ query, limit? }) → Chunk[]   (across ALL chunks — code, docs, commit messages)
+- search_docs({ query, limit? }) → Chunk[]      (restricted to markdown/doc chunks — READMEs, design notes, PR descriptions)
 - retrieve_code_chunks({ entities, limit? }) → Chunk[]
 - get_summary({ entity }) → { id, name, type, description }[]
 - answer({ question, context, style? }) → streaming response with inline citations
@@ -39,7 +40,7 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 - If the user mentions any identifier that looks like a class/function/type name (CamelCase, snake_case, contains digits, or appears in code), use \`find_symbol\`. Strip surrounding natural-language words from the \`name\` parameter — only the bare identifier. Prefer \`fuzzy: true\` when the name might be embedded in longer qualified names (e.g. "ZodBigInt" → also matches "ZodBigIntDef").
 - Use \`find_by_concept\` only when there is no concrete identifier — for genuinely fuzzy semantic queries ("where is discount logic").
 - For multi-hop "who calls X transitively" — use get_callers with transitive: true.
-- For "tell me about this project" — combine README discovery via find_file + hybrid_search overview.
+- For broad / architectural / "tell me about this project" / "how does X work overall" questions — use \`search_docs\` (covers READMEs, docs/*.md, design notes) as the primary retrieval step, optionally combined with \`hybrid_search\` for code snippets. Bumping limit to 15 is fine on such broad queries.
 - The question may be in any language (Russian, Chinese, etc.). Extract identifiers verbatim; do not translate them.
 - Keep plans concise: 2-5 steps is usually right.`
 
@@ -96,21 +97,24 @@ const FEW_SHOTS = [
   {
     question: 'Tell me about this project.',
     plan: {
-      reasoning: 'Broad question — pull README + overview chunks.',
+      reasoning: 'Broad question — primary signal is docs (README, design notes); add code overview for completeness.',
       steps: [
-        { id: 's1', op: 'find_file', params: { pathPattern: 'README*' } },
-        { id: 's2', op: 'retrieve_code_chunks', params: { entities: '$s1' } },
         {
-          id: 's3',
-          op: 'hybrid_search',
-          params: { query: 'project overview architecture main features', limit: 8 },
+          id: 's1',
+          op: 'search_docs',
+          params: { query: 'project overview architecture main features', limit: 15 },
         },
         {
-          id: 's4',
+          id: 's2',
+          op: 'hybrid_search',
+          params: { query: 'main entry points top-level modules', limit: 6 },
+        },
+        {
+          id: 's3',
           op: 'answer',
           params: {
             question: 'Tell me about this project.',
-            context: ['$s2', '$s3'],
+            context: ['$s1', '$s2'],
             style: 'detailed',
           },
         },

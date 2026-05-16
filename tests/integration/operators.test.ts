@@ -9,10 +9,12 @@ import {
   getCallers,
   getSummary,
   retrieveCodeChunks,
+  searchDocs,
   type OperatorContext,
 } from '../../server/kag/operators'
 import { MockEmbeddingsProvider } from '../../server/providers/embeddings'
 import { MockLLMProvider } from '../../server/providers/llm'
+import { embedChunks } from '../../server/indexer/embed'
 
 import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 
@@ -200,6 +202,38 @@ describe('operators', () => {
     const { ctx } = await seedTinyGraph()
     const result = await findFile({ pathPattern: 'src/*.ts' }, ctx)
     expect(result.map((f) => f.name).sort()).toEqual(['orders.ts', 'telemetry.ts'])
+  })
+
+  it('search_docs returns only doc chunks, ignores code chunks', async () => {
+    const { ctx } = await seedTinyGraph()
+    // Add a doc chunk and a code chunk both mentioning the same topic.
+    const inserted = await db
+      .insert(schema.chunks)
+      .values([
+        {
+          workspaceId: ctx.workspaceId,
+          sourceType: 'doc',
+          filePath: 'README.md',
+          text: 'CodeGraph provides KAG-style answers over a hybrid knowledge graph of code and docs.',
+        },
+        {
+          workspaceId: ctx.workspaceId,
+          sourceType: 'code',
+          filePath: 'src/lib.ts',
+          text: 'export function knowledgeGraphHelper() {}',
+        },
+      ])
+      .returning({ id: schema.chunks.id })
+    await embedChunks(ctx.db, ctx.workspaceId, inserted.map((r) => r.id), ctx.embeddings)
+
+    const result = await searchDocs(
+      { query: 'KAG knowledge graph overview', limit: 5 },
+      ctx,
+    )
+    expect(result.length).toBeGreaterThan(0)
+    // Every returned chunk must be from a doc-sourced row.
+    const filePaths = result.map((r) => r.filePath)
+    expect(filePaths.every((p) => p === 'README.md')).toBe(true)
   })
 
   it('get_callers returns immediate parents', async () => {
