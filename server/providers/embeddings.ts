@@ -1,5 +1,10 @@
 import OpenAI from 'openai'
 import { createHash } from 'node:crypto'
+import {
+  decode,
+  encode,
+  isWithinTokenLimit,
+} from 'gpt-tokenizer/model/text-embedding-3-small'
 import { getLogger } from '../lib/logger'
 
 const log = getLogger().child({ component: 'providers/embeddings' })
@@ -37,11 +42,10 @@ class OpenAIEmbeddingsProvider implements EmbeddingsProvider {
 
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return []
-    // OpenAI embedding models cap at 8192 tokens per input. We don't have a
-    // tokenizer here, so we truncate by character count using a conservative
-    // 3.5-chars-per-token heuristic (code tends to be denser than English).
-    // Truncation only affects what's embedded; the full chunk text remains
-    // in the DB for retrieval display.
+    // OpenAI embedding models cap at 8192 tokens per input. We tokenise with
+    // the actual cl100k-style tokenizer used by text-embedding-3-small and
+    // truncate over-long inputs. Full chunk text in DB is unchanged; only
+    // what we feed the API is shortened.
     const truncated = texts.map((t) => truncateToTokenLimit(t))
     const result: number[][] = new Array(texts.length)
     for (let start = 0; start < truncated.length; start += this.maxBatchSize) {
@@ -80,12 +84,12 @@ class OpenAIEmbeddingsProvider implements EmbeddingsProvider {
 }
 
 const EMBEDDING_TOKEN_LIMIT = 8000 // OpenAI hard cap is 8192; keep margin.
-const CHARS_PER_TOKEN = 3.5
 
 function truncateToTokenLimit(text: string): string {
-  const maxChars = Math.floor(EMBEDDING_TOKEN_LIMIT * CHARS_PER_TOKEN)
-  if (text.length <= maxChars) return text
-  return text.slice(0, maxChars)
+  // Fast path: most chunks are well under the cap.
+  if (isWithinTokenLimit(text, EMBEDDING_TOKEN_LIMIT)) return text
+  const tokens = encode(text)
+  return decode(tokens.slice(0, EMBEDDING_TOKEN_LIMIT))
 }
 
 /**
