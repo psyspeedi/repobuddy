@@ -291,6 +291,51 @@ function panTo(id: string): void {
   )
 }
 
+// Search.
+interface SearchHit {
+  id: string
+  type: string
+  name: string
+  qualifiedName: string | null
+  filePath: string | null
+}
+const searchQuery = ref('')
+const searchResults = ref<SearchHit[]>([])
+const searchOpen = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(searchQuery, (q) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  if (!q.trim()) {
+    searchResults.value = []
+    searchOpen.value = false
+    return
+  }
+  searchTimer = setTimeout(() => {
+    void runSearch(q.trim())
+  }, 200)
+})
+
+async function runSearch(q: string): Promise<void> {
+  try {
+    const res = await $fetch<{ results: SearchHit[] }>(
+      `/api/workspaces/${workspaceId}/search`,
+      { query: { q, limit: 15 } },
+    )
+    searchResults.value = res.results
+    searchOpen.value = res.results.length > 0
+  } catch {
+    searchResults.value = []
+    searchOpen.value = false
+  }
+}
+
+async function pickSearchResult(hit: SearchHit): Promise<void> {
+  searchOpen.value = false
+  searchQuery.value = ''
+  await focusEntity(hit.id)
+}
+
 useHead({ title: 'Graph — CodeGraph' })
 </script>
 
@@ -363,6 +408,37 @@ useHead({ title: 'Graph — CodeGraph' })
 
     <section class="relative flex-1 overflow-hidden rounded-lg border border-border bg-card">
       <div ref="containerRef" class="absolute inset-0" />
+
+      <div class="absolute left-3 right-3 top-3 z-10 max-w-md">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search entities by name…"
+          class="w-full rounded-md border border-border bg-background/95 px-3 py-1.5 text-sm shadow-sm backdrop-blur focus:outline-none focus:ring-2 focus:ring-ring"
+          @focus="searchOpen = searchResults.length > 0"
+        >
+        <ul
+          v-if="searchOpen"
+          class="mt-1 max-h-72 overflow-y-auto rounded-md border border-border bg-card text-sm shadow-lg"
+        >
+          <li
+            v-for="hit in searchResults"
+            :key="hit.id"
+            class="cursor-pointer border-b border-border px-3 py-2 last:border-0 hover:bg-accent"
+            @click="pickSearchResult(hit)"
+          >
+            <div class="flex items-center gap-2">
+              <span class="inline-block h-2 w-2 rounded-full" :style="{ backgroundColor: typeColors[hit.type] ?? '#888' }" />
+              <span class="font-medium">{{ hit.name }}</span>
+              <span class="text-xs text-muted-foreground">{{ hit.type }}</span>
+            </div>
+            <p v-if="hit.qualifiedName" class="break-all text-xs text-muted-foreground">
+              {{ hit.qualifiedName }}
+            </p>
+          </li>
+        </ul>
+      </div>
+
       <div v-if="pending" class="absolute inset-0 grid place-items-center bg-card/60">
         Loading graph…
       </div>

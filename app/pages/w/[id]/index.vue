@@ -35,6 +35,15 @@ const lastAssistant = computed(() =>
 onMounted(async () => {
   await Promise.all([chat.loadHistory(), chatSessions.refresh()])
   scrollToBottom()
+
+  // Honour ?ask=<prefilled question> — used by the graph detail panel's
+  // "Ask AI" button to hand off the user mid-flow.
+  const ask = route.query.ask
+  if (typeof ask === 'string' && ask.trim()) {
+    inputText.value = ask
+    // Strip the query so a page refresh doesn't re-trigger.
+    await navigateTo({ path: route.path }, { replace: true })
+  }
 })
 
 function onOpenChunk(chunkId: string): void {

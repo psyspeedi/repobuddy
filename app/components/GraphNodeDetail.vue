@@ -11,6 +11,20 @@ defineEmits<{
   (e: 'focus', id: string): void
 }>()
 
+const router = useRouter()
+
+async function askAboutEntity(): Promise<void> {
+  const e = detail.value?.entity
+  if (!e) return
+  const ref = `[entity:${e.id}]`
+  const subject = e.qualifiedName ?? e.name
+  const question = `Расскажи подробно про ${subject} ${ref}.`
+  await router.push({
+    path: `/w/${props.workspaceId}`,
+    query: { ask: question },
+  })
+}
+
 interface NeighborEntity {
   id: string
   name: string
@@ -106,9 +120,20 @@ const hotness = computed(() => {
           <span v-if="detail.entity.language"> · {{ detail.entity.language }}</span>
         </p>
       </div>
-      <Button variant="ghost" size="sm" @click="$emit('close')">
-        ×
-      </Button>
+      <div class="flex items-center gap-1">
+        <Button
+          v-if="detail?.entity"
+          variant="outline"
+          size="sm"
+          title="Open the chat with a prefilled question about this entity"
+          @click="askAboutEntity"
+        >
+          Ask AI
+        </Button>
+        <Button variant="ghost" size="sm" @click="$emit('close')">
+          ×
+        </Button>
+      </div>
     </header>
 
     <div class="flex-1 space-y-3 overflow-y-auto p-3 text-xs">
