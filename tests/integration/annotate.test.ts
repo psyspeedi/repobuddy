@@ -7,9 +7,7 @@ import { MockEmbeddingsProvider } from '../../server/providers/embeddings'
 import { MockLLMProvider } from '../../server/providers/llm'
 import { annotateAndEmbed } from '../../server/indexer/annotate'
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  'postgres://codegraph:codegraph@localhost:5532/codegraph'
+import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 
 let sqlClient: postgres.Sql
 let db: ReturnType<typeof drizzle<typeof schema>>

@@ -36,9 +36,7 @@ const { MockEmbeddingsProvider } = await import('../../server/providers/embeddin
 
 const mockEmbeddings = new MockEmbeddingsProvider()
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  'postgres://codegraph:codegraph@localhost:5532/codegraph'
+import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6479'
 
 const FIXTURE = resolve(__dirname, '../fixtures/repos/ts-sample')

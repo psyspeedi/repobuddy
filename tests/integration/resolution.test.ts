@@ -5,9 +5,7 @@ import { and, eq } from 'drizzle-orm'
 import * as schema from '../../server/db/schema'
 import { resolveEntities } from '../../server/indexer/resolution'
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  'postgres://codegraph:codegraph@localhost:5532/codegraph'
+import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 
 let sqlClient: postgres.Sql
 let db: ReturnType<typeof drizzle<typeof schema>>

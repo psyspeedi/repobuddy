@@ -8,9 +8,7 @@ import { MockLLMProvider } from '../../server/providers/llm'
 import type { OperatorContext } from '../../server/kag/operators'
 import type { Plan } from '../../shared/schemas/plan'
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  'postgres://codegraph:codegraph@localhost:5532/codegraph'
+import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 
 let sqlClient: postgres.Sql
 let db: ReturnType<typeof drizzle<typeof schema>>

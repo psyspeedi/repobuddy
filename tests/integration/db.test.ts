@@ -4,9 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { eq, sql } from 'drizzle-orm'
 import * as schema from '../../server/db/schema'
 
-const DATABASE_URL =
-  process.env.DATABASE_URL ??
-  'postgres://codegraph:codegraph@localhost:5532/codegraph'
+import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 
 let sqlClient: postgres.Sql
 let db: ReturnType<typeof drizzle<typeof schema>>
