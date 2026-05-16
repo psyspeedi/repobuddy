@@ -333,8 +333,24 @@ export async function runIndexPipeline(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      log.error({ err: msg }, 'pipeline failed')
-      await markWorkspaceFailed(db, workspaceId, msg)
+      // postgres-js wraps the driver error and exposes its detail via `.cause`
+      // (PostgresError with .code / .detail / .table fields). Surface what
+      // we can so the operator log shows the actual root cause.
+      const cause = err instanceof Error ? (err.cause as unknown) : undefined
+      const causeFields =
+        cause && typeof cause === 'object'
+          ? {
+              causeMessage: (cause as { message?: string }).message,
+              causeCode: (cause as { code?: string }).code,
+              causeDetail: (cause as { detail?: string }).detail,
+              causeTable: (cause as { table_name?: string }).table_name,
+            }
+          : {}
+      log.error({ err: msg, ...causeFields }, 'pipeline failed')
+      const failureMessage = causeFields.causeMessage
+        ? `${msg} — ${causeFields.causeMessage}`
+        : msg
+      await markWorkspaceFailed(db, workspaceId, failureMessage)
       throw err
     } finally {
       if (source) await source.cleanup()

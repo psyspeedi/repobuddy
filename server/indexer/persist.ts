@@ -44,7 +44,25 @@ export async function insertEntities(
   parsed: ParsedEntity[],
 ): Promise<Map<string, string>> {
   if (parsed.length === 0) return new Map()
-  const rows = parsed.map((e) => ({
+
+  // Dedupe by (workspaceId, qualifiedName) before batching. Postgres rejects
+  // an INSERT … ON CONFLICT DO UPDATE that affects the same conflict-target
+  // row twice in one statement (declaration merging, namespace re-opens,
+  // duplicate file walks all cause this). Last write wins.
+  const byKey = new Map<string, ParsedEntity>()
+  const nullKeyed: ParsedEntity[] = []
+  for (const e of parsed) {
+    if (e.qualifiedName) {
+      byKey.set(e.qualifiedName, e)
+    } else {
+      // Entities without qualified_name (rare — usually module/concept) can
+      // coexist; the unique constraint treats each NULL as distinct.
+      nullKeyed.push(e)
+    }
+  }
+  const deduped: ParsedEntity[] = [...byKey.values(), ...nullKeyed]
+
+  const rows = deduped.map((e) => ({
     workspaceId,
     type: e.type,
     name: e.name,
@@ -86,6 +104,12 @@ export async function insertEntities(
     for (const row of inserted) {
       if (row.qualifiedName) idMap.set(row.qualifiedName, row.id)
     }
+  }
+  if (parsed.length !== deduped.length) {
+    log.info(
+      { workspaceId, raw: parsed.length, deduped: deduped.length },
+      'deduplicated parsed entities before insert',
+    )
   }
   return idMap
 }
