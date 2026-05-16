@@ -16,6 +16,11 @@ import type {
 import { fetchGitHub, type FetchedSource } from './source/fetch'
 import { walkRepo } from './source/walk'
 import { extractGitHistory } from './git/history'
+import { embedChunks } from './embed'
+import {
+  createEmbeddingsProvider,
+  type EmbeddingsProvider,
+} from '../providers/embeddings'
 import { getTypeScriptParser } from './parsers/typescript'
 import { getPythonParser } from './parsers/python'
 import { getGoParser } from './parsers/go'
@@ -36,9 +41,14 @@ import type {
 
 const log = getLogger().child({ component: 'indexer/pipeline' })
 
+export interface PipelineDeps {
+  embeddings?: EmbeddingsProvider
+}
+
 export async function runIndexPipeline(
   db: Database,
   job: Job<IndexWorkspaceJobData, IndexWorkspaceJobResult>,
+  deps: PipelineDeps = {},
 ): Promise<IndexWorkspaceJobResult> {
   const { workspaceId, userId } = job.data
   return withTrace({ workspaceId, userId, jobId: job.id }, async () => {
@@ -213,6 +223,27 @@ export async function runIndexPipeline(
       )
       await linkEntityChunks(db, idMap, chunkByQualified)
 
+      // 9b. Embed chunks.
+      const embeddings = deps.embeddings ?? createEmbeddingsProvider()
+      await setWorkspaceProgress(db, workspaceId, {
+        phase: 'embedding',
+        percent: 85,
+        message: `Embedding ${chunkIds.length} chunks…`,
+      })
+      const embeddedCount = await embedChunks(
+        db,
+        workspaceId,
+        chunkIds,
+        embeddings,
+        async (done, total) => {
+          await setWorkspaceProgress(db, workspaceId, {
+            phase: 'embedding',
+            percent: 85 + Math.round((done / total) * 5),
+            message: `Embedded ${done}/${total} chunks`,
+          })
+        },
+      )
+
       // 10. Git history.
       await setWorkspaceProgress(db, workspaceId, {
         phase: 'embedding',
@@ -250,6 +281,7 @@ export async function runIndexPipeline(
         entities: allEntities.length,
         relations: relCount,
         chunks: chunkIds.length,
+        embeddedChunks: embeddedCount,
         commits: commitCount,
         warnings: warnings.length,
         tokensSpent: 0,

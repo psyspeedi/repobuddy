@@ -32,6 +32,9 @@ vi.mock('../../server/indexer/source/fetch', async () => {
 // Imported AFTER the mock so the mocked module wins.
 const { runIndexPipeline } = await import('../../server/indexer/pipeline')
 const { fetchGitHub } = await import('../../server/indexer/source/fetch')
+const { MockEmbeddingsProvider } = await import('../../server/providers/embeddings')
+
+const mockEmbeddings = new MockEmbeddingsProvider()
 
 const DATABASE_URL =
   process.env.DATABASE_URL ??
@@ -73,7 +76,7 @@ beforeAll(async () => {
 
   worker = new Worker(
     INDEX_WORKSPACE_QUEUE,
-    async (job) => runIndexPipeline(db, job),
+    async (job) => runIndexPipeline(db, job, { embeddings: mockEmbeddings }),
     { connection, concurrency: 1 },
   )
   events = new QueueEvents(INDEX_WORKSPACE_QUEUE, { connection })
@@ -189,6 +192,13 @@ describe('full indexing pipeline', () => {
       SELECT text_tsv::text AS tsv FROM chunks WHERE id = ${sample!.id}
     `
     expect(tsv.length).toBeGreaterThan(0)
+
+    // Embeddings populated by MockEmbeddingsProvider
+    const [{ embedded_count }] = await sqlClient<{ embedded_count: number }[]>`
+      SELECT COUNT(*)::int AS embedded_count
+      FROM chunks WHERE workspace_id = ${workspaceId} AND embedding IS NOT NULL
+    `
+    expect(Number(embedded_count)).toBeGreaterThan(0)
   }, 90000)
 
   it('processes py-sample (python parser path)', async () => {

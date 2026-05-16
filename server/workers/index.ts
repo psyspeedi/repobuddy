@@ -17,6 +17,7 @@ import type {
   IndexWorkspaceJobResult,
 } from '../queues'
 import { runIndexPipeline } from '../indexer/pipeline'
+import { createEmbeddingsProvider } from '../providers/embeddings'
 
 const log = getLogger().child({ component: 'worker' })
 
@@ -26,10 +27,11 @@ async function main(): Promise<void> {
 
   const db = getDb(env.DATABASE_URL)
   const connection = getRedisConnection(env.REDIS_URL)
+  const embeddings = createEmbeddingsProvider({ apiKey: env.OPENAI_API_KEY })
 
   const worker = new Worker<IndexWorkspaceJobData, IndexWorkspaceJobResult>(
     INDEX_WORKSPACE_QUEUE,
-    async (job) => runIndexPipeline(db, job),
+    async (job) => runIndexPipeline(db, job, { embeddings }),
     {
       connection,
       concurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
