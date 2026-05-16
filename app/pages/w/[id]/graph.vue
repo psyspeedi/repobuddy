@@ -74,6 +74,10 @@ const edgeColors: Record<string, string> = {
 }
 const DEFAULT_EDGE_COLOR = '#cbd5e1'
 
+// Threshold above which we engage degree-based level-of-detail culling.
+// Below this, every node renders unconditionally — Sigma handles it.
+const LOD_THRESHOLD = 800
+
 // View presets — one click swaps the type filter to a curated set.
 interface ViewPreset {
   id: string
@@ -117,11 +121,18 @@ const visibleEdgeTypes = computed(() => {
   return new Set(data.value.edges.map((e) => e.type))
 })
 
+const fetchLimit = ref(800)
+
 const query = computed(() => ({
   types: selectedTypes.value.join(','),
-  limit: 1500,
+  limit: fetchLimit.value,
   neighbors: '1',
 }))
+
+function loadMore(): void {
+  fetchLimit.value = Math.min(fetchLimit.value + 1000, 5000)
+  void refresh()
+}
 
 const { data, refresh, pending } = await useFetch<GraphResponse>(
   `/api/workspaces/${workspaceId}/graph`,
@@ -217,6 +228,26 @@ function rebuild(): void {
     minCameraRatio: 0.05,
     maxCameraRatio: 10,
   })
+
+  // Level-of-detail (LOD): when the graph is dense (> LOD_THRESHOLD nodes),
+  // hide low-degree nodes when zoomed out and progressively reveal them as
+  // the camera zooms in. Highlighted and selected nodes always visible.
+  if (graph.order > LOD_THRESHOLD) {
+    const degreeByNode = new Map<string, number>()
+    graph.forEachNode((n) => degreeByNode.set(n, graph!.degree(n)))
+
+    sigma.setSetting('nodeReducer', (node, attrs) => {
+      if (highlightSet.value.has(node) || node === selectedNodeId.value) {
+        return attrs
+      }
+      const ratio = sigma!.getCamera().ratio
+      const degreeFloor = Math.max(1, Math.round(ratio * 5))
+      const deg = degreeByNode.get(node) ?? 0
+      if (deg < degreeFloor) return { ...attrs, hidden: true }
+      return attrs
+    })
+    sigma.getCamera().on('updated', () => sigma?.refresh())
+  }
 
   // By default hide every edge label; only paint the one Sigma is hovering.
   sigma.setSetting('edgeReducer', (edge, attrs) => {
@@ -424,8 +455,16 @@ useHead({ title: 'Graph — CodeGraph' })
           </li>
         </ul>
       </details>
-      <div v-if="data?.truncated" class="rounded bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
-        Graph truncated. Adjust filters to narrow.
+      <div v-if="data?.truncated" class="space-y-1 rounded bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
+        <p>Graph truncated at {{ fetchLimit }} nodes.</p>
+        <button
+          v-if="fetchLimit < 5000"
+          type="button"
+          class="text-yellow-700 underline underline-offset-2 hover:text-yellow-900 dark:text-yellow-300 dark:hover:text-yellow-100"
+          @click="loadMore"
+        >
+          Load more →
+        </button>
       </div>
     </aside>
 
