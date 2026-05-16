@@ -37,9 +37,15 @@ class OpenAIEmbeddingsProvider implements EmbeddingsProvider {
 
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return []
+    // OpenAI embedding models cap at 8192 tokens per input. We don't have a
+    // tokenizer here, so we truncate by character count using a conservative
+    // 3.5-chars-per-token heuristic (code tends to be denser than English).
+    // Truncation only affects what's embedded; the full chunk text remains
+    // in the DB for retrieval display.
+    const truncated = texts.map((t) => truncateToTokenLimit(t))
     const result: number[][] = new Array(texts.length)
-    for (let start = 0; start < texts.length; start += this.maxBatchSize) {
-      const slice = texts.slice(start, start + this.maxBatchSize)
+    for (let start = 0; start < truncated.length; start += this.maxBatchSize) {
+      const slice = truncated.slice(start, start + this.maxBatchSize)
       const vectors = await this.embedWithRetry(slice)
       for (let i = 0; i < vectors.length; i++) {
         const vec = vectors[i]
@@ -71,6 +77,15 @@ class OpenAIEmbeddingsProvider implements EmbeddingsProvider {
     }
     throw lastErr instanceof Error ? lastErr : new Error('embed retries exhausted')
   }
+}
+
+const EMBEDDING_TOKEN_LIMIT = 8000 // OpenAI hard cap is 8192; keep margin.
+const CHARS_PER_TOKEN = 3.5
+
+function truncateToTokenLimit(text: string): string {
+  const maxChars = Math.floor(EMBEDDING_TOKEN_LIMIT * CHARS_PER_TOKEN)
+  if (text.length <= maxChars) return text
+  return text.slice(0, maxChars)
 }
 
 /**
