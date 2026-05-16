@@ -1,12 +1,3 @@
-export type WorkspaceStatus =
-  | 'pending'
-  | 'cloning'
-  | 'parsing'
-  | 'extracting'
-  | 'embedding'
-  | 'ready'
-  | 'failed'
-
 export type SourceType = 'github' | 'upload'
 
 export type Language = 'typescript' | 'javascript' | 'python' | 'go'

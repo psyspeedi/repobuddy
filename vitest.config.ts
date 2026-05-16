@@ -22,11 +22,13 @@ export default defineConfig({
         '**/*.d.ts',
       ],
     },
-    pool: 'threads',
+    // Integration tests share a single Postgres + Redis instance; force
+    // sequential file execution to avoid TRUNCATE races and stale BullMQ
+    // jobs leaking across suites.
+    fileParallelism: false,
+    pool: 'forks',
     poolOptions: {
-      threads: {
-        singleThread: false,
-      },
+      forks: { singleFork: true },
     },
   },
   resolve: {
