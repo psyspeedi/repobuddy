@@ -1,0 +1,206 @@
+import { PlanSchema, type Plan } from '#shared/schemas/plan'
+import type { LLMProvider } from '../providers/llm'
+import { getLogger } from '../lib/logger'
+
+const log = getLogger().child({ component: 'kag/planner' })
+
+const SYSTEM_PROMPT = `You are CodeGraph's query planner. You receive a user question about a codebase and produce a JSON plan whose steps will be executed by a graph engine.
+
+## Available operators
+
+- find_symbol({ name, type?, fuzzy?, limit? }) → Entity[]
+- find_file({ pathPattern, limit? }) → Entity[]
+- get_callers({ target, transitive?, maxDepth?, limit? }) → Entity[]
+- get_callees({ source, transitive?, maxDepth?, limit? }) → Entity[]
+- get_dependencies({ source | target, transitive?, maxDepth? }) → Entity[]
+- get_dependents({ target | source, transitive?, maxDepth? }) → Entity[]
+- find_implementations({ interfaceOrType, limit? }) → Entity[]
+- git_history({ entity, since?, limit? }) → Commit[]
+- find_by_concept({ query, limit? }) → Entity[]   (semantic search over entity descriptions)
+- vector_search_chunks({ query, limit? }) → Chunk[]
+- hybrid_search({ query, limit? }) → Chunk[]
+- retrieve_code_chunks({ entities, limit? }) → Chunk[]
+- get_summary({ entity }) → { id, name, type, description }[]
+- answer({ question, context, style? }) → streaming response with inline citations
+
+## Reference syntax
+
+Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
+
+## Rules
+
+- Always end with an \`answer\` step whose \`context\` is a list of step refs (entities + chunks).
+- For exact symbol queries, prefer find_symbol; for vague semantic queries, prefer find_by_concept.
+- For multi-hop "who calls X transitively" — use get_callers with transitive: true.
+- For "tell me about this project" — combine README discovery via find_file + hybrid_search overview.
+- Keep plans concise: 2-5 steps is usually right.`
+
+const FEW_SHOTS = [
+  {
+    question: 'Where is the OrderService class defined?',
+    plan: {
+      reasoning: 'Direct symbol lookup.',
+      steps: [
+        { id: 's1', op: 'find_symbol', params: { name: 'OrderService', type: 'class' } },
+        { id: 's2', op: 'retrieve_code_chunks', params: { entities: '$s1' } },
+        {
+          id: 's3',
+          op: 'answer',
+          params: { question: 'Where is OrderService defined?', context: ['$s1', '$s2'] },
+        },
+      ],
+    },
+  },
+  {
+    question: 'Which functions call processPayment directly or transitively?',
+    plan: {
+      reasoning: 'Resolve target then walk callers transitively.',
+      steps: [
+        { id: 's1', op: 'find_symbol', params: { name: 'processPayment', type: 'function' } },
+        { id: 's2', op: 'get_callers', params: { target: '$s1', transitive: true, maxDepth: 5 } },
+        { id: 's3', op: 'get_summary', params: { entity: '$s2' } },
+        {
+          id: 's4',
+          op: 'answer',
+          params: {
+            question: 'Who calls processPayment transitively?',
+            context: ['$s2', '$s3'],
+          },
+        },
+      ],
+    },
+  },
+  {
+    question: 'Where is discount logic implemented?',
+    plan: {
+      reasoning: 'No exact symbol — fall back to concept search.',
+      steps: [
+        { id: 's1', op: 'find_by_concept', params: { query: 'discount calculation', limit: 10 } },
+        { id: 's2', op: 'retrieve_code_chunks', params: { entities: '$s1' } },
+        {
+          id: 's3',
+          op: 'answer',
+          params: { question: 'Where is discount logic?', context: ['$s1', '$s2'] },
+        },
+      ],
+    },
+  },
+  {
+    question: 'Tell me about this project.',
+    plan: {
+      reasoning: 'Broad question — pull README + overview chunks.',
+      steps: [
+        { id: 's1', op: 'find_file', params: { pathPattern: 'README*' } },
+        { id: 's2', op: 'retrieve_code_chunks', params: { entities: '$s1' } },
+        {
+          id: 's3',
+          op: 'hybrid_search',
+          params: { query: 'project overview architecture main features', limit: 8 },
+        },
+        {
+          id: 's4',
+          op: 'answer',
+          params: {
+            question: 'Tell me about this project.',
+            context: ['$s2', '$s3'],
+            style: 'detailed',
+          },
+        },
+      ],
+    },
+  },
+]
+
+function fewShotMessages() {
+  const out: { role: 'user' | 'assistant'; content: string }[] = []
+  for (const ex of FEW_SHOTS) {
+    out.push({ role: 'user', content: ex.question })
+    out.push({ role: 'assistant', content: JSON.stringify(ex.plan, null, 2) })
+  }
+  return out
+}
+
+export interface PlanContext {
+  /** Lightweight summary of the workspace to ground the planner. */
+  workspaceName: string
+  languages: string[]
+  stats?: Record<string, number>
+}
+
+export async function planQuestion(
+  llm: LLMProvider,
+  question: string,
+  ctx: PlanContext,
+): Promise<Plan> {
+  const userMessage = renderUserMessage(question, ctx)
+  try {
+    return await llm.structured<Plan>(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...fewShotMessages(),
+        { role: 'user', content: userMessage },
+      ],
+      { schema: PlanSchema, schemaName: 'kag_plan' },
+    )
+  } catch (firstErr) {
+    log.warn(
+      { err: firstErr instanceof Error ? firstErr.message : String(firstErr) },
+      'planner first attempt failed, retrying with feedback',
+    )
+    const errMsg = firstErr instanceof Error ? firstErr.message : String(firstErr)
+    try {
+      return await llm.structured<Plan>(
+        [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...fewShotMessages(),
+          { role: 'user', content: userMessage },
+          {
+            role: 'user',
+            content: `Your previous response failed validation: ${errMsg}\nReturn a plan that satisfies the schema exactly. Ensure every step id is "s<N>", every op is one of the listed operators, and references use "$sN" or "$sN.field".`,
+          },
+        ],
+        { schema: PlanSchema, schemaName: 'kag_plan' },
+      )
+    } catch (secondErr) {
+      log.warn(
+        { err: secondErr instanceof Error ? secondErr.message : String(secondErr) },
+        'planner retry failed; falling back to hybrid RAG plan',
+      )
+      // Final fallback: a deterministic plan that runs hybrid_search + answer.
+      return {
+        reasoning: 'Planner unavailable; using RAG fallback.',
+        steps: [
+          {
+            id: 's1',
+            op: 'hybrid_search',
+            params: { query: question, limit: 8 },
+          },
+          {
+            id: 's2',
+            op: 'answer',
+            params: { question, context: ['$s1'] },
+          },
+        ],
+      }
+    }
+  }
+}
+
+function renderUserMessage(question: string, ctx: PlanContext): string {
+  const stats = ctx.stats
+    ? `Stats: ${Object.entries(ctx.stats)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')}`
+    : ''
+  return [
+    `Workspace: ${ctx.workspaceName}`,
+    `Languages: ${ctx.languages.join(', ') || 'unknown'}`,
+    stats,
+    '',
+    `Question: ${question}`,
+    '',
+    'Produce the plan JSON.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}

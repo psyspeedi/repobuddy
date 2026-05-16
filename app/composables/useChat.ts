@@ -1,11 +1,27 @@
 import { randomUUID } from 'uncrypto'
 
+export interface PlanData {
+  reasoning: string
+  steps: { id: string; op: string; params: Record<string, unknown>; comment?: string }[]
+}
+
+export interface TraceEntry {
+  stepId: string
+  op: string
+  ok: boolean
+  durationMs: number
+  summary?: string
+  error?: string
+}
+
 export interface ChatMessageData {
   role: 'user' | 'assistant'
   content: string
   citations?: { kind: 'chunk' | 'entity'; id: string }[]
   invalid?: string[]
   pending?: boolean
+  plan?: PlanData
+  trace?: TraceEntry[]
 }
 
 /**
@@ -92,6 +108,14 @@ export function useChat(workspaceId: string) {
     if (!last || last.role !== 'assistant') return
     if (event === 'text') {
       last.content += data
+    } else if (event === 'plan') {
+      try {
+        last.plan = JSON.parse(data) as PlanData
+      } catch { /* malformed */ }
+    } else if (event === 'trace') {
+      try {
+        last.trace = JSON.parse(data) as TraceEntry[]
+      } catch { /* malformed */ }
     } else if (event === 'citations') {
       try {
         const parsed = JSON.parse(data) as {
