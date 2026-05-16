@@ -97,6 +97,12 @@ export default defineEventHandler(async (event) => {
         workspaceId: body.workspaceId,
         db,
         embeddings,
+        workspace: {
+          name: ws.name,
+          sourceUrl: ws.sourceUrl,
+          languages: ws.languages,
+          stats: ws.stats as Record<string, number> | null,
+        },
         llm,
       })
 

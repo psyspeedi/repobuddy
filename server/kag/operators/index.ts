@@ -19,6 +19,13 @@ export interface OperatorContext {
   db: Database
   embeddings: EmbeddingsProvider
   llm: LLMProvider
+  /** Always-present workspace metadata passed to the answer operator. */
+  workspace?: {
+    name: string
+    sourceUrl?: string | null
+    languages: string[]
+    stats?: Record<string, number> | null
+  }
 }
 
 // ---------- Entity shape exposed to ops ----------
@@ -438,11 +445,37 @@ export async function* answerOp(
     }
   }
 
+  // Safety net: if the planner produced no chunks at all, fall back to
+  // hybrid_search on the question itself so the model always has something
+  // concrete to ground in. Workspace meta below covers the "no chunks AND
+  // no entities" case for broad questions.
+  if (chunks.length === 0) {
+    try {
+      const results = await hybridSearch(ctx.db, ctx.embeddings, {
+        workspaceId: ctx.workspaceId,
+        query: params.question,
+        limit: 8,
+      })
+      for (const r of results) {
+        chunks.push({
+          id: r.chunkId,
+          text: r.text,
+          filePath: r.filePath,
+          startLine: r.startLine,
+          endLine: r.endLine,
+        })
+      }
+    } catch {
+      // ignore — answer still works with workspace meta only
+    }
+  }
+
   for await (const evt of answer(ctx.llm, {
     question: params.question,
     chunks,
     entities: entitiesContext,
     style: params.style,
+    workspace: ctx.workspace,
   })) {
     yield evt
   }

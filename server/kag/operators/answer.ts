@@ -16,6 +16,13 @@ export interface AnswerContextEntity {
   qualifiedName?: string | null
 }
 
+export interface AnswerWorkspaceMeta {
+  name: string
+  sourceUrl?: string | null
+  languages: string[]
+  stats?: Record<string, number> | null
+}
+
 export interface AnswerParams {
   question: string
   chunks: AnswerContextChunk[]
@@ -23,6 +30,12 @@ export interface AnswerParams {
   style?: 'concise' | 'detailed'
   /** Optional history (previous user/assistant turns in the session). */
   history?: ChatMessage[]
+  /**
+   * Always-present grounding metadata about the workspace itself, so the
+   * model can answer broad "tell me about this repo" questions even when
+   * the planner couldn't retrieve any chunks.
+   */
+  workspace?: AnswerWorkspaceMeta
 }
 
 export interface AnswerStreamChunk {
@@ -71,6 +84,23 @@ function renderUserMessage(params: AnswerParams): string {
   const lines: string[] = []
   lines.push(`Question: ${params.question}`)
   lines.push('')
+
+  if (params.workspace) {
+    const ws = params.workspace
+    lines.push('## Workspace')
+    lines.push(`- name: ${ws.name}`)
+    if (ws.sourceUrl) lines.push(`- source: ${ws.sourceUrl}`)
+    if (ws.languages.length > 0) {
+      lines.push(`- languages: ${ws.languages.join(', ')}`)
+    }
+    if (ws.stats) {
+      const interesting = ['files', 'entities', 'relations', 'chunks', 'commits', 'concepts', 'patterns']
+        .filter((k) => typeof ws.stats?.[k] === 'number')
+        .map((k) => `${k}=${ws.stats?.[k]}`)
+      if (interesting.length > 0) lines.push(`- stats: ${interesting.join(', ')}`)
+    }
+    lines.push('')
+  }
 
   if (params.entities && params.entities.length > 0) {
     lines.push('## Entities in scope')
