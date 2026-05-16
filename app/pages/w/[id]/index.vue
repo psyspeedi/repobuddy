@@ -31,9 +31,18 @@ const lastAssistant = computed(() =>
   [...chat.messages.value].reverse().find((m) => m.role === 'assistant') ?? null,
 )
 
+onMounted(() => {
+  void chat.loadHistory().then(() => scrollToBottom())
+})
+
 function onOpenChunk(chunkId: string): void {
   openChunkId.value = chunkId
   sidePanel.value = 'viewer'
+}
+
+function startNewChat(): void {
+  chat.newSession()
+  openChunkId.value = null
 }
 
 async function submit(): Promise<void> {
@@ -153,6 +162,15 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           >
           <Button type="submit" :disabled="chat.streaming.value || !inputText.trim()">
             Send
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            :disabled="chat.streaming.value"
+            title="Start a new chat session (clears the current conversation)"
+            @click="startNewChat"
+          >
+            New
           </Button>
         </form>
       </div>

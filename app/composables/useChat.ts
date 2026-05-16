@@ -24,26 +24,66 @@ export interface ChatMessageData {
   trace?: TraceEntry[]
 }
 
+interface HistoryMessage {
+  role: 'user' | 'assistant'
+  content: string
+  plan?: unknown
+  trace?: unknown
+}
+
+const STORAGE_PREFIX = 'codegraph:session:'
+
+function readPersistedSession(workspaceId: string): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return localStorage.getItem(STORAGE_PREFIX + workspaceId)
+  } catch {
+    return null
+  }
+}
+
+function writePersistedSession(workspaceId: string, id: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_PREFIX + workspaceId, id)
+  } catch {
+    /* private mode etc — ignore */
+  }
+}
+
 /**
- * Stateful chat session bound to a workspace. The composable owns one
- * session id (uuid) generated client-side; refreshing reuses it for the
- * lifetime of the page.
+ * Stateful chat session bound to a workspace. The session id is persisted in
+ * localStorage keyed by workspace, so reloading the page reuses the same
+ * session and its message history. Call `newSession()` to start a fresh one.
  */
 export function useChat(workspaceId: string) {
-  const sessionId = ref(randomUUID())
+  const initialId = readPersistedSession(workspaceId) ?? randomUUID()
+  if (!readPersistedSession(workspaceId)) {
+    writePersistedSession(workspaceId, initialId)
+  }
+  const sessionId = ref(initialId)
   const messages = ref<ChatMessageData[]>([])
   const streaming = ref(false)
+  const historyLoaded = ref(false)
 
   async function loadHistory(): Promise<void> {
-    const res = await $fetch<{
-      session: { id: string } | null
-      messages: { role: 'user' | 'assistant'; content: string }[]
-    }>(`/api/chat/${sessionId.value}`)
-    if (res.session) {
-      messages.value = res.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }))
+    try {
+      const res = await $fetch<{
+        session: { id: string } | null
+        messages: HistoryMessage[]
+      }>(`/api/chat/${sessionId.value}`)
+      if (res.session && res.messages.length > 0) {
+        messages.value = res.messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          plan: m.plan as PlanData | undefined,
+          trace: m.trace as TraceEntry[] | undefined,
+        }))
+      }
+    } catch {
+      // Empty / missing session is fine — chat starts blank.
+    } finally {
+      historyLoaded.value = true
     }
   }
 
@@ -99,19 +139,23 @@ export function useChat(workspaceId: string) {
 
   function handleSseChunk(raw: string): void {
     let event = 'message'
+    // Per SSE spec, the data buffer accumulates each `data:` line joined by
+    // a single \n. h3's createEventStream serialises a value containing
+    // newlines as multiple `data:` lines, so dropping the separator
+    // collapses headers and lists into the next paragraph (we saw
+    // "### Heading:- item1- item2" before).
     let data = ''
+    let hasData = false
     for (const line of raw.split('\n')) {
       if (line.startsWith('event:')) {
         event = line.slice(6).trim()
       } else if (line.startsWith('data:')) {
-        // SSE spec: a single U+0020 SPACE after the colon is the field
-        // separator and must be removed. Any further leading whitespace
-        // is content and must be preserved. trimStart() ate every space,
-        // which is why streamed tokens like " hello" collapsed into "hello"
-        // and the answer came back with no spaces between tokens.
         let value = line.slice(5)
+        // SSE spec: strip exactly one leading U+0020 SPACE (field separator).
         if (value.startsWith(' ')) value = value.slice(1)
+        if (hasData) data += '\n'
         data += value
+        hasData = true
       }
     }
     const last = messages.value.at(-1)
@@ -146,14 +190,18 @@ export function useChat(workspaceId: string) {
   }
 
   function newSession(): void {
-    sessionId.value = randomUUID()
+    const fresh = randomUUID()
+    sessionId.value = fresh
+    writePersistedSession(workspaceId, fresh)
     messages.value = []
+    historyLoaded.value = true
   }
 
   return {
     sessionId,
     messages,
     streaming,
+    historyLoaded,
     send,
     loadHistory,
     newSession,
