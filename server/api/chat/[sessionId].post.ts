@@ -22,6 +22,7 @@ const log = getLogger().child({ component: 'api/chat' })
 const BodySchema = z.object({
   question: z.string().min(1).max(2000),
   workspaceId: z.string().uuid(),
+  locale: z.enum(['en', 'ru']).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -121,6 +122,7 @@ export default defineEventHandler(async (event) => {
         llm,
         pinnedEntities,
         pinnedChunks,
+        responseLocale: body.locale ?? 'en',
       })
 
       // Emit trace early so the inspector can render even while the answer streams.

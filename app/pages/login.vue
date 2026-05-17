@@ -3,25 +3,26 @@ import { Button } from '@/components/ui/button'
 
 definePageMeta({ layout: 'default', auth: false })
 
+const { t } = useI18n()
 const route = useRoute()
 const errorMessage = computed(() => {
   if (route.query.error === 'github_auth_failed') {
-    return 'GitHub authentication failed. Please try again.'
+    return t('login.errorGithub')
   }
   return null
 })
 
-useHead({ title: 'Sign in — CodeGraph' })
+useHead({ title: () => `${t('login.title')} — CodeGraph` })
 </script>
 
 <template>
   <div class="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center space-y-6">
     <div class="space-y-2 text-center">
       <h1 class="text-2xl font-bold tracking-tight">
-        Welcome to CodeGraph
+        {{ t('login.title') }}
       </h1>
       <p class="text-sm text-muted-foreground">
-        Sign in with GitHub to index and explore repositories.
+        {{ t('login.subtitle') }}
       </p>
     </div>
 
@@ -34,12 +35,12 @@ useHead({ title: 'Sign in — CodeGraph' })
 
     <a href="/auth/github" class="w-full">
       <Button class="w-full" size="lg">
-        Continue with GitHub
+        {{ t('login.button') }}
       </Button>
     </a>
 
     <p class="text-center text-xs text-muted-foreground">
-      We only read public profile info, your email, and public repos.
+      {{ t('login.permissionNote') }}
     </p>
   </div>
 </template>

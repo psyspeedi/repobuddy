@@ -100,10 +100,15 @@ export function useChat(workspaceId: string) {
     streaming.value = true
 
     try {
+      const i18n = useI18n()
       const response = await fetch(`/api/chat/${sessionId.value}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ workspaceId, question: trimmed }),
+        body: JSON.stringify({
+          workspaceId,
+          question: trimmed,
+          locale: i18n.locale.value,
+        }),
       })
       if (!response.ok || !response.body) {
         throw new Error(`Chat failed: ${response.status}`)

@@ -43,6 +43,8 @@ export interface AnswerParams {
    * the planner couldn't retrieve any chunks.
    */
   workspace?: AnswerWorkspaceMeta
+  /** UI locale — instruct the model to reply in this language. */
+  responseLocale?: 'en' | 'ru'
 }
 
 export interface AnswerStreamChunk {
@@ -52,15 +54,28 @@ export interface AnswerStreamChunk {
   outputTokens?: number
 }
 
-const SYSTEM_PROMPT = `You are CodeGraph, an assistant that answers questions about a codebase using ONLY the provided context.
+const LOCALE_NAMES: Record<string, string> = {
+  en: 'English',
+  ru: 'Russian (русский)',
+}
 
-Rules:
+function buildSystemPrompt(locale: string | undefined): string {
+  const langName = LOCALE_NAMES[locale ?? 'en'] ?? 'English'
+  return `You are CodeGraph, an assistant that answers questions about a codebase using ONLY the provided context.
+
+Language rule:
+- ALWAYS respond in ${langName}, regardless of the question's language. This is the user's interface language and must be respected.
+
+Citation rules:
 - After every factual claim, cite the source inline. Citations use the
   exact form [chunk:UUID] for code/doc snippets and [entity:UUID] for
   graph entities. UUIDs come from the context block; do not invent them.
 - If the context is insufficient, say so plainly. Do not fabricate.
+
+Style:
 - Prefer concise prose; use bullet lists when comparing multiple items.
 - Code blocks should be triple-fenced with the appropriate language tag.`
+}
 
 export async function* answer(
   llm: LLMProvider,
@@ -69,7 +84,7 @@ export async function* answer(
   const userMessage = renderUserMessage(params)
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: buildSystemPrompt(params.responseLocale) },
     ...(params.history ?? []),
     { role: 'user', content: userMessage },
   ]

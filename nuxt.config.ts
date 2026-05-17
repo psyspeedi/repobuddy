@@ -11,10 +11,25 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
     '@nuxtjs/color-mode',
+    '@nuxtjs/i18n',
     '@vueuse/nuxt',
     'nuxt-auth-utils',
     'shadcn-nuxt',
   ],
+
+  i18n: {
+    locales: [
+      { code: 'en', name: 'English', file: 'en.json' },
+      { code: 'ru', name: 'Русский', file: 'ru.json' },
+    ],
+    defaultLocale: 'en',
+    strategy: 'no_prefix',
+    detectBrowserLanguage: {
+      useCookie: true,
+      cookieKey: 'codegraph-i18n',
+      redirectOn: 'root',
+    },
+  },
 
   colorMode: {
     classSuffix: '',

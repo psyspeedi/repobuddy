@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
 
+const { t } = useI18n()
 const route = useRoute()
 const workspaceId = String(route.params.id)
 
@@ -139,14 +140,14 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             variant="outline"
             size="sm"
             :disabled="reindexing"
-            title="Re-run indexing on the latest commit (picks up new diffs, files, annotations)"
+            :title="t('workspace.reindexHint')"
             @click="reindex"
           >
-            {{ reindexing ? 'Queuing…' : 'Re-index' }}
+            {{ reindexing ? t('workspace.reindexing') : t('workspace.reindex') }}
           </Button>
           <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/graph`">
             <Button variant="outline" size="sm">
-              View graph
+              {{ t('workspace.viewGraph') }}
             </Button>
           </NuxtLink>
         </div>
@@ -159,7 +160,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
     >
       <div class="flex items-center justify-between">
         <h2 class="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Indexing
+          {{ t('workspace.indexing') }}
         </h2>
         <span class="text-sm font-mono">{{ phase }} · {{ percent }}%</span>
       </div>
@@ -170,7 +171,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
         />
       </div>
       <p class="text-sm text-muted-foreground">
-        {{ message || 'Waiting…' }}
+        {{ message || t('workspace.waiting') }}
       </p>
     </section>
 
@@ -179,7 +180,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
       class="space-y-2 rounded-lg border border-destructive bg-destructive/10 p-6"
     >
       <h2 class="text-lg font-semibold text-destructive">
-        Indexing failed
+        {{ t('workspace.indexingFailed') }}
       </h2>
       <p class="text-sm">
         {{ wsData.workspace.error ?? 'Unknown error' }}
@@ -201,7 +202,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
       <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
         <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4">
           <p v-if="chat.messages.value.length === 0" class="text-center text-sm text-muted-foreground">
-            Ask anything about this repository.
+            {{ t('workspace.askPrompt') }}
           </p>
           <ChatMessage
             v-for="(msg, i) in chat.messages.value"
@@ -222,12 +223,12 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           <input
             v-model="inputText"
             type="text"
-            placeholder="Ask about the repo…"
+            :placeholder="t('workspace.askPlaceholder')"
             class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             :disabled="chat.streaming.value"
           >
           <Button type="submit" :disabled="chat.streaming.value || !inputText.trim()">
-            Send
+            {{ t('workspace.send') }}
           </Button>
         </form>
       </div>
@@ -240,7 +241,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             :class="sidePanel === 'inspector' ? 'bg-accent' : ''"
             @click="sidePanel = 'inspector'"
           >
-            Reasoning
+            {{ t('chat.panels.reasoning') }}
           </Button>
           <Button
             variant="outline"
@@ -248,7 +249,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             :class="sidePanel === 'viewer' ? 'bg-accent' : ''"
             @click="sidePanel = 'viewer'"
           >
-            Source
+            {{ t('chat.panels.source') }}
           </Button>
         </div>
         <ReasoningInspector
@@ -266,8 +267,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           v-else-if="sidePanel === 'viewer' && !openChunkId"
           class="flex h-full w-full items-center justify-center rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground"
         >
-          Click a citation in the chat (the ↗ badge after a claim) to open the
-          referenced code here.
+          {{ t('chat.panels.sourcePlaceholder') }}
         </aside>
       </div>
     </section>

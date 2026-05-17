@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
 
-useHead({ title: 'CodeGraph — Workspaces' })
+definePageMeta({ auth: false })
+
+const { t } = useI18n()
+const { loggedIn } = useUserSession()
 
 interface Workspace {
   id: string
@@ -14,10 +17,22 @@ interface Workspace {
   lastIndexedAt: string | null
 }
 
-const { data, refresh, pending } = await useFetch<{ workspaces: Workspace[] }>(
-  '/api/workspaces',
-  { key: 'workspaces-list' },
-)
+const data = ref<{ workspaces: Workspace[] } | null>(null)
+const pending = ref(true)
+async function refresh(): Promise<void> {
+  if (!loggedIn.value) {
+    pending.value = false
+    return
+  }
+  try {
+    data.value = await $fetch<{ workspaces: Workspace[] }>('/api/workspaces')
+  } catch {
+    data.value = { workspaces: [] }
+  } finally {
+    pending.value = false
+  }
+}
+onMounted(refresh)
 
 const showCreate = ref(false)
 const githubUrl = ref('')
@@ -42,16 +57,22 @@ async function createFromGithub(): Promise<void> {
     submitting.value = false
   }
 }
+
+useHead(() => ({ title: `${t('app.name')} — ${loggedIn.value ? t('dashboard.title') : t('app.tagline')}` }))
 </script>
 
 <template>
-  <div class="space-y-6">
+  <!-- Landing for guests -->
+  <LandingPage v-if="!loggedIn" />
+
+  <!-- Dashboard for logged-in users -->
+  <div v-else class="space-y-6">
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold">
-        Workspaces
+        {{ t('dashboard.title') }}
       </h1>
       <Button @click="showCreate = !showCreate">
-        {{ showCreate ? 'Cancel' : 'New workspace' }}
+        {{ showCreate ? t('dashboard.cancelButton') : t('dashboard.newButton') }}
       </Button>
     </div>
 
@@ -60,12 +81,12 @@ async function createFromGithub(): Promise<void> {
       class="space-y-3 rounded-lg border border-border bg-card p-6"
     >
       <h2 class="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-        From GitHub URL
+        {{ t('dashboard.fromGithub') }}
       </h2>
       <input
         v-model="githubUrl"
         type="url"
-        placeholder="https://github.com/owner/repo"
+        :placeholder="t('dashboard.githubPlaceholder')"
         class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         @keyup.enter="createFromGithub"
       >
@@ -73,12 +94,12 @@ async function createFromGithub(): Promise<void> {
         {{ error }}
       </p>
       <Button :disabled="submitting || !githubUrl" @click="createFromGithub">
-        {{ submitting ? 'Creating…' : 'Index repository' }}
+        {{ submitting ? t('dashboard.indexing') : t('dashboard.indexButton') }}
       </Button>
     </section>
 
     <div v-if="pending" class="text-sm text-muted-foreground">
-      Loading…
+      {{ t('dashboard.loading') }}
     </div>
 
     <div
@@ -86,7 +107,7 @@ async function createFromGithub(): Promise<void> {
       class="rounded-lg border border-dashed border-border bg-card p-6 text-center"
     >
       <p class="text-sm text-muted-foreground">
-        No workspaces yet. Create one from a public GitHub URL above.
+        {{ t('dashboard.empty') }}
       </p>
     </div>
 
@@ -114,7 +135,7 @@ async function createFromGithub(): Promise<void> {
             </span>
           </div>
           <p class="text-xs text-muted-foreground">
-            {{ ws.sourceUrl ?? 'uploaded' }}
+            {{ ws.sourceUrl ?? t('dashboard.uploaded') }}
           </p>
         </NuxtLink>
       </li>

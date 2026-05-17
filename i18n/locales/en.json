@@ -1,0 +1,158 @@
+{
+  "app": {
+    "name": "CodeGraph",
+    "tagline": "AI assistant for understanding codebases via knowledge graphs"
+  },
+  "nav": {
+    "signOut": "Sign out",
+    "signIn": "Sign in",
+    "themeLight": "Light theme",
+    "themeDark": "Dark theme",
+    "language": "Language"
+  },
+  "landing": {
+    "hero": {
+      "title": "Understand any codebase, fast.",
+      "subtitle": "Index a Git repository into a hybrid knowledge graph (AST + LLM annotations + git history) and ask questions in plain language with cited sources.",
+      "cta": "Sign in with GitHub",
+      "cta2": "Already have an account? Open dashboard"
+    },
+    "features": {
+      "title": "What you can do",
+      "items": {
+        "0": {
+          "title": "Ask questions, get cited answers",
+          "body": "Each fact in the response is linked to a specific code chunk or graph entity. Click the citation to see the source."
+        },
+        "1": {
+          "title": "Reason over multi-hop questions",
+          "body": "A planner turns your question into a sequence of graph operators (find_symbol → get_callers → answer) and shows the plan + trace."
+        },
+        "2": {
+          "title": "Interactive graph explorer",
+          "body": "Sigma.js viewer with type filters, view presets (Code / Git / Semantic), entity search, and highlight-from-chat."
+        },
+        "3": {
+          "title": "Per-commit diffs in context",
+          "body": "Commit metadata + the unified diff are stored as searchable chunks, so you can ask 'what changed here' and get specifics."
+        },
+        "4": {
+          "title": "Library-friendly",
+          "body": "JSDoc / docstrings extracted, examples folder indexed as docs, tests linked back to the entities they cover."
+        },
+        "5": {
+          "title": "Git-history aware",
+          "body": "Activity, maintainers, fix-to-feat ratio, hot files, breaking-change frequency — surfaced as insights so you know what you're getting into."
+        }
+      }
+    },
+    "stack": {
+      "title": "Built with",
+      "items": {
+        "0": "Nuxt 4 + Nitro",
+        "1": "Postgres 16 + pgvector",
+        "2": "OpenAI gpt-4o (planning) + gpt-4o-mini (annotation)",
+        "3": "Sigma.js + Graphology",
+        "4": "ts-morph + web-tree-sitter",
+        "5": "BullMQ + Redis"
+      }
+    },
+    "footer": "Open source. MIT licensed."
+  },
+  "login": {
+    "title": "Welcome to CodeGraph",
+    "subtitle": "Sign in with GitHub to index and explore repositories.",
+    "button": "Continue with GitHub",
+    "errorGithub": "GitHub authentication failed. Please try again.",
+    "permissionNote": "We only read public profile info, your email, and public repos."
+  },
+  "dashboard": {
+    "title": "Workspaces",
+    "newButton": "New workspace",
+    "cancelButton": "Cancel",
+    "fromGithub": "From GitHub URL",
+    "githubPlaceholder": "https://github.com/owner/repo",
+    "indexButton": "Index repository",
+    "indexing": "Creating…",
+    "loading": "Loading…",
+    "empty": "No workspaces yet. Create one from a public GitHub URL above.",
+    "uploaded": "uploaded archive"
+  },
+  "workspace": {
+    "viewGraph": "View graph",
+    "reindex": "Re-index",
+    "reindexing": "Queuing…",
+    "reindexHint": "Re-run indexing on the latest commit (picks up new diffs, files, annotations)",
+    "indexing": "Indexing",
+    "waiting": "Waiting…",
+    "indexingFailed": "Indexing failed",
+    "askPlaceholder": "Ask about the repo…",
+    "send": "Send",
+    "askPrompt": "Ask anything about this repository."
+  },
+  "chat": {
+    "you": "You",
+    "assistant": "CodeGraph",
+    "showOnGraph": "Show on graph",
+    "chats": "Chats",
+    "newChat": "+ New",
+    "noChats": "No saved chats yet.",
+    "messageCount": "{n} msg",
+    "deleteChat": "Delete this chat",
+    "panels": {
+      "reasoning": "Reasoning",
+      "source": "Source",
+      "sourcePlaceholder": "Click a citation in the chat (the ↗ badge after a claim) to open the referenced code here."
+    }
+  },
+  "graph": {
+    "backToChat": "← Back to chat",
+    "view": "Graph view",
+    "presets": "View",
+    "types": "Types",
+    "edges": "Edges",
+    "searchPlaceholder": "Search entities by name…",
+    "highlighted": "Highlighted",
+    "clearHighlight": "Clear highlight",
+    "loading": "Loading graph…",
+    "noEntities": "Workspace has no entities yet — indexing may still be running.",
+    "loadMore": "Load more →",
+    "truncated": "Graph truncated at {n} nodes.",
+    "primary": "primary",
+    "context": "context",
+    "edgesCount": "edges"
+  },
+  "reasoning": {
+    "title": "Reasoning",
+    "noPlanYet": "No plan yet — ask a question.",
+    "params": "params",
+    "result": "result",
+    "error": "error"
+  },
+  "nodeDetail": {
+    "askAi": "Ask AI",
+    "askAiTitle": "Open the chat with a prefilled question about this entity",
+    "description": "Description",
+    "signature": "Signature",
+    "commit": "Commit",
+    "sha": "sha",
+    "author": "author",
+    "date": "date",
+    "message": "message",
+    "filesChanged": "Files changed",
+    "filesChangedMore": "+ {n} more",
+    "hotness": "Hotness",
+    "hotnessLabel": "{n} modification(s) in the last 90 days",
+    "outgoing": "→ Outgoing",
+    "incoming": "← Incoming",
+    "loading": "Loading…"
+  },
+  "viewer": {
+    "title": "Source viewer",
+    "raw": "Raw",
+    "render": "Render",
+    "rawTitle": "Show raw markdown",
+    "renderTitle": "Render as markdown",
+    "loading": "Loading…"
+  }
+}

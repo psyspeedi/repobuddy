@@ -58,6 +58,8 @@ export interface OperatorContext {
     sourceType?: string
     metadata?: Record<string, unknown> | null
   }[]
+  /** UI locale — the answer operator instructs the model to reply in this language. */
+  responseLocale?: 'en' | 'ru'
 }
 
 // ---------- Entity shape exposed to ops ----------
@@ -668,6 +670,7 @@ export async function* answerOp(
     entities: entitiesContext,
     style: params.style,
     workspace: ctx.workspace,
+    responseLocale: ctx.responseLocale,
   })) {
     yield evt
   }
