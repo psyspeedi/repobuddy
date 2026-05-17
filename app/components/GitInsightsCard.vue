@@ -80,12 +80,12 @@ const showAll = ref(false)
       {{ t('insights.noHistory') }}
     </div>
     <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <div class="space-y-1 rounded border border-border bg-background/40 p-2.5">
-        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div class="space-y-1 rounded-lg border border-violet-500/20 bg-violet-500/5 p-2.5">
+        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-violet-700 dark:text-violet-300">
           <GitCommit class="h-3 w-3" />
           {{ t('insights.activity') }}
         </div>
-        <div class="text-lg font-semibold leading-none">
+        <div class="text-lg font-semibold leading-none text-violet-700 dark:text-violet-200">
           {{ insights.commitsLast90d }}
         </div>
         <p class="text-[11px] text-muted-foreground">
@@ -93,12 +93,12 @@ const showAll = ref(false)
         </p>
       </div>
 
-      <div class="space-y-1 rounded border border-border bg-background/40 p-2.5">
-        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div class="space-y-1 rounded-lg border border-sky-500/20 bg-sky-500/5 p-2.5">
+        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-sky-700 dark:text-sky-300">
           <Activity class="h-3 w-3" />
           {{ t('insights.lastCommit') }}
         </div>
-        <div class="text-lg font-semibold leading-none">
+        <div class="text-lg font-semibold leading-none text-sky-700 dark:text-sky-200">
           {{ relativeLastCommit ?? '—' }}
         </div>
         <p class="text-[11px] text-muted-foreground" :title="insights.lastCommitAt ?? ''">
@@ -106,12 +106,12 @@ const showAll = ref(false)
         </p>
       </div>
 
-      <div class="space-y-1 rounded border border-border bg-background/40 p-2.5">
-        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div class="space-y-1 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
           <Users class="h-3 w-3" />
           {{ t('insights.maintainers') }}
         </div>
-        <div class="text-lg font-semibold leading-none">
+        <div class="text-lg font-semibold leading-none text-emerald-700 dark:text-emerald-200">
           {{ insights.activeMaintainers90d }}
         </div>
         <p class="text-[11px] text-muted-foreground">
@@ -119,12 +119,12 @@ const showAll = ref(false)
         </p>
       </div>
 
-      <div class="space-y-1 rounded border border-border bg-background/40 p-2.5">
-        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div class="space-y-1 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
+        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-300">
           <AlertTriangle class="h-3 w-3" />
           {{ t('insights.busFactor') }}
         </div>
-        <div class="text-lg font-semibold leading-none">
+        <div class="text-lg font-semibold leading-none text-amber-700 dark:text-amber-200">
           {{ insights.busFactor }}
         </div>
         <p class="text-[11px] text-muted-foreground">
@@ -132,12 +132,12 @@ const showAll = ref(false)
         </p>
       </div>
 
-      <div class="space-y-1 rounded border border-border bg-background/40 p-2.5">
-        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div class="space-y-1 rounded-lg border border-rose-500/20 bg-rose-500/5 p-2.5">
+        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-rose-700 dark:text-rose-300">
           <Bug class="h-3 w-3" />
           {{ t('insights.fixFeat') }}
         </div>
-        <div class="text-lg font-semibold leading-none">
+        <div class="text-lg font-semibold leading-none text-rose-700 dark:text-rose-200">
           {{ fixVsFeatPretty }}
         </div>
         <p class="text-[11px] text-muted-foreground">
@@ -145,12 +145,12 @@ const showAll = ref(false)
         </p>
       </div>
 
-      <div class="space-y-1 rounded border border-border bg-background/40 p-2.5">
-        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div class="space-y-1 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5 p-2.5">
+        <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-fuchsia-700 dark:text-fuchsia-300">
           <Sparkles class="h-3 w-3" />
           {{ t('insights.breaking') }}
         </div>
-        <div class="text-lg font-semibold leading-none">
+        <div class="text-lg font-semibold leading-none text-fuchsia-700 dark:text-fuchsia-200">
           {{ insights.breakingChangesLast90d }}
         </div>
         <p class="text-[11px] text-muted-foreground">
@@ -168,7 +168,7 @@ const showAll = ref(false)
           <div
             v-for="(bar, i) in sparkline"
             :key="i"
-            class="flex-1 rounded-sm bg-primary/60"
+            class="flex-1 rounded-sm bg-gradient-to-t from-primary to-fuchsia-500/70"
             :style="{ height: `${Math.max(4, bar.heightPct)}%` }"
             :title="`${bar.month}: ${bar.commits}`"
           />

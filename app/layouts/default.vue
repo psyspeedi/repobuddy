@@ -25,10 +25,10 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
 
 <template>
   <div class="min-h-screen bg-background text-foreground">
-    <header class="border-b border-border bg-card">
+    <header class="border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div class="container mx-auto flex items-center justify-between px-4 py-3">
         <NuxtLink to="/" class="text-lg font-semibold tracking-tight">
-          {{ t('app.name') }}
+          <span class="cg-gradient-text">{{ t('app.name') }}</span>
         </NuxtLink>
         <div class="flex items-center gap-2">
           <div class="relative">

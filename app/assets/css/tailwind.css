@@ -19,6 +19,10 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -28,48 +32,58 @@
 }
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  /* Indigo-violet primary with a soft cool-blue surface — gives the
+   * dev-tool/AI vibe without losing readability of dense code lists. */
+  --background: 220 30% 99%;
+  --foreground: 235 25% 12%;
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
+  --card-foreground: 235 25% 12%;
   --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
+  --popover-foreground: 235 25% 12%;
+  --primary: 252 75% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 250 30% 95%;
+  --secondary-foreground: 252 35% 25%;
+  --muted: 230 25% 95%;
+  --muted-foreground: 235 15% 42%;
+  --accent: 188 80% 92%;
+  --accent-foreground: 188 80% 22%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 10% 3.9%;
-  --radius: 0.5rem;
+  --success: 156 70% 38%;
+  --success-foreground: 0 0% 98%;
+  --warning: 35 95% 52%;
+  --warning-foreground: 35 95% 12%;
+  --border: 230 25% 88%;
+  --input: 230 25% 88%;
+  --ring: 252 75% 58%;
+  --radius: 0.6rem;
 }
 
 .dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
+  --background: 235 30% 7%;
+  --foreground: 220 25% 96%;
+  --card: 235 28% 10%;
+  --card-foreground: 220 25% 96%;
+  --popover: 235 28% 10%;
+  --popover-foreground: 220 25% 96%;
+  --primary: 254 90% 72%;
+  --primary-foreground: 235 35% 12%;
+  --secondary: 235 22% 18%;
+  --secondary-foreground: 220 25% 96%;
+  --muted: 235 22% 16%;
+  --muted-foreground: 235 15% 65%;
+  --accent: 188 70% 22%;
+  --accent-foreground: 188 80% 88%;
+  --destructive: 0 70% 55%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
+  --success: 156 65% 50%;
+  --success-foreground: 235 35% 12%;
+  --warning: 38 95% 60%;
+  --warning-foreground: 35 95% 10%;
+  --border: 235 22% 20%;
+  --input: 235 22% 20%;
+  --ring: 254 90% 72%;
 }
 
 * {
@@ -79,4 +93,39 @@
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+  background-image:
+    radial-gradient(at 8% 0%, hsl(var(--primary) / 0.06) 0px, transparent 50%),
+    radial-gradient(at 95% 5%, hsl(var(--accent) / 0.25) 0px, transparent 45%);
+  background-attachment: fixed;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(at 8% 0%, hsl(var(--primary) / 0.15) 0px, transparent 55%),
+    radial-gradient(at 95% 5%, hsl(188 60% 30% / 0.18) 0px, transparent 50%);
+}
+
+/* Gradient text utility for hero titles & emphasis. */
+.cg-gradient-text {
+  background: linear-gradient(
+    90deg,
+    hsl(252 90% 60%),
+    hsl(280 85% 60%),
+    hsl(188 80% 45%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dark .cg-gradient-text {
+  background: linear-gradient(
+    90deg,
+    hsl(254 95% 78%),
+    hsl(290 90% 75%),
+    hsl(188 85% 65%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }

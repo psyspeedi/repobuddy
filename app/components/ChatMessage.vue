@@ -89,13 +89,17 @@ function onClick(e: MouseEvent): void {
 
 <template>
   <div
-    class="rounded-lg border border-border px-4 py-3"
-    :class="role === 'user' ? 'bg-secondary' : 'bg-card'"
+    class="rounded-lg border px-4 py-3 transition"
+    :class="
+      role === 'user'
+        ? 'border-border bg-secondary'
+        : 'border-primary/20 bg-gradient-to-br from-primary/[0.04] to-fuchsia-500/[0.03]'
+    "
   >
     <div class="mb-1 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
-      <span>
+      <span :class="role === 'assistant' ? 'font-semibold text-primary' : ''">
         {{ role === 'user' ? t('chat.you') : t('chat.assistant') }}
-        <span v-if="pending" class="ml-2 animate-pulse">…</span>
+        <span v-if="pending" class="ml-2 animate-pulse text-primary">…</span>
       </span>
       <NuxtLink
         v-if="graphHighlightUrl"
