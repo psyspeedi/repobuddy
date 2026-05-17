@@ -215,6 +215,42 @@ function renderEntity(e: AnswerContextEntity): string[] {
       if (typeof m.hotness === 'number') {
         out.push(`- hotness: ${m.hotness} modification(s) in last 90 days`)
       }
+    } else if (
+      // Functions/classes/types may carry author-written JSDoc/docstring
+      // extracted by the parser. Surface it verbatim so the model can
+      // ground on author intent.
+      (e.type === 'function' || e.type === 'class' || e.type === 'type')
+      && 'docs' in meta
+    ) {
+      const m = meta as {
+        docs?: {
+          description?: string
+          params?: { name: string; description: string }[]
+          returns?: string
+          examples?: string[]
+          deprecated?: string | true
+        }
+      }
+      const d = m.docs
+      if (d) {
+        if (d.description) out.push(`- jsdoc: ${d.description}`)
+        if (d.params && d.params.length > 0) {
+          out.push(`- jsdoc params:`)
+          for (const p of d.params) out.push(`    - ${p.name}: ${p.description}`)
+        }
+        if (d.returns) out.push(`- jsdoc returns: ${d.returns}`)
+        if (d.deprecated) {
+          out.push(`- deprecated${typeof d.deprecated === 'string' ? `: ${d.deprecated}` : ''}`)
+        }
+        if (d.examples && d.examples.length > 0) {
+          out.push(`- jsdoc examples:`)
+          for (const ex of d.examples) {
+            out.push('  ```')
+            for (const line of ex.split('\n')) out.push(`  ${line}`)
+            out.push('  ```')
+          }
+        }
+      }
     } else {
       // Generic fallback — dump non-trivial metadata.
       const entries = Object.entries(meta).filter(([, v]) => v !== null && v !== '')

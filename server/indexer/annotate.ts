@@ -94,13 +94,20 @@ export async function annotateAndEmbed(
         continue
       }
       try {
+        // Author-written JSDoc/docstring extracted by the parser — when
+        // present, it's the source-of-truth description. We still ask the
+        // LLM for concepts/patterns, but feed the JSDoc text as context so
+        // it grounds on author intent rather than re-inferring meaning
+        // from the code alone.
+        const authorDocs = readAuthorDocs(entity)
+        const userContent = authorDocs
+          ? `Entity ${entity.qualifiedName} (${entity.type}, ${entity.language}):\n\nAuthor-written JSDoc:\n${authorDocs}\n\nCode:\n${code}`
+          : `Entity ${entity.qualifiedName} (${entity.type}, ${entity.language}):\n\n${code}`
+
         const annotation = await llm.structured<SemanticAnnotation>(
           [
             { role: 'system', content: SYSTEM_PROMPT },
-            {
-              role: 'user',
-              content: `Entity ${entity.qualifiedName} (${entity.type}, ${entity.language}):\n\n${code}`,
-            },
+            { role: 'user', content: userContent },
           ],
           { schema: SemanticAnnotationSchema, schemaName: 'semantic_annotation' },
         )
@@ -169,6 +176,39 @@ export async function annotateAndEmbed(
   await embedEntityDescriptions(db, workspaceId, embeddings)
 
   return { annotated, conceptsCreated, patternsCreated }
+}
+
+function readAuthorDocs(entity: typeof entities.$inferSelect): string | null {
+  const meta = entity.metadata as { docs?: {
+    description?: string
+    params?: { name: string; description: string }[]
+    returns?: string
+    examples?: string[]
+    deprecated?: string | true
+  } } | null
+  const docs = meta?.docs
+  if (!docs) return null
+  const lines: string[] = []
+  if (docs.description) lines.push(docs.description)
+  if (docs.params && docs.params.length > 0) {
+    lines.push('Parameters:')
+    for (const p of docs.params) {
+      lines.push(`  - ${p.name}: ${p.description}`)
+    }
+  }
+  if (docs.returns) lines.push(`Returns: ${docs.returns}`)
+  if (docs.deprecated) {
+    lines.push(`Deprecated${typeof docs.deprecated === 'string' ? `: ${docs.deprecated}` : ''}`)
+  }
+  if (docs.examples && docs.examples.length > 0) {
+    lines.push('Examples:')
+    for (const ex of docs.examples) {
+      lines.push('```')
+      lines.push(ex)
+      lines.push('```')
+    }
+  }
+  return lines.length > 0 ? lines.join('\n') : null
 }
 
 async function fetchEntityCode(

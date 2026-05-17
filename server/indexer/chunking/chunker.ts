@@ -20,6 +20,30 @@ const MIN_LINES_FOR_ENTITY_CHUNK = 4
 const SMALL_FILE_LINE_THRESHOLD = 150
 
 /**
+ * Path segments that mark a file as an example / sample / demo. Indexed
+ * separately so the retrieval layer can prefer "show me how to use X" over
+ * "show me how X is implemented" when asked.
+ */
+const EXAMPLE_PATH_SEGMENTS = new Set([
+  'examples',
+  'example',
+  'samples',
+  'sample',
+  'demo',
+  'demos',
+  'sandbox',
+  'playground',
+])
+
+export function isExamplePath(filePath: string): boolean {
+  const segments = filePath.split('/')
+  for (const s of segments) {
+    if (EXAMPLE_PATH_SEGMENTS.has(s.toLowerCase())) return true
+  }
+  return false
+}
+
+/**
  * AST-aware chunker.
  *
  * Strategy:
@@ -52,7 +76,7 @@ export function chunkCode(
         startLine: 1,
         endLine: totalLines,
         text: source,
-        sourceType: 'code',
+        sourceType: isExamplePath(filePath) ? 'example' : 'code',
         metadata: { language },
       },
     ]
@@ -80,7 +104,7 @@ export function chunkCode(
         startLine: 1,
         endLine: totalLines,
         text: source,
-        sourceType: 'code',
+        sourceType: isExamplePath(filePath) ? 'example' : 'code',
         metadata: { language },
       },
     ]
@@ -115,7 +139,7 @@ export function chunkCode(
         startLine: 1,
         endLine: totalLines,
         text: source,
-        sourceType: 'code',
+        sourceType: isExamplePath(filePath) ? 'example' : 'code',
         metadata: { language },
       },
     ]
@@ -136,7 +160,7 @@ function buildChunk(
     startLine: start,
     endLine: end,
     text: lines.slice(start - 1, end).join('\n'),
-    sourceType: 'code',
+    sourceType: isExamplePath(filePath) ? 'example' : 'code',
     metadata: {
       qualifiedName: entity.qualifiedName,
       entityType: entity.type,
@@ -178,12 +202,13 @@ export function chunkMarkdown(filePath: string, source: string): CodeChunk[] {
   }
   flush(lines.length)
 
+  const isExample = isExamplePath(filePath)
   return sections.map((s) => ({
     filePath,
     startLine: s.startLine,
     endLine: s.endLine,
     text: s.text,
-    sourceType: 'doc' as const,
+    sourceType: isExample ? ('example' as const) : ('doc' as const),
     metadata: {},
   }))
 }

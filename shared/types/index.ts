@@ -41,6 +41,14 @@ export type RelationType =
   | 'introduced_in'
   | 'relates_to'
 
-export type ChunkSourceType = 'code' | 'doc' | 'pr_description' | 'commit_message'
+export type ChunkSourceType =
+  | 'code'
+  | 'doc'
+  | 'pr_description'
+  | 'commit_message'
+  /** Code or doc taken from an examples/, samples/, demo/ folder — gives the
+   * planner a way to surface usage examples specifically when answering
+   * "how do I use X" style questions. */
+  | 'example'
 
 export type ChatRole = 'user' | 'assistant'

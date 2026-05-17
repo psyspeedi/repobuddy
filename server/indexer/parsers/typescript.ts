@@ -5,6 +5,8 @@ import {
   type CallExpression,
   type ClassDeclaration,
   type InterfaceDeclaration,
+  type JSDocableNode,
+  type JSDoc,
   type MethodDeclaration,
   type Node,
   type SourceFile,
@@ -134,6 +136,7 @@ class TypeScriptParser implements SourceParser {
         endLine: cls.getEndLineNumber(),
         signature: classSignature(cls),
         visibility: cls.hasModifier(SyntaxKind.ExportKeyword) ? 'public' : 'private',
+        metadata: docsMetadata(cls),
       })
 
       relations.push({
@@ -178,6 +181,7 @@ class TypeScriptParser implements SourceParser {
           startLine: ctor.getStartLineNumber(),
           endLine: ctor.getEndLineNumber(),
           signature: ctor.getText().split('\n')[0],
+          metadata: docsMetadata(ctor),
         })
         relations.push({
           fromQualified: methodQualified,
@@ -210,6 +214,7 @@ class TypeScriptParser implements SourceParser {
       visibility: method.hasModifier(SyntaxKind.PrivateKeyword)
         ? 'private'
         : 'public',
+      metadata: docsMetadata(method),
     })
     relations.push({
       fromQualified: qualified,
@@ -240,6 +245,7 @@ class TypeScriptParser implements SourceParser {
         endLine: fn.getEndLineNumber(),
         signature: signatureLine(fn),
         visibility: fn.hasModifier(SyntaxKind.ExportKeyword) ? 'public' : 'private',
+        metadata: docsMetadata(fn),
       })
       relations.push({
         fromQualified: qualified,
@@ -270,6 +276,9 @@ class TypeScriptParser implements SourceParser {
           endLine: decl.getEndLineNumber(),
           signature: signatureLine(decl),
           visibility: varStmt.hasModifier(SyntaxKind.ExportKeyword) ? 'public' : 'private',
+          // JSDoc lives on the VariableStatement (`/** ... */ export const fn = …`),
+          // not on the declarator — getJsDocs() returns [] on VariableDeclaration.
+          metadata: docsMetadata(varStmt),
         })
         relations.push({
           fromQualified: qualified,
@@ -302,6 +311,7 @@ class TypeScriptParser implements SourceParser {
         endLine: iface.getEndLineNumber(),
         signature: `interface ${name}`,
         visibility: iface.hasModifier(SyntaxKind.ExportKeyword) ? 'public' : 'private',
+        metadata: docsMetadata(iface),
       })
       relations.push({
         fromQualified: qualified,
@@ -323,6 +333,7 @@ class TypeScriptParser implements SourceParser {
         endLine: alias.getEndLineNumber(),
         signature: `type ${name}`,
         visibility: alias.hasModifier(SyntaxKind.ExportKeyword) ? 'public' : 'private',
+        metadata: docsMetadata(alias),
       })
       relations.push({
         fromQualified: qualified,
@@ -379,6 +390,86 @@ function classSignature(cls: ClassDeclaration): string {
 
 function signatureLine(node: Node): string {
   return node.getText().split('\n')[0]?.slice(0, 200) ?? ''
+}
+
+interface ParsedDocs {
+  description: string
+  params?: { name: string; description: string }[]
+  returns?: string
+  examples?: string[]
+  deprecated?: string | true
+  tags?: { name: string; text: string }[]
+}
+
+// Extract author-written JSDoc into structured metadata. Libraries that
+// document themselves (lodash, p-limit, zod helpers, …) carry the
+// source-of-truth API description here, so the annotation phase and the
+// answer operator can ground on real prose instead of regenerating it.
+function docsMetadata(
+  node: JSDocableNode & Node,
+): { docs: ParsedDocs } | undefined {
+  let docs: JSDoc[] = []
+  try {
+    docs = node.getJsDocs()
+  } catch {
+    return undefined
+  }
+  if (docs.length === 0) return undefined
+  // Multiple JSDoc blocks above one declaration are unusual but legal —
+  // the convention in TS lib types is to pick the last block (closest to
+  // the declaration).
+  const block = docs[docs.length - 1]
+  if (!block) return undefined
+  const description = block.getDescription().trim()
+  const params: { name: string; description: string }[] = []
+  const examples: string[] = []
+  const tags: { name: string; text: string }[] = []
+  let returns: string | undefined
+  let deprecated: string | true | undefined
+
+  for (const tag of block.getTags()) {
+    const tagName = tag.getTagName()
+    const text = (tag.getCommentText() ?? '').trim()
+    switch (tagName) {
+      case 'param':
+      case 'parameter': {
+        const m = /^(\S+)\s*-?\s*(.*)$/s.exec(text)
+        if (m) params.push({ name: m[1] ?? '', description: (m[2] ?? '').trim() })
+        else if (text) params.push({ name: '', description: text })
+        break
+      }
+      case 'returns':
+      case 'return':
+        if (text) returns = text
+        break
+      case 'example':
+        if (text) examples.push(text)
+        break
+      case 'deprecated':
+        deprecated = text || true
+        break
+      default:
+        if (text) tags.push({ name: tagName, text })
+    }
+  }
+
+  if (
+    !description
+    && params.length === 0
+    && !returns
+    && examples.length === 0
+    && deprecated === undefined
+    && tags.length === 0
+  ) {
+    return undefined
+  }
+  const out: ParsedDocs = { description }
+  if (params.length > 0) out.params = params
+  if (returns) out.returns = returns
+  if (examples.length > 0) out.examples = examples
+  if (deprecated !== undefined) out.deprecated = deprecated
+  if (tags.length > 0) out.tags = tags
+  return { docs: out }
 }
 
 function callTargetName(expr: Node): string | null {
