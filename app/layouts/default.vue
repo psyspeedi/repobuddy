@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
+import { Sun, Moon } from 'lucide-vue-next'
 
 const colorMode = useColorMode()
 const { loggedIn, user, clear } = useUserSession()
@@ -24,12 +25,14 @@ async function logout(): Promise<void> {
         </NuxtLink>
         <div class="flex items-center gap-2">
           <Button
-            variant="outline"
-            size="sm"
-            aria-label="Toggle theme"
+            variant="ghost"
+            size="icon"
+            :aria-label="colorMode.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+            :title="colorMode.value === 'dark' ? 'Light theme' : 'Dark theme'"
             @click="toggleTheme"
           >
-            {{ colorMode.value === 'dark' ? 'Light' : 'Dark' }}
+            <Sun v-if="colorMode.value === 'dark'" class="h-4 w-4" />
+            <Moon v-else class="h-4 w-4" />
           </Button>
           <template v-if="loggedIn">
             <span class="hidden text-sm text-muted-foreground sm:inline">

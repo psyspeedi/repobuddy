@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type Graph from 'graphology'
 import type Sigma from 'sigma'
+import { Button } from '@/components/ui/button'
 
 // ---------- Constants ----------
 const typeColors: Record<string, string> = {
@@ -546,7 +547,16 @@ useHead({ title: 'Graph — CodeGraph' })
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-12rem)] gap-4">
+  <div class="space-y-3">
+    <div class="flex items-center gap-2">
+      <NuxtLink :to="`/w/${workspaceId}`">
+        <Button variant="ghost" size="sm">
+          ← Back to chat
+        </Button>
+      </NuxtLink>
+      <span class="text-sm text-muted-foreground">Graph view</span>
+    </div>
+    <div class="flex h-[calc(100vh-14rem)] gap-4">
     <aside class="w-56 shrink-0 space-y-3 overflow-y-auto rounded-lg border border-border bg-card p-3">
       <div class="space-y-1">
         <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -708,5 +718,6 @@ useHead({ title: 'Graph — CodeGraph' })
       @close="selectedNodeId = null"
       @focus="focusEntity"
     />
+    </div>
   </div>
 </template>
