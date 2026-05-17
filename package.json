@@ -36,7 +36,8 @@
     "db:create:test": "docker compose exec postgres psql -U codegraph -d postgres -c 'CREATE DATABASE codegraph_test;' && pnpm db:migrate:test",
     "db:studio": "drizzle-kit studio",
     "dev:worker": "tsx watch server/workers/index.ts",
-    "build:worker": "tsx server/workers/build.ts"
+    "build:worker": "tsx server/workers/build.ts",
+    "backfill:insights": "tsx scripts/backfill-git-insights.ts"
   },
   "dependencies": {
     "@nuxtjs/color-mode": "^3.5.2",
