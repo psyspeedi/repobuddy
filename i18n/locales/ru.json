@@ -94,16 +94,29 @@
     "you": "Ты",
     "assistant": "CodeGraph",
     "showOnGraph": "Показать на графе",
+    "showOnGraphTitle": "Открыть граф с подсветкой упомянутых сущностей",
     "chats": "Чаты",
     "newChat": "+ Новый",
     "noChats": "Пока нет сохранённых чатов.",
     "messageCount": "{n} сообщ.",
     "deleteChat": "Удалить чат",
+    "untitled": "Без названия",
+    "citation": {
+      "invalid": "некорректная цитата",
+      "openChunk": "открыть фрагмент исходника",
+      "showOnGraph": "показать сущность на графе"
+    },
     "panels": {
       "reasoning": "Рассуждение",
       "source": "Исходник",
       "sourcePlaceholder": "Кликни на цитату в чате (значок ↗ после утверждения), чтобы открыть исходник здесь."
     }
+  },
+  "time": {
+    "justNow": "только что",
+    "minutesAgo": "{n} мин назад",
+    "hoursAgo": "{n} ч назад",
+    "daysAgo": "{n} д назад"
   },
   "graph": {
     "backToChat": "← Назад к чату",
@@ -132,6 +145,7 @@
   "nodeDetail": {
     "askAi": "Спросить ИИ",
     "askAiTitle": "Открыть чат с готовым вопросом про эту сущность",
+    "askPrefilled": "Расскажи подробно про {subject} {ref}.",
     "description": "Описание",
     "signature": "Сигнатура",
     "commit": "Коммит",

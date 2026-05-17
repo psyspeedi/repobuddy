@@ -16,6 +16,7 @@ interface Props {
 }
 const props = defineProps<Props>()
 const emit = defineEmits<{ (e: 'open-chunk', chunkId: string): void }>()
+const { t } = useI18n()
 
 const entityCitations = computed(() =>
   (props.citations ?? []).filter((c) => c.kind === 'entity'),
@@ -45,10 +46,10 @@ const html = computed(() => {
       const isInvalid = invalidSet.has(lid)
       const glyph = isInvalid ? '⚠' : k === 'chunk' ? '↗' : '◆'
       const label = isInvalid
-        ? 'invalid citation'
+        ? t('chat.citation.invalid')
         : k === 'chunk'
-          ? 'open source chunk'
-          : 'show entity on graph'
+          ? t('chat.citation.openChunk')
+          : t('chat.citation.showOnGraph')
       const invalidAttr = isInvalid ? ' data-invalid="true"' : ''
       return `<a class="cg-cite" data-kind="${k}" data-id="${lid}" title="${label}"${invalidAttr} href="#">${glyph}</a>`
     },
@@ -93,16 +94,16 @@ function onClick(e: MouseEvent): void {
   >
     <div class="mb-1 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
       <span>
-        {{ role === 'user' ? 'You' : 'CodeGraph' }}
+        {{ role === 'user' ? t('chat.you') : t('chat.assistant') }}
         <span v-if="pending" class="ml-2 animate-pulse">…</span>
       </span>
       <NuxtLink
         v-if="graphHighlightUrl"
         :to="graphHighlightUrl"
         class="rounded bg-accent/40 px-2 py-0.5 text-[10px] normal-case tracking-normal hover:bg-accent"
-        title="Open graph with the cited entities highlighted"
+        :title="t('chat.showOnGraphTitle')"
       >
-        Show on graph
+        {{ t('chat.showOnGraph') }}
       </NuxtLink>
     </div>
     <div class="cg-prose text-sm leading-relaxed" v-html="html" @click="onClick" />

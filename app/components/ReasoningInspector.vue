@@ -6,6 +6,7 @@ interface Props {
   trace: TraceEntry[] | null | undefined
 }
 const props = defineProps<Props>()
+const { t } = useI18n()
 const expanded = ref<Record<string, boolean>>({})
 
 function toggle(id: string): void {
@@ -25,7 +26,7 @@ const indexedSteps = computed(() => {
   <aside class="flex h-full w-full flex-col gap-3 overflow-hidden rounded-lg border border-border bg-card p-3">
     <header class="space-y-1">
       <h2 class="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-        Reasoning
+        {{ t('reasoning.title') }}
       </h2>
       <p v-if="plan" class="text-xs text-muted-foreground">
         {{ plan.reasoning }}
@@ -67,22 +68,22 @@ const indexedSteps = computed(() => {
           </p>
           <details class="mb-2">
             <summary class="cursor-pointer select-none text-muted-foreground">
-              params
+              {{ t('reasoning.params') }}
             </summary>
             <pre class="mt-1 whitespace-pre-wrap break-all">{{ JSON.stringify(entry.step.params, null, 2) }}</pre>
           </details>
           <p v-if="entry.trace?.summary" class="text-muted-foreground">
-            <span class="font-medium">result:</span> <code>{{ entry.trace.summary }}</code>
+            <span class="font-medium">{{ t('reasoning.result') }}:</span> <code>{{ entry.trace.summary }}</code>
           </p>
           <p v-if="entry.trace?.error" class="text-destructive">
-            error: {{ entry.trace.error }}
+            {{ t('reasoning.error') }}: {{ entry.trace.error }}
           </p>
         </div>
       </li>
     </ul>
 
     <p v-else class="text-sm text-muted-foreground">
-      No plan yet — ask a question.
+      {{ t('reasoning.noPlanYet') }}
     </p>
   </aside>
 </template>

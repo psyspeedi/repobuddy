@@ -11,6 +11,7 @@ interface Props {
 const props = defineProps<Props>()
 defineEmits<{ (e: 'close'): void }>()
 
+const { t } = useI18n()
 const colorMode = useColorMode()
 
 interface ChunkResponse {
@@ -116,17 +117,17 @@ function shikiLang(lang: string): string {
           </span>
         </p>
         <p v-else class="text-muted-foreground">
-          Source viewer
+          {{ t('viewer.title') }}
         </p>
       </div>
       <Button
         v-if="data?.chunk && mode !== 'diff'"
         variant="ghost"
         size="sm"
-        :title="mode === 'markdown' ? 'Show raw markdown' : 'Render as markdown'"
+        :title="mode === 'markdown' ? t('viewer.rawTitle') : t('viewer.renderTitle')"
         @click="toggleMode"
       >
-        {{ mode === 'markdown' ? 'Raw' : 'Render' }}
+        {{ mode === 'markdown' ? t('viewer.raw') : t('viewer.render') }}
       </Button>
       <Button variant="ghost" size="sm" @click="$emit('close')">
         ×
@@ -134,7 +135,7 @@ function shikiLang(lang: string): string {
     </header>
     <div class="flex-1 overflow-auto p-3" :class="mode === 'markdown' ? 'text-sm' : 'text-xs'">
       <div v-if="loading">
-        Loading…
+        {{ t('viewer.loading') }}
       </div>
       <p v-else-if="error" class="text-destructive">
         {{ error }}

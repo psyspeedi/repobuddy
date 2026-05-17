@@ -82,6 +82,7 @@ interface GraphResponse {
 
 // ---------- Route + state ----------
 const route = useRoute()
+const { t } = useI18n()
 const workspaceId = String(route.params.id)
 
 const selectedTypes = ref<string[]>([...(VIEW_PRESETS[0]?.types ?? [])])
@@ -543,7 +544,7 @@ function clearHighlight(): void {
   sigma?.getCamera().animatedReset({ duration: 300 })
 }
 
-useHead({ title: 'Graph — CodeGraph' })
+useHead({ title: () => `${t('graph.view')} — CodeGraph` })
 </script>
 
 <template>
@@ -551,16 +552,16 @@ useHead({ title: 'Graph — CodeGraph' })
     <div class="flex items-center gap-2">
       <NuxtLink :to="`/w/${workspaceId}`">
         <Button variant="ghost" size="sm">
-          ← Back to chat
+          {{ t('graph.backToChat') }}
         </Button>
       </NuxtLink>
-      <span class="text-sm text-muted-foreground">Graph view</span>
+      <span class="text-sm text-muted-foreground">{{ t('graph.view') }}</span>
     </div>
     <div class="flex h-[calc(100vh-14rem)] gap-4">
     <aside class="w-56 shrink-0 space-y-3 overflow-y-auto rounded-lg border border-border bg-card p-3">
       <div class="space-y-1">
         <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          View
+          {{ t('graph.presets') }}
         </h2>
         <div class="flex flex-wrap gap-1">
           <button
@@ -582,7 +583,7 @@ useHead({ title: 'Graph — CodeGraph' })
       </div>
 
       <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Types
+        {{ t('graph.types') }}
       </h2>
       <ul class="space-y-1 text-sm">
         <li v-for="s in stats" :key="s.type">
@@ -600,12 +601,12 @@ useHead({ title: 'Graph — CodeGraph' })
         </li>
       </ul>
       <div v-if="data?.counts" class="text-[10px] text-muted-foreground">
-        {{ data.counts.primary }} primary, {{ data.counts.context }} context, {{ data.counts.edges }} edges
+        {{ data.counts.primary }} {{ t('graph.primary') }}, {{ data.counts.context }} {{ t('graph.context') }}, {{ data.counts.edges }} {{ t('graph.edgesCount') }}
       </div>
 
       <details v-if="visibleEdgeTypes.size > 0" class="pt-1">
         <summary class="cursor-pointer text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Edges
+          {{ t('graph.edges') }}
         </summary>
         <ul class="mt-2 space-y-1 text-xs">
           <li v-for="t in [...visibleEdgeTypes].sort()" :key="t" class="flex items-center gap-2">
@@ -615,9 +616,9 @@ useHead({ title: 'Graph — CodeGraph' })
         </ul>
       </details>
       <div v-if="data?.truncated" class="space-y-1 rounded bg-yellow-500/10 p-2 text-xs text-yellow-700 dark:text-yellow-400">
-        <p>Graph truncated at {{ fetchLimit }} nodes.</p>
+        <p>{{ t('graph.truncated', { n: fetchLimit }) }}</p>
         <button v-if="fetchLimit < 5000" type="button" class="underline" @click="loadMore">
-          Load more →
+          {{ t('graph.loadMore') }}
         </button>
       </div>
     </aside>
@@ -634,12 +635,12 @@ useHead({ title: 'Graph — CodeGraph' })
       >
         <span class="inline-block h-2 w-2 rounded-full bg-orange-500" />
         <span class="font-medium">
-          Highlighted: {{ highlightedNodes.map((n) => `${n.name} (${n.type})`).join(', ') }}
+          {{ t('graph.highlighted') }}: {{ highlightedNodes.map((n) => `${n.name} (${n.type})`).join(', ') }}
         </span>
         <button
           type="button"
           class="ml-auto text-muted-foreground hover:text-foreground"
-          title="Clear highlight"
+          :title="t('graph.clearHighlight')"
           @click="clearHighlight"
         >
           ×
@@ -650,7 +651,7 @@ useHead({ title: 'Graph — CodeGraph' })
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search entities by name…"
+          :placeholder="t('graph.searchPlaceholder')"
           class="w-full rounded-md border border-border bg-background/95 px-3 py-1.5 text-sm shadow-sm backdrop-blur focus:outline-none focus:ring-2 focus:ring-ring"
           @focus="searchOpen = searchResults.length > 0"
         >
@@ -701,13 +702,13 @@ useHead({ title: 'Graph — CodeGraph' })
       </div>
 
       <div v-if="pending" class="absolute inset-0 grid place-items-center bg-card/60">
-        Loading graph…
+        {{ t('graph.loading') }}
       </div>
       <div
         v-if="!pending && allTypes.length === 0"
         class="absolute inset-0 grid place-items-center text-sm text-muted-foreground"
       >
-        Workspace has no entities yet — indexing may still be running.
+        {{ t('graph.noEntities') }}
       </div>
     </section>
 

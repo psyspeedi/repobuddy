@@ -11,6 +11,7 @@ defineEmits<{
   (e: 'focus', id: string): void
 }>()
 
+const { t } = useI18n()
 const router = useRouter()
 
 async function askAboutEntity(): Promise<void> {
@@ -18,7 +19,7 @@ async function askAboutEntity(): Promise<void> {
   if (!e) return
   const ref = `[entity:${e.id}]`
   const subject = e.qualifiedName ?? e.name
-  const question = `Расскажи подробно про ${subject} ${ref}.`
+  const question = t('nodeDetail.askPrefilled', { subject, ref })
   await router.push({
     path: `/w/${props.workspaceId}`,
     query: { ask: question },
@@ -113,7 +114,7 @@ const hotness = computed(() => {
     <header class="flex items-start justify-between gap-2 border-b border-border p-3">
       <div class="min-w-0 flex-1">
         <p class="break-all text-sm font-semibold">
-          {{ detail?.entity.name ?? 'Loading…' }}
+          {{ detail?.entity.name ?? t('nodeDetail.loading') }}
         </p>
         <p v-if="detail?.entity.type" class="text-xs uppercase tracking-wide text-muted-foreground">
           {{ detail.entity.type }}
@@ -125,10 +126,10 @@ const hotness = computed(() => {
           v-if="detail?.entity"
           variant="outline"
           size="sm"
-          title="Open the chat with a prefilled question about this entity"
+          :title="t('nodeDetail.askAiTitle')"
           @click="askAboutEntity"
         >
-          Ask AI
+          {{ t('nodeDetail.askAi') }}
         </Button>
         <Button variant="ghost" size="sm" @click="$emit('close')">
           ×
@@ -138,7 +139,7 @@ const hotness = computed(() => {
 
     <div class="flex-1 space-y-3 overflow-y-auto p-3 text-xs">
       <div v-if="loading">
-        Loading…
+        {{ t('nodeDetail.loading') }}
       </div>
       <p v-else-if="error" class="text-destructive">
         {{ error }}
@@ -158,7 +159,7 @@ const hotness = computed(() => {
         <!-- Description (LLM-generated) -->
         <section v-if="detail.entity.description">
           <h4 class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Description
+            {{ t('nodeDetail.description') }}
           </h4>
           <p class="leading-relaxed">
             {{ detail.entity.description }}
@@ -168,7 +169,7 @@ const hotness = computed(() => {
         <!-- Signature for functions/classes -->
         <section v-if="detail.entity.signature">
           <h4 class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Signature
+            {{ t('nodeDetail.signature') }}
           </h4>
           <pre class="overflow-x-auto rounded bg-muted p-2 text-[11px]">{{ detail.entity.signature }}</pre>
         </section>
@@ -176,12 +177,12 @@ const hotness = computed(() => {
         <!-- Commit-specific block -->
         <section v-if="commitMeta">
           <h4 class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Commit
+            {{ t('nodeDetail.commit') }}
           </h4>
           <dl class="space-y-1">
             <div v-if="commitMeta.sha" class="flex gap-1">
               <dt class="text-muted-foreground">
-                sha:
+                {{ t('nodeDetail.sha') }}:
               </dt>
               <dd class="break-all font-mono">
                 {{ commitMeta.sha.slice(0, 12) }}
@@ -189,19 +190,19 @@ const hotness = computed(() => {
             </div>
             <div v-if="commitMeta.author">
               <dt class="text-muted-foreground">
-                author:
+                {{ t('nodeDetail.author') }}:
               </dt>
               <dd>{{ commitMeta.author }} <span v-if="commitMeta.email" class="text-muted-foreground">&lt;{{ commitMeta.email }}&gt;</span></dd>
             </div>
             <div v-if="commitMeta.date">
               <dt class="text-muted-foreground">
-                date:
+                {{ t('nodeDetail.date') }}:
               </dt>
               <dd>{{ formatDate(commitMeta.date) }}</dd>
             </div>
             <div v-if="commitMeta.message">
               <dt class="text-muted-foreground">
-                message:
+                {{ t('nodeDetail.message') }}:
               </dt>
               <dd class="whitespace-pre-wrap">
                 {{ commitMeta.message }}
@@ -213,15 +214,15 @@ const hotness = computed(() => {
         <!-- Hotness for files -->
         <section v-if="hotness !== null">
           <h4 class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Hotness
+            {{ t('nodeDetail.hotness') }}
           </h4>
-          <p>{{ hotness }} modification(s) in the last 90 days</p>
+          <p>{{ t('nodeDetail.hotnessLabel', { n: hotness }) }}</p>
         </section>
 
         <!-- Files changed list (commits) -->
         <section v-if="detail.filesChanged && detail.filesChanged.length > 0">
           <h4 class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Files changed ({{ detail.filesChanged.length }})
+            {{ t('nodeDetail.filesChanged') }} ({{ detail.filesChanged.length }})
           </h4>
           <ul class="space-y-0.5">
             <li
@@ -240,7 +241,7 @@ const hotness = computed(() => {
               <span v-else class="font-mono text-muted-foreground">{{ f.path }}</span>
             </li>
             <li v-if="detail.filesChanged.length > 30" class="text-muted-foreground">
-              + {{ detail.filesChanged.length - 30 }} more
+              {{ t('nodeDetail.filesChangedMore', { n: detail.filesChanged.length - 30 }) }}
             </li>
           </ul>
         </section>
@@ -248,7 +249,7 @@ const hotness = computed(() => {
         <!-- Outgoing relations -->
         <section v-if="detail.outgoing.length > 0">
           <h4 class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            → Outgoing ({{ detail.outgoing.length }})
+            {{ t('nodeDetail.outgoing') }} ({{ detail.outgoing.length }})
           </h4>
           <ul class="space-y-0.5">
             <li v-for="rel in detail.outgoing.slice(0, 40)" :key="rel.id">
@@ -264,7 +265,7 @@ const hotness = computed(() => {
               </button>
             </li>
             <li v-if="detail.outgoing.length > 40" class="text-muted-foreground">
-              + {{ detail.outgoing.length - 40 }} more
+              {{ t('nodeDetail.filesChangedMore', { n: detail.outgoing.length - 40 }) }}
             </li>
           </ul>
         </section>
@@ -272,7 +273,7 @@ const hotness = computed(() => {
         <!-- Incoming relations -->
         <section v-if="detail.incoming.length > 0">
           <h4 class="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            ← Incoming ({{ detail.incoming.length }})
+            {{ t('nodeDetail.incoming') }} ({{ detail.incoming.length }})
           </h4>
           <ul class="space-y-0.5">
             <li v-for="rel in detail.incoming.slice(0, 40)" :key="rel.id">
@@ -288,7 +289,7 @@ const hotness = computed(() => {
               </button>
             </li>
             <li v-if="detail.incoming.length > 40" class="text-muted-foreground">
-              + {{ detail.incoming.length - 40 }} more
+              {{ t('nodeDetail.filesChangedMore', { n: detail.incoming.length - 40 }) }}
             </li>
           </ul>
         </section>

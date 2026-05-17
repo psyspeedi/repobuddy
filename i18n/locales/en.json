@@ -94,16 +94,29 @@
     "you": "You",
     "assistant": "CodeGraph",
     "showOnGraph": "Show on graph",
+    "showOnGraphTitle": "Open the graph with the cited entities highlighted",
     "chats": "Chats",
     "newChat": "+ New",
     "noChats": "No saved chats yet.",
     "messageCount": "{n} msg",
     "deleteChat": "Delete this chat",
+    "untitled": "Untitled",
+    "citation": {
+      "invalid": "invalid citation",
+      "openChunk": "open source chunk",
+      "showOnGraph": "show entity on graph"
+    },
     "panels": {
       "reasoning": "Reasoning",
       "source": "Source",
       "sourcePlaceholder": "Click a citation in the chat (the ↗ badge after a claim) to open the referenced code here."
     }
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{n}m ago",
+    "hoursAgo": "{n}h ago",
+    "daysAgo": "{n}d ago"
   },
   "graph": {
     "backToChat": "← Back to chat",
@@ -132,6 +145,7 @@
   "nodeDetail": {
     "askAi": "Ask AI",
     "askAiTitle": "Open the chat with a prefilled question about this entity",
+    "askPrefilled": "Tell me about {subject} in detail {ref}.",
     "description": "Description",
     "signature": "Signature",
     "commit": "Commit",
