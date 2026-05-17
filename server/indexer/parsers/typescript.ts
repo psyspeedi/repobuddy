@@ -64,12 +64,14 @@ class TypeScriptParser implements SourceParser {
       return { entities, relations, warnings }
     }
 
-    // File entity (one per source file).
+    // File entity (one per source file). Test files get type='test' so the
+    // planner / UI can treat them differently and the post-parse step can
+    // emit `tested_by` edges back to the imported source entities.
     const fileQualified = input.relPath
     entities.push({
       qualifiedName: fileQualified,
       name: input.relPath.split('/').pop() ?? input.relPath,
-      type: 'file',
+      type: isTestPath(input.relPath) ? 'test' : 'file',
       language: input.language,
       filePath: input.relPath,
       startLine: 1,
@@ -362,6 +364,23 @@ class TypeScriptParser implements SourceParser {
       })
     }
   }
+}
+
+/**
+ * Identify test files: `*.test.ts`, `*.spec.ts`, files under `__tests__/`,
+ * `tests/`, or `test/`. The pipeline turns each into a `tested_by` edge
+ * from every imported entity back to the test file.
+ */
+function isTestPath(relPath: string): boolean {
+  if (/(\.|\/)(test|spec)\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$/i.test(relPath)) {
+    return true
+  }
+  const segments = relPath.split('/')
+  for (const s of segments) {
+    const lower = s.toLowerCase()
+    if (lower === '__tests__' || lower === 'tests' || lower === 'test') return true
+  }
+  return false
 }
 
 function scriptKindFor(relPath: string): ScriptKind {

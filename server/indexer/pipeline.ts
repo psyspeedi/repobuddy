@@ -192,6 +192,15 @@ export async function runIndexPipeline(
         }
       }
 
+      // 5c. Derive `tested_by` relations: for every test-file entity, look at
+      // its outgoing `imports` relations and emit a tested_by edge from each
+      // top-level entity defined in the imported file back to the test
+      // file. The resolver is approximate (it matches by file path prefix,
+      // not by imported symbol name), which is intentional — author intent
+      // "this test covers module X" usually maps to "this test exercises
+      // all top-level entities in module X".
+      deriveTestedByRelations(allEntities, allRelations)
+
       // 6. Persist entities.
       await setWorkspaceProgress(db, workspaceId, {
         phase: 'extracting',
@@ -399,6 +408,79 @@ export async function runIndexPipeline(
       if (source) await source.cleanup()
     }
   })
+}
+
+/**
+ * Heuristic resolver: for every test-file entity, attach `tested_by`
+ * edges from the entities of the files it imports. We don't try to
+ * follow each imported symbol — that would need real module resolution
+ * and re-export tracing — but "the test imports module X" is enough
+ * signal in practice. Mutates `allRelations` in place.
+ */
+function deriveTestedByRelations(
+  allEntities: ParsedEntity[],
+  allRelations: ParsedRelation[],
+): void {
+  const testFiles = new Set<string>()
+  for (const e of allEntities) {
+    if (e.type === 'test') testFiles.add(e.qualifiedName)
+  }
+  if (testFiles.size === 0) return
+
+  // Build a quick index of relPath → top-level entities in that file.
+  // Top-level = the entity itself sits in that file AND is not a method
+  // (we filter out anything with `::` after the first segment so we don't
+  // double-up class methods into the relation set — the class itself is
+  // enough).
+  const topLevelByFile = new Map<string, ParsedEntity[]>()
+  for (const e of allEntities) {
+    if (e.type === 'file' || e.type === 'test' || e.type === 'document') continue
+    // qualifiedName looks like `path/to/file.ts::Symbol` or
+    // `path/to/file.ts::Class::method`. Keep only the first `::Symbol` form.
+    const segments = e.qualifiedName.split('::')
+    if (segments.length !== 2) continue
+    const arr = topLevelByFile.get(e.filePath) ?? []
+    arr.push(e)
+    topLevelByFile.set(e.filePath, arr)
+  }
+
+  // Common source extensions we may need to try when a relative import
+  // omits one (`./foo` → `src/foo.ts`).
+  const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts']
+
+  for (const rel of allRelations) {
+    if (rel.type !== 'imports') continue
+    if (!testFiles.has(rel.fromQualified)) continue
+    // toQualified for relative imports is the resolved path WITHOUT extension.
+    // External imports look like raw module names ("zod") — skip them.
+    if (rel.toQualified.includes(':') || !rel.toQualified.includes('/')) continue
+
+    let importedFile: string | null = null
+    if (topLevelByFile.has(rel.toQualified)) {
+      importedFile = rel.toQualified
+    } else {
+      for (const ext of EXTS) {
+        if (topLevelByFile.has(rel.toQualified + ext)) {
+          importedFile = rel.toQualified + ext
+          break
+        }
+        const indexPath = `${rel.toQualified}/index${ext}`
+        if (topLevelByFile.has(indexPath)) {
+          importedFile = indexPath
+          break
+        }
+      }
+    }
+    if (!importedFile) continue
+    const targets = topLevelByFile.get(importedFile) ?? []
+    for (const target of targets) {
+      allRelations.push({
+        fromQualified: target.qualifiedName,
+        toQualified: rel.fromQualified,
+        type: 'tested_by',
+      })
+    }
+  }
 }
 
 function parserFor(language: string) {

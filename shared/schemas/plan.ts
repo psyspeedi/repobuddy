@@ -15,6 +15,7 @@ export const OPERATOR_NAMES = [
   'search_docs',
   'retrieve_code_chunks',
   'get_summary',
+  'walkthrough',
   'answer',
 ] as const
 

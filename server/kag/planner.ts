@@ -28,6 +28,7 @@ The JSON object MUST have this top-level shape:
 - search_docs({ query, limit? }) → Chunk[]      (restricted to markdown/doc chunks — READMEs, design notes, PR descriptions)
 - retrieve_code_chunks({ entities, limit? }) → Chunk[]
 - get_summary({ entity }) → { id, name, type, description }[]
+- walkthrough({ entity, limit? }) → { entity, callees, tests, parents }[]   (entity-centric tour: direct callees + tests covering it + enclosing parent)
 - answer({ question, context, style? }) → streaming response with inline citations
 
 ## Reference syntax
@@ -41,6 +42,7 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 - Use \`find_by_concept\` only when there is no concrete identifier — for genuinely fuzzy semantic queries ("where is discount logic").
 - For multi-hop "who calls X transitively" — use get_callers with transitive: true.
 - For broad / architectural / "tell me about this project" / "how does X work overall" questions — use \`search_docs\` (covers READMEs, docs/*.md, design notes) as the primary retrieval step, optionally combined with \`hybrid_search\` for code snippets. Bumping limit to 15 is fine on such broad queries.
+- For "walk me through X" / "how does X work" / "explain X step by step" / "проведи меня по X" — first resolve X via find_symbol, then use \`walkthrough\` to gather callees + tests + parent, then retrieve_code_chunks of those for the answer.
 - The question may be in any language (Russian, Chinese, etc.). Extract identifiers verbatim; do not translate them.
 - Keep plans concise: 2-5 steps is usually right.`
 
@@ -90,6 +92,26 @@ const FEW_SHOTS = [
           id: 's3',
           op: 'answer',
           params: { question: 'Where is discount logic?', context: ['$s1', '$s2'] },
+        },
+      ],
+    },
+  },
+  {
+    question: 'Walk me through how processOrder works.',
+    plan: {
+      reasoning: 'Walkthrough request — resolve symbol, gather its callees + tests + parent, then retrieve the code for the answer.',
+      steps: [
+        { id: 's1', op: 'find_symbol', params: { name: 'processOrder', type: 'function' } },
+        { id: 's2', op: 'walkthrough', params: { entity: '$s1', limit: 12 } },
+        { id: 's3', op: 'retrieve_code_chunks', params: { entities: '$s1' } },
+        {
+          id: 's4',
+          op: 'answer',
+          params: {
+            question: 'Walk me through how processOrder works.',
+            context: ['$s1', '$s2', '$s3'],
+            style: 'detailed',
+          },
         },
       ],
     },

@@ -543,6 +543,50 @@ export async function getSummary(
     .where(and(eq(entities.workspaceId, ctx.workspaceId), inArray(entities.id, ids)))
 }
 
+// ---------- walkthrough ----------
+/**
+ * Single-target operator that gathers everything needed for a "walk me
+ * through how X works" answer: the entity itself, its direct callees,
+ * its tests (incoming `tested_by`), and its inbound `defined_in` /
+ * `contained_in` parent for context. The planner pairs this with
+ * retrieve_code_chunks → answer for a structured tour.
+ */
+export interface WalkthroughParams {
+  entity: GraphEntity | GraphEntity[]
+  /** Cap on neighbours returned per side (callees, tests, parents). */
+  limit?: number
+}
+
+export async function walkthrough(
+  params: WalkthroughParams,
+  ctx: OperatorContext,
+): Promise<GraphEntity[]> {
+  const list = Array.isArray(params.entity) ? params.entity : [params.entity]
+  const targets = list.filter((e): e is GraphEntity => Boolean(e?.id))
+  if (targets.length === 0) return []
+  const limit = params.limit ?? 20
+
+  const seen = new Set<string>()
+  const out: GraphEntity[] = []
+  const pushUnique = (e: GraphEntity | undefined): void => {
+    if (!e?.id || seen.has(e.id)) return
+    seen.add(e.id)
+    out.push(e)
+  }
+  for (const target of targets) {
+    pushUnique(target)
+    const [callees, tests, parents] = await Promise.all([
+      traverse(ctx, [target.id], 'calls', 'out', { limit }),
+      traverse(ctx, [target.id], 'tested_by', 'out', { limit }),
+      traverse(ctx, [target.id], 'contained_in', 'out', { limit: 3 }),
+    ])
+    for (const e of callees) pushUnique(e)
+    for (const e of tests) pushUnique(e)
+    for (const e of parents) pushUnique(e)
+  }
+  return out
+}
+
 // ---------- answer wrapper for plan executor ----------
 export async function* answerOp(
   params: {
@@ -729,6 +773,7 @@ export type OperatorName =
   | 'search_docs'
   | 'retrieve_code_chunks'
   | 'get_summary'
+  | 'walkthrough'
   | 'answer'
 
 export const OPERATORS: Record<
@@ -749,5 +794,6 @@ export const OPERATORS: Record<
   search_docs: searchDocs as never,
   retrieve_code_chunks: retrieveCodeChunks as never,
   get_summary: getSummary as never,
+  walkthrough: walkthrough as never,
   answer: answerOp as never,
 }
