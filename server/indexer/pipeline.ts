@@ -1,6 +1,6 @@
 import type { Job } from 'bullmq'
 import { readFile } from 'node:fs/promises'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { entities as entitiesTable, workspaces } from '../db/schema'
 import { getLogger, withTrace } from '../lib/logger'
@@ -16,6 +16,7 @@ import type {
 import { fetchGitHub, type FetchedSource } from './source/fetch'
 import { walkRepo } from './source/walk'
 import { extractGitHistory } from './git/history'
+import { computeGitInsights } from './git/insights'
 import { embedAllPendingChunks, embedChunks } from './embed'
 import {
   createEmbeddingsProvider,
@@ -337,6 +338,17 @@ export async function runIndexPipeline(
           .set({ metadata: { hotness: hits } })
           .where(eq(entitiesTable.id, id))
       }
+
+      // 10c. Aggregate git insights and stash on workspaces.stats so the
+      // workspace page can render maintainer/activity/quality cards
+      // without re-walking commits.
+      const gitInsights = computeGitInsights(history)
+      await db
+        .update(workspaces)
+        .set({
+          stats: sql`coalesce(${workspaces.stats}, '{}'::jsonb) || ${JSON.stringify({ gitInsights })}::jsonb`,
+        })
+        .where(eq(workspaces.id, workspaceId))
 
       // 11. Done.
       await markWorkspaceReady(db, workspaceId, {

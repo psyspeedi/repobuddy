@@ -118,6 +118,27 @@
     "hoursAgo": "{n} ч назад",
     "daysAgo": "{n} д назад"
   },
+  "insights": {
+    "title": "Git-метрики",
+    "showMore": "Подробнее",
+    "showLess": "Свернуть",
+    "noHistory": "История коммитов недоступна для этого рабочего пространства.",
+    "monthsAgo": "{n} мес назад",
+    "yearsAgo": "{n} г назад",
+    "activity": "Активность",
+    "activityDetail": "{n90} за 90 дн · {n30} за 30 дн",
+    "lastCommit": "Последний коммит",
+    "maintainers": "Мейнтейнеры",
+    "maintainersDetail": "активных за {n} дней",
+    "busFactor": "Bus factor",
+    "busFactorDetail": "авторов покрывают 50% коммитов",
+    "fixFeat": "Fix : Feat",
+    "fixFeatDetail": "{fix} исправлений / {feat} фич",
+    "breaking": "Breaking",
+    "breakingDetail": "за {n} дней",
+    "frequency": "Коммитов по месяцам",
+    "topAuthors": "Топ-контрибьюторы"
+  },
   "graph": {
     "backToChat": "← Назад к чату",
     "view": "Просмотр графа",

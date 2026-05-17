@@ -5,9 +5,36 @@ const { t } = useI18n()
 const route = useRoute()
 const workspaceId = String(route.params.id)
 
-const { data: wsData, refresh: refreshWs } = await useFetch(`/api/workspaces/${workspaceId}`, {
-  key: `workspace-${workspaceId}`,
-})
+interface WorkspaceStats {
+  gitInsights?: {
+    lastCommitAt: string | null
+    totalCommitsScanned: number
+    commitsLast30d: number
+    commitsLast90d: number
+    activeMaintainers90d: number
+    topAuthors: { name: string; email: string; commitCount: number }[]
+    busFactor: number
+    fixCount: number
+    featCount: number
+    fixVsFeatRatio: number | null
+    breakingChangesLast90d: number
+    commitFrequencyByMonth: { month: string; commits: number }[]
+    windowDays: number
+  }
+}
+
+const { data: wsData, refresh: refreshWs } = await useFetch<{
+  workspace: {
+    id: string
+    name: string
+    sourceUrl: string | null
+    status: string
+    error: string | null
+    stats: WorkspaceStats | null
+  }
+}>(`/api/workspaces/${workspaceId}`, { key: `workspace-${workspaceId}` })
+
+const gitInsights = computed(() => wsData.value?.workspace.stats?.gitInsights ?? null)
 
 const progressApi = useWorkspaceProgress(workspaceId)
 const { state, done } = progressApi
@@ -187,8 +214,10 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
       </p>
     </section>
 
+    <GitInsightsCard v-if="isReady && gitInsights" :insights="gitInsights" />
+
     <section
-      v-else
+      v-if="isReady"
       class="flex h-[calc(100vh-14rem)] gap-3"
     >
       <ChatSessionsList

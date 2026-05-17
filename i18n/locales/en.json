@@ -118,6 +118,27 @@
     "hoursAgo": "{n}h ago",
     "daysAgo": "{n}d ago"
   },
+  "insights": {
+    "title": "Git insights",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "noHistory": "No commit history available for this workspace.",
+    "monthsAgo": "{n} mo ago",
+    "yearsAgo": "{n}y ago",
+    "activity": "Activity",
+    "activityDetail": "{n90} in 90d · {n30} in 30d",
+    "lastCommit": "Last commit",
+    "maintainers": "Maintainers",
+    "maintainersDetail": "active in last {n} days",
+    "busFactor": "Bus factor",
+    "busFactorDetail": "authors covering 50% of commits",
+    "fixFeat": "Fix : Feat",
+    "fixFeatDetail": "{fix} fixes / {feat} features",
+    "breaking": "Breaking",
+    "breakingDetail": "in last {n} days",
+    "frequency": "Commits per month",
+    "topAuthors": "Top contributors"
+  },
   "graph": {
     "backToChat": "← Back to chat",
     "view": "Graph view",
