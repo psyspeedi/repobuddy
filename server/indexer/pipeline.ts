@@ -348,17 +348,6 @@ export async function runIndexPipeline(
           .where(eq(entitiesTable.id, id))
       }
 
-      // 10c. Aggregate git insights and stash on workspaces.stats so the
-      // workspace page can render maintainer/activity/quality cards
-      // without re-walking commits.
-      const gitInsights = computeGitInsights(history)
-      await db
-        .update(workspaces)
-        .set({
-          stats: sql`coalesce(${workspaces.stats}, '{}'::jsonb) || ${JSON.stringify({ gitInsights })}::jsonb`,
-        })
-        .where(eq(workspaces.id, workspaceId))
-
       // 11. Done.
       await markWorkspaceReady(db, workspaceId, {
         files: walked.files.length,
@@ -375,6 +364,18 @@ export async function runIndexPipeline(
         flaggedDuplicates: resolutionStats.flagged,
         tokensSpent: 0,
       })
+
+      // 11b. Aggregate git insights and merge onto workspaces.stats so the
+      // workspace page can render maintainer/activity/quality cards without
+      // re-walking commits. Done AFTER markWorkspaceReady because that call
+      // sets `stats` to a plain object and would otherwise overwrite us.
+      const gitInsights = computeGitInsights(history)
+      await db
+        .update(workspaces)
+        .set({
+          stats: sql`coalesce(${workspaces.stats}, '{}'::jsonb) || ${JSON.stringify({ gitInsights })}::jsonb`,
+        })
+        .where(eq(workspaces.id, workspaceId))
 
       const durationMs = Date.now() - start
       log.info({ durationMs, entities: allEntities.length }, 'pipeline ready')
