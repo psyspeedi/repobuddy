@@ -57,6 +57,13 @@ function writePersistedSession(workspaceId: string, id: string): void {
  * session and its message history. Call `newSession()` to start a fresh one.
  */
 export function useChat(workspaceId: string) {
+  // Composables must be invoked synchronously at the top of a setup
+  // function. useI18n() used to be called inside send() — that worked
+  // in the happy path because Nuxt's async context still resolved, but
+  // when send() was triggered from a non-setup callback (e.g. an event
+  // handler bound after mount) it threw "Must be called at the top of
+  // a setup function". Pulling it up here is the documented pattern.
+  const i18n = useI18n()
   const initialId = readPersistedSession(workspaceId) ?? randomUUID()
   if (!readPersistedSession(workspaceId)) {
     writePersistedSession(workspaceId, initialId)
@@ -100,7 +107,6 @@ export function useChat(workspaceId: string) {
     streaming.value = true
 
     try {
-      const i18n = useI18n()
       const response = await fetch(`/api/chat/${sessionId.value}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
