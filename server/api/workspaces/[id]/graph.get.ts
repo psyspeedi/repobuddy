@@ -1,25 +1,17 @@
 import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import { getDb } from '../../../db/client'
-import { entities, relations, workspaces } from '../../../db/schema'
-import { requireValidUser } from '../../../lib/auth'
+import { entities, relations } from '../../../db/schema'
+import { readAccess } from '../../../lib/workspace-access'
 
 const DEFAULT_LIMIT = 2000
 const NEIGHBOR_LIMIT = 1500
 
 export default defineEventHandler(async (event) => {
-  const user = await requireValidUser(event)
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id required' })
-
+  const { workspace: ws } = await readAccess(event, id)
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
-
-  const [ws] = await db
-    .select()
-    .from(workspaces)
-    .where(and(eq(workspaces.id, id), eq(workspaces.ownerUserId, user.id)))
-    .limit(1)
-  if (!ws) throw createError({ statusCode: 404, statusMessage: 'workspace not found' })
 
   const query = getQuery(event)
   const limit = Math.min(Number(query.limit ?? DEFAULT_LIMIT), 5000)

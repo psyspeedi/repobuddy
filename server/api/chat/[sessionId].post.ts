@@ -7,14 +7,12 @@ import {
   chunks as chunksTable,
   entities as entitiesTable,
   entityChunks,
-  workspaces,
 } from '../../db/schema'
-import { createEmbeddingsProvider } from '../../providers/embeddings'
-import { createLLMProvider } from '../../providers/llm'
+import { resolveProvidersByUserId } from '../../providers/resolve'
 import { planQuestion } from '../../kag/planner'
 import { executePlan } from '../../kag/executor'
 import { extractCitations } from '../../kag/operators/answer'
-import { requireValidUser } from '../../lib/auth'
+import { readAccess } from '../../lib/workspace-access'
 import { getLogger } from '../../lib/logger'
 
 const log = getLogger().child({ component: 'api/chat' })
@@ -26,7 +24,6 @@ const BodySchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const user = await requireValidUser(event)
   const sessionId = getRouterParam(event, 'sessionId')
   if (!sessionId) throw createError({ statusCode: 400, statusMessage: 'sessionId required' })
 
@@ -34,40 +31,41 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
 
-  // Verify ownership.
-  const [ws] = await db
-    .select()
-    .from(workspaces)
-    .where(
-      and(eq(workspaces.id, body.workspaceId), eq(workspaces.ownerUserId, user.id)),
-    )
-    .limit(1)
-  if (!ws) throw createError({ statusCode: 404, statusMessage: 'workspace not found' })
+  // readAccess gates by ownership / admin / public. Guests can use chat
+  // on a public workspace; their session is ephemeral (not persisted).
+  const { workspace: ws, viewer } = await readAccess(event, body.workspaceId)
+  const isGuest = viewer.kind === 'guest'
 
-  // Find or create session.
-  let [session] = await db
-    .select()
-    .from(chatSessions)
-    .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, user.id)))
-    .limit(1)
-  if (!session) {
-    ;[session] = await db
-      .insert(chatSessions)
-      .values({
-        id: sessionId,
-        workspaceId: body.workspaceId,
-        userId: user.id,
-        title: body.question.slice(0, 80),
-      })
-      .returning()
+  // For owners/admins we persist the session + messages so /api/chat/sessions
+  // can show the history. For guests we skip persistence entirely — keeps
+  // anonymous traffic out of the chat history list and limits abuse surface.
+  let sessionRowId: string | null = null
+  if (!isGuest) {
+    const ownerId = (viewer as { userId: string }).userId
+    let [session] = await db
+      .select()
+      .from(chatSessions)
+      .where(and(eq(chatSessions.id, sessionId), eq(chatSessions.userId, ownerId)))
+      .limit(1)
+    if (!session) {
+      ;[session] = await db
+        .insert(chatSessions)
+        .values({
+          id: sessionId,
+          workspaceId: body.workspaceId,
+          userId: ownerId,
+          title: body.question.slice(0, 80),
+        })
+        .returning()
+    }
+    if (!session) throw createError({ statusCode: 500, statusMessage: 'session insert failed' })
+    sessionRowId = session.id
+    await db.insert(chatMessages).values({
+      sessionId: session.id,
+      role: 'user',
+      content: body.question,
+    })
   }
-  if (!session) throw createError({ statusCode: 500, statusMessage: 'session insert failed' })
-
-  await db.insert(chatMessages).values({
-    sessionId: session.id,
-    role: 'user',
-    content: body.question,
-  })
 
   setResponseHeaders(event, {
     'content-type': 'text/event-stream',
@@ -79,13 +77,15 @@ export default defineEventHandler(async (event) => {
 
   ;(async () => {
     try {
-      const embeddings = createEmbeddingsProvider({
-        apiKey: config.openaiApiKey as string,
-      })
-      const llm = createLLMProvider({
-        apiKey: config.openaiApiKey as string,
-        model: config.openaiModelPlanning as string,
-      })
+      // For owner/admin: pull BYOK config + fall back to server defaults.
+      // For guests: server defaults only (no per-user BYOK).
+      const ownerUserId = isGuest ? null : (viewer as { userId: string }).userId
+      const { llm, embeddings, usesByok } = await resolveProvidersByUserId(
+        db,
+        ownerUserId,
+        { llmModel: config.openaiModelPlanning as string | undefined },
+      )
+      void usesByok // reserved for quota bypass in a later commit
 
       // Pre-load any [entity:UUID] the user typed into the prompt. Plan
       // execution might never look at them (e.g. planner picks
@@ -174,15 +174,17 @@ export default defineEventHandler(async (event) => {
         data: JSON.stringify({ citations, invalid }),
       })
 
-      // 5) Persist assistant message with plan + trace.
-      await db.insert(chatMessages).values({
-        sessionId: session.id,
-        role: 'assistant',
-        content: assembled,
-        plan,
-        trace: result.trace,
-        tokensUsed: inputTokens + outputTokens,
-      })
+      // 5) Persist assistant message with plan + trace (skip for guests).
+      if (sessionRowId) {
+        await db.insert(chatMessages).values({
+          sessionId: sessionRowId,
+          role: 'assistant',
+          content: assembled,
+          plan,
+          trace: result.trace,
+          tokensUsed: inputTokens + outputTokens,
+        })
+      }
 
       await stream.push({
         event: 'done',

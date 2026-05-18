@@ -1,24 +1,16 @@
 import { and, eq, ilike } from 'drizzle-orm'
 import { getDb } from '../../../db/client'
-import { entities, workspaces } from '../../../db/schema'
-import { requireValidUser } from '../../../lib/auth'
+import { entities } from '../../../db/schema'
+import { readAccess } from '../../../lib/workspace-access'
 
 const DEFAULT_LIMIT = 20
 
 export default defineEventHandler(async (event) => {
-  const user = await requireValidUser(event)
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id required' })
-
+  await readAccess(event, id)
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
-
-  const [ws] = await db
-    .select({ id: workspaces.id })
-    .from(workspaces)
-    .where(and(eq(workspaces.id, id), eq(workspaces.ownerUserId, user.id)))
-    .limit(1)
-  if (!ws) throw createError({ statusCode: 404, statusMessage: 'workspace not found' })
 
   const query = getQuery(event)
   const q = typeof query.q === 'string' ? query.q.trim() : ''

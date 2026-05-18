@@ -5,28 +5,18 @@ import {
   entities,
   entityChunks,
   relations,
-  workspaces,
 } from '../../../../db/schema'
-import { requireValidUser } from '../../../../lib/auth'
+import { readAccess } from '../../../../lib/workspace-access'
 
 export default defineEventHandler(async (event) => {
-  const user = await requireValidUser(event)
   const workspaceId = getRouterParam(event, 'id')
   const entityId = getRouterParam(event, 'entityId')
   if (!workspaceId || !entityId) {
     throw createError({ statusCode: 400, statusMessage: 'id and entityId required' })
   }
-
+  await readAccess(event, workspaceId)
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
-
-  // Ownership check.
-  const [ws] = await db
-    .select()
-    .from(workspaces)
-    .where(and(eq(workspaces.id, workspaceId), eq(workspaces.ownerUserId, user.id)))
-    .limit(1)
-  if (!ws) throw createError({ statusCode: 404, statusMessage: 'workspace not found' })
 
   // Entity row.
   const [entity] = await db

@@ -23,6 +23,21 @@ const features = computed(() => [
   { key: '4', icon: BookOpen, tint: 'bg-amber-500/15 text-amber-600 dark:text-amber-300 ring-amber-500/30' },
   { key: '5', icon: Activity, tint: 'bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-300 ring-fuchsia-500/30' },
 ])
+
+interface PublicWorkspace {
+  id: string
+  name: string
+  sourceUrl: string | null
+  languages: string[]
+  ownerLogin: string | null
+}
+
+// Fetch on-demand (guests don't have auth, so this endpoint is open).
+// useFetch is fine here — runs once, cached, SSR-friendly.
+const { data: publicList } = await useFetch<{ workspaces: PublicWorkspace[] }>(
+  '/api/workspaces/public',
+  { default: () => ({ workspaces: [] }) },
+)
 </script>
 
 <template>
@@ -73,6 +88,45 @@ const features = computed(() => [
             {{ t(`landing.features.items.${f.key}.body`) }}
           </p>
         </div>
+      </div>
+    </section>
+
+    <!-- Public showcase -->
+    <section v-if="publicList && publicList.workspaces.length > 0" class="space-y-4">
+      <h2 class="text-center text-2xl font-semibold">
+        {{ t('landing.public.title') }}
+      </h2>
+      <p class="mx-auto max-w-xl text-center text-sm text-muted-foreground">
+        {{ t('landing.public.subtitle') }}
+      </p>
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <NuxtLink
+          v-for="ws in publicList.workspaces"
+          :key="ws.id"
+          :to="`/w/${ws.id}`"
+          class="block space-y-2 rounded-xl border border-border bg-card p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md hover:shadow-primary/10"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <h3 class="truncate font-semibold">
+              {{ ws.name }}
+            </h3>
+            <span class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+              {{ t('workspace.publicBadge') }}
+            </span>
+          </div>
+          <p v-if="ws.ownerLogin" class="text-xs text-muted-foreground">
+            @{{ ws.ownerLogin }}
+          </p>
+          <div v-if="ws.languages.length > 0" class="flex flex-wrap gap-1 text-[10px]">
+            <span
+              v-for="lang in ws.languages.slice(0, 4)"
+              :key="lang"
+              class="rounded bg-primary/10 px-1.5 py-0.5 text-primary"
+            >
+              {{ lang }}
+            </span>
+          </div>
+        </NuxtLink>
       </div>
     </section>
 

@@ -57,6 +57,10 @@
         "5": "BullMQ + Redis"
       }
     },
+    "public": {
+      "title": "Try it on a public project",
+      "subtitle": "These workspaces are open to anyone — explore the graph and chat with a guest token budget. No account needed."
+    },
     "footer": "Open source. MIT licensed."
   },
   "login": {
@@ -88,7 +92,18 @@
     "indexingFailed": "Indexing failed",
     "askPlaceholder": "Ask about the repo…",
     "send": "Send",
-    "askPrompt": "Ask anything about this repository."
+    "askPrompt": "Ask anything about this repository.",
+    "delete": "Delete",
+    "deleteTitle": "Permanently delete this workspace",
+    "deleteConfirmTitle": "Delete workspace?",
+    "deleteConfirmBody": "This permanently removes the workspace, its graph, chunks, embeddings, and all chats. To confirm, type the workspace name: {name}",
+    "deleteCancel": "Cancel",
+    "deleteConfirm": "Delete forever",
+    "deleting": "Deleting…",
+    "makePublic": "Make public",
+    "makePrivate": "Make private",
+    "publicBadge": "Public",
+    "publicHint": "Anyone with the link can open this workspace in read-only mode (chat with guest limits, graph). No reindex / delete / settings."
   },
   "chat": {
     "you": "You",

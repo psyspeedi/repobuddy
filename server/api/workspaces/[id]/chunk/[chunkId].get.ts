@@ -1,27 +1,17 @@
 import { and, eq } from 'drizzle-orm'
 import { getDb } from '../../../../db/client'
-import { chunks, workspaces } from '../../../../db/schema'
-import { requireValidUser } from '../../../../lib/auth'
+import { chunks } from '../../../../db/schema'
+import { readAccess } from '../../../../lib/workspace-access'
 
 export default defineEventHandler(async (event) => {
-  const user = await requireValidUser(event)
   const workspaceId = getRouterParam(event, 'id')
   const chunkId = getRouterParam(event, 'chunkId')
   if (!workspaceId || !chunkId) {
     throw createError({ statusCode: 400, statusMessage: 'id and chunkId required' })
   }
-
+  await readAccess(event, workspaceId)
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
-
-  const [ws] = await db
-    .select()
-    .from(workspaces)
-    .where(
-      and(eq(workspaces.id, workspaceId), eq(workspaces.ownerUserId, user.id)),
-    )
-    .limit(1)
-  if (!ws) throw createError({ statusCode: 404, statusMessage: 'workspace not found' })
 
   const [chunk] = await db
     .select()

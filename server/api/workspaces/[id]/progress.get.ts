@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { getDb } from '../../../db/client'
 import { workspaces } from '../../../db/schema'
-import { requireValidUser } from '../../../lib/auth'
+import { readAccess } from '../../../lib/workspace-access'
 
 const POLL_MS = 1000
 const HEARTBEAT_MS = 15000
@@ -12,20 +12,11 @@ const HEARTBEAT_MS = 15000
  * iteration could switch to Postgres LISTEN/NOTIFY or Redis pub/sub.
  */
 export default defineEventHandler(async (event) => {
-  const user = await requireValidUser(event)
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id required' })
-
+  await readAccess(event, id)
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
-
-  // Verify ownership before opening stream
-  const [ws] = await db
-    .select()
-    .from(workspaces)
-    .where(and(eq(workspaces.id, id), eq(workspaces.ownerUserId, user.id)))
-    .limit(1)
-  if (!ws) throw createError({ statusCode: 404, statusMessage: 'workspace not found' })
 
   setResponseHeaders(event, {
     'content-type': 'text/event-stream',

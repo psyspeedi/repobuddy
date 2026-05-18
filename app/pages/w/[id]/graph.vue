@@ -81,6 +81,10 @@ interface GraphResponse {
 }
 
 // ---------- Route + state ----------
+// Guests can view the graph for public workspaces. readAccess on each
+// API call enforces visibility.
+definePageMeta({ auth: false })
+
 const route = useRoute()
 const { t } = useI18n()
 const workspaceId = String(route.params.id)

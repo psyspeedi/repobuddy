@@ -1,7 +1,6 @@
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { getDb } from '../../db/client'
-import { chatMessages, chatSessions } from '../../db/schema'
-import { requireValidUser } from '../../lib/auth'
+import { chatMessages, chatSessions, users } from '../../db/schema'
 
 interface SessionListItem {
   id: string
@@ -14,15 +13,22 @@ interface SessionListItem {
 }
 
 export default defineEventHandler(async (event) => {
-  const user = await requireValidUser(event)
   const query = getQuery(event)
   const workspaceId = typeof query.workspaceId === 'string' ? query.workspaceId : null
   if (!workspaceId) {
     throw createError({ statusCode: 400, statusMessage: 'workspaceId required' })
   }
 
+  // Guests get an empty list (their chats aren't persisted anyway).
+  const session = await getUserSession(event)
+  const sessionUserId = session.user?.id as string | undefined
+  if (!sessionUserId) return { sessions: [] }
+
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
+  const [u] = await db.select().from(users).where(eq(users.id, sessionUserId)).limit(1)
+  if (!u) return { sessions: [] }
+  const user = u
 
   // Pull sessions + a one-line preview from the latest assistant or user
   // message. We could project this in a single CTE; the JOIN with

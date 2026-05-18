@@ -22,6 +22,7 @@ export interface EmbeddingsProvider {
 interface OpenAIProviderOptions {
   apiKey: string
   model?: string
+  baseURL?: string
   maxBatchSize?: number
   maxRetries?: number
 }
@@ -34,7 +35,7 @@ class OpenAIEmbeddingsProvider implements EmbeddingsProvider {
   private maxRetries: number
 
   constructor(opts: OpenAIProviderOptions) {
-    this.client = new OpenAI({ apiKey: opts.apiKey })
+    this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL })
     this.model = opts.model ?? 'text-embedding-3-small'
     this.maxBatchSize = opts.maxBatchSize ?? 100
     this.maxRetries = opts.maxRetries ?? 3
@@ -135,9 +136,21 @@ export function createEmbeddingsProvider(
   if (opts.mock || process.env.CODEGRAPH_MOCK_PROVIDERS === '1') {
     return new MockEmbeddingsProvider()
   }
-  const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY
+  // Resolution: explicit opts → EMBEDDING_* → LLM_* → OPENAI_*.
+  // Embedding endpoint can differ from chat endpoint (Groq has no embeddings,
+  // so a typical setup is LLM_BASE_URL=https://api.groq.com/openai/v1 +
+  // EMBEDDING_BASE_URL=https://api.openai.com/v1).
+  const apiKey =
+    opts.apiKey
+    ?? process.env.EMBEDDING_API_KEY
+    ?? process.env.LLM_API_KEY
+    ?? process.env.OPENAI_API_KEY
+  const baseURL =
+    opts.baseURL ?? process.env.EMBEDDING_BASE_URL ?? process.env.LLM_BASE_URL
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is required for embeddings (or pass mock: true)')
+    throw new Error(
+      'No embeddings API key configured (EMBEDDING_API_KEY, LLM_API_KEY or OPENAI_API_KEY)',
+    )
   }
-  return new OpenAIEmbeddingsProvider({ ...opts, apiKey })
+  return new OpenAIEmbeddingsProvider({ ...opts, apiKey, baseURL })
 }

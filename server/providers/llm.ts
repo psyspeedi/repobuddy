@@ -39,11 +39,13 @@ class OpenAILLMProvider implements LLMProvider {
   readonly costCentsPer1MOutputTokens: number
   private client: OpenAI
 
-  constructor(opts: { apiKey: string; model?: string }) {
-    this.client = new OpenAI({ apiKey: opts.apiKey })
+  constructor(opts: { apiKey: string; model?: string; baseURL?: string }) {
+    this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL })
     this.model = opts.model ?? 'gpt-4o'
-    // Approximate retail pricing (per 1M tokens, in USD cents).
-    if (this.model.startsWith('gpt-4o-mini')) {
+    // Approximate retail pricing (per 1M tokens, in USD cents). Used purely
+    // as an upper-bound USD estimate for budget guardrails — for non-OpenAI
+    // providers (Groq, Ollama, …) the real bill may be lower or zero.
+    if (/mini|haiku|small/i.test(this.model)) {
       this.costCentsPer1MInputTokens = 15
       this.costCentsPer1MOutputTokens = 60
     } else {
@@ -174,15 +176,18 @@ export class MockLLMProvider implements LLMProvider {
 }
 
 export function createLLMProvider(
-  opts: { apiKey?: string; model?: string; mock?: boolean } = {},
+  opts: { apiKey?: string; model?: string; baseURL?: string; mock?: boolean } = {},
 ): LLMProvider {
   if (opts.mock || process.env.CODEGRAPH_MOCK_PROVIDERS === '1') {
     return new MockLLMProvider()
   }
-  const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY
+  // Resolution order: explicit opts → LLM_* (unified) → OPENAI_* (legacy).
+  const apiKey =
+    opts.apiKey ?? process.env.LLM_API_KEY ?? process.env.OPENAI_API_KEY
+  const baseURL = opts.baseURL ?? process.env.LLM_BASE_URL
   if (!apiKey) {
-    throw new Error('OPENAI_API_KEY required for LLM provider')
+    throw new Error('No LLM API key configured (LLM_API_KEY or OPENAI_API_KEY)')
   }
-  return new OpenAILLMProvider({ apiKey, model: opts.model })
+  return new OpenAILLMProvider({ apiKey, model: opts.model, baseURL })
 }
 

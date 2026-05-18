@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   bigint,
+  boolean,
   customType,
   index,
   integer,
@@ -34,11 +35,42 @@ export const users = pgTable(
     githubLogin: text('github_login').notNull(),
     email: text('email'),
     avatarUrl: text('avatar_url'),
+    // BYOK: optional user-provided OpenAI-compatible endpoint that overrides
+    // the server defaults. When `encryptedByokApiKey` is set, the server
+    // routes ALL of this user's LLM/embedding traffic through these creds
+    // (and the user's quotas are not enforced — they're paying their own
+    // bill).
+    byokBaseUrl: text('byok_base_url'),
+    byokModel: text('byok_model'),
+    byokEmbeddingModel: text('byok_embedding_model'),
+    encryptedByokApiKey: text('encrypted_byok_api_key'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [unique('users_github_id_unique').on(table.githubId)],
+)
+
+// ---------- Per-user daily quotas ----------
+// One row per (user, day-bucket-utc). Updated atomically via UPSERT when an
+// action consumes quota; checked before the action proceeds. Rows older
+// than 7 days can be purged opportunistically (not implemented yet).
+export const userQuotas = pgTable(
+  'user_quotas',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // UTC day key as 'YYYY-MM-DD' — keeps the table indexed by day cheaply.
+    day: text('day').notNull(),
+    workspacesCreated: integer('workspaces_created').notNull().default(0),
+    messagesSent: integer('messages_sent').notNull().default(0),
+    tokensUsed: bigint('tokens_used', { mode: 'number' }).notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.day] })],
 )
 
 // ---------- OAuth tokens (encrypted at rest) ----------
@@ -87,6 +119,11 @@ export const workspaces = pgTable(
     stats: jsonb('stats').notNull().default(sql`'{}'::jsonb`),
     languages: text('languages').array().notNull().default(sql`'{}'::text[]`),
     error: text('error'),
+    // When true, anyone (including unauthenticated guests) can open the
+    // workspace and exercise its chat/graph in read-only mode. Toggled by
+    // the owner on /w/[id]. Owner stays the same; guests cannot reindex,
+    // delete, or modify chat history.
+    isPublic: boolean('is_public').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -98,6 +135,7 @@ export const workspaces = pgTable(
   (table) => [
     index('workspaces_owner_idx').on(table.ownerUserId),
     index('workspaces_status_idx').on(table.status),
+    index('workspaces_public_idx').on(table.isPublic),
   ],
 )
 
@@ -341,6 +379,7 @@ export const llmCostLog = pgTable(
 
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
+export type UserQuota = typeof userQuotas.$inferSelect
 export type Workspace = typeof workspaces.$inferSelect
 export type NewWorkspace = typeof workspaces.$inferInsert
 export type Entity = typeof entities.$inferSelect

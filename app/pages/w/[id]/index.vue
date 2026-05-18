@@ -1,9 +1,27 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
 
+// Guests need to reach the page; server-side readAccess decides whether
+// the workspace is publicly visible. If not, the API returns 404 and
+// useFetch surfaces it as an error.
+definePageMeta({ auth: false })
+
 const { t } = useI18n()
 const route = useRoute()
 const workspaceId = String(route.params.id)
+
+interface WorkspaceResponse {
+  workspace: {
+    id: string
+    name: string
+    sourceUrl: string | null
+    status: string
+    error: string | null
+    stats: WorkspaceStats | null
+    isPublic: boolean
+  }
+  viewerIsOwner: boolean
+}
 
 interface WorkspaceStats {
   gitInsights?: {
@@ -23,18 +41,28 @@ interface WorkspaceStats {
   }
 }
 
-const { data: wsData, refresh: refreshWs } = await useFetch<{
-  workspace: {
-    id: string
-    name: string
-    sourceUrl: string | null
-    status: string
-    error: string | null
-    stats: WorkspaceStats | null
-  }
-}>(`/api/workspaces/${workspaceId}`, { key: `workspace-${workspaceId}` })
+const { data: wsData, refresh: refreshWs } = await useFetch<WorkspaceResponse>(
+  `/api/workspaces/${workspaceId}`,
+  { key: `workspace-${workspaceId}` },
+)
 
 const gitInsights = computed(() => wsData.value?.workspace.stats?.gitInsights ?? null)
+const viewerIsOwner = computed(() => wsData.value?.viewerIsOwner ?? false)
+const isPublic = computed(() => wsData.value?.workspace.isPublic ?? false)
+
+async function togglePublic(): Promise<void> {
+  if (!wsData.value) return
+  const next = !isPublic.value
+  try {
+    await $fetch(`/api/workspaces/${workspaceId}/visibility`, {
+      method: 'PUT',
+      body: { isPublic: next },
+    })
+    await refreshWs()
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'Failed to toggle visibility')
+  }
+}
 
 const progressApi = useWorkspaceProgress(workspaceId)
 const { state, done } = progressApi
@@ -96,6 +124,27 @@ async function deleteSession(id: string): Promise<void> {
   await chatSessions.remove(id)
   if (id === chat.sessionId.value) {
     chat.newSession()
+  }
+}
+
+// Delete flow — typed-confirmation modal.
+const deleteOpen = ref(false)
+const deleteName = ref('')
+const deleting = ref(false)
+async function confirmDelete(): Promise<void> {
+  if (deleting.value) return
+  deleting.value = true
+  try {
+    // Cast to any: Nuxt's typed-routes generator narrows method by route
+    // pattern and rejects DELETE here even though the endpoint exists.
+    await ($fetch as unknown as (url: string, init: RequestInit) => Promise<unknown>)(
+      `/api/workspaces/${workspaceId}`,
+      { method: 'DELETE' },
+    )
+    await navigateTo('/')
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'Delete failed')
+    deleting.value = false
   }
 }
 
@@ -162,8 +211,24 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           </p>
         </div>
         <div class="flex items-center gap-2">
+          <span
+            v-if="isPublic"
+            class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+            :title="t('workspace.publicHint')"
+          >
+            {{ t('workspace.publicBadge') }}
+          </span>
           <Button
-            v-if="isReady || isFailed"
+            v-if="viewerIsOwner"
+            variant="outline"
+            size="sm"
+            :title="t('workspace.publicHint')"
+            @click="togglePublic"
+          >
+            {{ isPublic ? t('workspace.makePrivate') : t('workspace.makePublic') }}
+          </Button>
+          <Button
+            v-if="viewerIsOwner && (isReady || isFailed)"
             variant="outline"
             size="sm"
             :disabled="reindexing"
@@ -177,9 +242,58 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
               {{ t('workspace.viewGraph') }}
             </Button>
           </NuxtLink>
+          <Button
+            v-if="viewerIsOwner"
+            variant="ghost"
+            size="sm"
+            class="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            :title="t('workspace.deleteTitle')"
+            @click="deleteOpen = true"
+          >
+            {{ t('workspace.delete') }}
+          </Button>
         </div>
       </div>
     </header>
+
+    <!-- Delete confirmation modal -->
+    <div
+      v-if="deleteOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur"
+      @click.self="deleteOpen = false"
+    >
+      <div class="w-full max-w-md space-y-4 rounded-xl border border-destructive/30 bg-card p-5 shadow-xl">
+        <div class="space-y-1">
+          <h3 class="text-lg font-semibold text-destructive">
+            {{ t('workspace.deleteConfirmTitle') }}
+          </h3>
+          <p class="text-sm text-muted-foreground">
+            {{ t('workspace.deleteConfirmBody', { name: wsData.workspace.name }) }}
+          </p>
+        </div>
+        <input
+          v-model="deleteName"
+          type="text"
+          autocomplete="off"
+          :placeholder="wsData.workspace.name"
+          class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-destructive"
+        >
+        <div class="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" :disabled="deleting" @click="deleteOpen = false">
+            {{ t('workspace.deleteCancel') }}
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            :disabled="deleting || deleteName !== wsData.workspace.name"
+            @click="confirmDelete"
+          >
+            {{ deleting ? t('workspace.deleting') : t('workspace.deleteConfirm') }}
+          </Button>
+        </div>
+      </div>
+    </div>
 
     <section
       v-if="!isReady && !isFailed"

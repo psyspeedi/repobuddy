@@ -17,8 +17,7 @@ import type {
   IndexWorkspaceJobResult,
 } from '../queues'
 import { runIndexPipeline } from '../indexer/pipeline'
-import { createEmbeddingsProvider } from '../providers/embeddings'
-import { createLLMProvider } from '../providers/llm'
+import { resolveProvidersByUserId } from '../providers/resolve'
 
 const log = getLogger().child({ component: 'worker' })
 
@@ -28,15 +27,19 @@ async function main(): Promise<void> {
 
   const db = getDb(env.DATABASE_URL)
   const connection = getRedisConnection(env.REDIS_URL)
-  const embeddings = createEmbeddingsProvider({ apiKey: env.OPENAI_API_KEY })
-  const llm = createLLMProvider({
-    apiKey: env.OPENAI_API_KEY,
-    model: env.OPENAI_MODEL_EXTRACTION,
-  })
 
   const worker = new Worker<IndexWorkspaceJobData, IndexWorkspaceJobResult>(
     INDEX_WORKSPACE_QUEUE,
-    async (job) => runIndexPipeline(db, job, { embeddings, llm }),
+    async (job) => {
+      // Resolve providers per-job so jobs queued by BYOK users hit their
+      // own endpoint, and others fall back to server defaults.
+      const { llm, embeddings } = await resolveProvidersByUserId(
+        db,
+        job.data.userId,
+        { llmModel: env.LLM_MODEL_EXTRACTION ?? env.OPENAI_MODEL_EXTRACTION },
+      )
+      return runIndexPipeline(db, job, { embeddings, llm })
+    },
     {
       connection,
       concurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
