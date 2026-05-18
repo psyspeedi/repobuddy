@@ -86,6 +86,10 @@
       "title": "Try it on a public project",
       "subtitle": "These workspaces are open to anyone — explore the graph and chat with a guest token budget. No account needed."
     },
+    "languages": {
+      "title": "Supported languages",
+      "subtitle": "Static analysis covers four languages today. Markdown and per-commit diffs are indexed for every repo regardless of language."
+    },
     "footer": "Open source. MIT licensed."
   },
   "login": {
@@ -118,6 +122,7 @@
     "askPlaceholder": "Ask about the repo…",
     "send": "Send",
     "askPrompt": "Ask anything about this repository.",
+    "backToList": "Workspaces",
     "delete": "Delete",
     "deleteTitle": "Permanently delete this workspace",
     "deleteConfirmTitle": "Delete workspace?",
@@ -177,6 +182,8 @@
     "breaking": "Breaking",
     "breakingDetail": "in last {n} days",
     "frequency": "Commits per month",
+    "commits": "commits",
+    "commitsShort": "commits",
     "topAuthors": "Top contributors"
   },
   "graph": {

@@ -4,23 +4,27 @@ import type Sigma from 'sigma'
 import { Button } from '@/components/ui/button'
 
 // ---------- Constants ----------
+// Palette tuned so each colour stays readable on both the light and the
+// dark canvas (lightness ~45–65 %). The earlier values used slate-300 /
+// slate-600 tones that disappeared on whichever theme they got close to,
+// most notably `commit` and `variable`.
 const typeColors: Record<string, string> = {
-  file: '#6b7280',
-  module: '#94a3b8',
-  class: '#3b82f6',
-  function: '#10b981',
-  type: '#a855f7',
-  variable: '#d1d5db',
-  component: '#0ea5e9',
-  route: '#f59e0b',
-  test: '#ef4444',
-  concept: '#ec4899',
-  pattern: '#f97316',
-  decision: '#facc15',
-  commit: '#475569',
-  pull_request: '#475569',
-  person: '#22c55e',
-  document: '#71717a',
+  file: '#64748b',          // slate-500 — neutral grey, works both themes
+  module: '#7c8da3',         // slate-400 darkened
+  class: '#3b82f6',          // blue-500
+  function: '#10b981',       // emerald-500
+  type: '#a855f7',           // purple-500
+  variable: '#9ca3af',       // gray-400 — was too pale (gray-300)
+  component: '#0ea5e9',      // sky-500
+  route: '#f59e0b',          // amber-500
+  test: '#ef4444',           // red-500
+  concept: '#ec4899',        // pink-500
+  pattern: '#f97316',        // orange-500
+  decision: '#eab308',       // yellow-500 — was facc15 (too bright on light)
+  commit: '#64748b',         // slate-500 — was slate-600 (faded on dark)
+  pull_request: '#64748b',
+  person: '#22c55e',         // green-500
+  document: '#71717a',       // zinc-500
 }
 const edgeColors: Record<string, string> = {
   calls: '#10b981',
@@ -33,15 +37,15 @@ const edgeColors: Record<string, string> = {
   renders: '#0ea5e9',
   handles: '#0ea5e9',
   tested_by: '#ef4444',
-  implements_concept: '#facc15',
+  implements_concept: '#eab308',
   follows_pattern: '#f59e0b',
-  mentioned_in: '#cbd5e1',
+  mentioned_in: '#94a3b8',  // was cbd5e1 — too pale against dark fg
   modified_by: '#ec4899',
   authored: '#22c55e',
   introduced_in: '#22c55e',
-  relates_to: '#cbd5e1',
+  relates_to: '#94a3b8',
 }
-const DEFAULT_EDGE_COLOR = '#cbd5e1'
+const DEFAULT_EDGE_COLOR = '#94a3b8'
 const LOD_THRESHOLD = 800
 
 interface ViewPreset {
@@ -87,6 +91,7 @@ definePageMeta({ auth: false })
 
 const route = useRoute()
 const { t } = useI18n()
+const colorMode = useColorMode()
 const workspaceId = String(route.params.id)
 
 const selectedTypes = ref<string[]>([...(VIEW_PRESETS[0]?.types ?? [])])
@@ -246,10 +251,24 @@ function rebuild(): void {
       })
     }
 
+    // Default Sigma label color is #000, which vanishes on the dark
+    // canvas. Pick foreground / muted colors that contrast both themes
+    // and apply via the labelColor/edgeLabelColor settings (Sigma reads
+    // them as `{ color: '#…' }`). Also bump default node label sizes
+    // a touch so dense graphs stay legible.
+    const isDark = colorMode.value === 'dark'
+    const labelFg = isDark ? '#e2e8f0' : '#1e293b' // slate-200 / slate-800
+    const edgeLabelFg = isDark ? '#94a3b8' : '#475569' // slate-400 / slate-600
     sigma = new SigmaCtor(graph, containerRef.value, {
       renderEdgeLabels: true,
       labelDensity: 0.5,
       labelGridCellSize: 60,
+      labelColor: { color: labelFg },
+      edgeLabelColor: { color: edgeLabelFg },
+      labelSize: 13,
+      edgeLabelSize: 11,
+      labelWeight: '600',
+      defaultEdgeColor: isDark ? '#475569' : '#cbd5e1',
       minCameraRatio: 0.05,
       maxCameraRatio: 10,
     })
@@ -411,6 +430,21 @@ watch(
 )
 watch(highlightSet, () => sigma?.refresh())
 watch(selectedNodeId, () => sigma?.refresh())
+
+// When the user flips the theme, swap label/edge colors live without
+// rebuilding the whole scene. Sigma applies the new values on the next
+// refresh.
+watch(
+  () => colorMode.value,
+  () => {
+    if (!sigma) return
+    const isDark = colorMode.value === 'dark'
+    sigma.setSetting('labelColor', { color: isDark ? '#e2e8f0' : '#1e293b' })
+    sigma.setSetting('edgeLabelColor', { color: isDark ? '#94a3b8' : '#475569' })
+    sigma.setSetting('defaultEdgeColor', isDark ? '#475569' : '#cbd5e1')
+    sigma.refresh()
+  },
+)
 
 // ---------- Filters / search / actions ----------
 const stats = computed(() => data.value?.stats ?? [])

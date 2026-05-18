@@ -64,6 +64,10 @@ export function useChat(workspaceId: string) {
   // handler bound after mount) it threw "Must be called at the top of
   // a setup function". Pulling it up here is the documented pattern.
   const i18n = useI18n()
+  // Shared counter that the layout's quota pill watches — bumped after
+  // every successful chat completion so the "used / limit" numbers
+  // update without a manual refresh.
+  const quotaBump = useState<number>('quota-bump', () => 0)
   const initialId = readPersistedSession(workspaceId) ?? randomUUID()
   if (!readPersistedSession(workspaceId)) {
     writePersistedSession(workspaceId, initialId)
@@ -194,6 +198,9 @@ export function useChat(workspaceId: string) {
       }
     } else if (event === 'done') {
       last.pending = false
+      // Tell the layout's quota pill to re-fetch /api/me/quota now that
+      // the server has recorded this message's tokens.
+      quotaBump.value++
     } else if (event === 'error') {
       last.content += `\n\n_Error: ${data}_`
       last.pending = false

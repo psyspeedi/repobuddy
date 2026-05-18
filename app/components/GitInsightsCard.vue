@@ -32,16 +32,33 @@ const relativeLastCommit = computed(() => {
   return t('insights.yearsAgo', { n: years })
 })
 
+const monthLabelFormatter = computed(() =>
+  new Intl.DateTimeFormat(locale.value === 'ru' ? 'ru-RU' : 'en-US', {
+    month: 'short',
+    year: 'numeric',
+  }),
+)
+function formatMonthLabel(ym: string): string {
+  // ym is 'YYYY-MM' (UTC) — render as e.g. "Apr 2026" in the active locale.
+  const [y, m] = ym.split('-')
+  if (!y || !m) return ym
+  const d = new Date(Date.UTC(Number(y), Number(m) - 1, 1))
+  return monthLabelFormatter.value.format(d)
+}
+
 const sparkline = computed(() => {
   const data = props.insights.commitFrequencyByMonth.slice(-12)
   if (data.length === 0) return []
-  const max = Math.max(...data.map((d) => d.commits))
+  const max = Math.max(1, ...data.map((d) => d.commits))
   return data.map((d) => ({
     month: d.month,
+    label: formatMonthLabel(d.month),
     commits: d.commits,
-    heightPct: max === 0 ? 0 : Math.round((d.commits / max) * 100),
+    heightPct: Math.max(4, Math.round((d.commits / max) * 100)),
   }))
 })
+
+const hoveredBar = ref<number | null>(null)
 
 const fixVsFeatPretty = computed(() => {
   const r = props.insights.fixVsFeatRatio
@@ -160,22 +177,49 @@ const showAll = ref(false)
     </div>
 
     <div v-if="showAll && insights.totalCommitsScanned > 0" class="space-y-3 pt-1">
-      <div v-if="sparkline.length > 0" class="space-y-1.5">
-        <div class="text-[10px] uppercase tracking-wide text-muted-foreground">
-          {{ t('insights.frequency') }}
+      <div v-if="sparkline.length > 0" class="space-y-2">
+        <div class="flex items-baseline justify-between">
+          <div class="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {{ t('insights.frequency') }}
+          </div>
+          <div v-if="hoveredBar !== null && sparkline[hoveredBar]" class="text-[11px] tabular-nums">
+            <span class="font-medium">{{ sparkline[hoveredBar]?.label }}</span>
+            <span class="text-muted-foreground"> · </span>
+            <span class="text-primary">{{ sparkline[hoveredBar]?.commits }} {{ t('insights.commitsShort') }}</span>
+          </div>
         </div>
-        <div class="flex h-12 items-end gap-1">
+        <div
+          class="relative flex h-20 items-end gap-1 rounded-md border border-border/60 bg-background/40 px-2 py-2"
+          @mouseleave="hoveredBar = null"
+        >
           <div
             v-for="(bar, i) in sparkline"
             :key="i"
-            class="flex-1 rounded-sm bg-gradient-to-t from-primary to-fuchsia-500/70"
-            :style="{ height: `${Math.max(4, bar.heightPct)}%` }"
-            :title="`${bar.month}: ${bar.commits}`"
-          />
+            class="group relative flex flex-1 cursor-pointer items-end justify-center"
+            @mouseenter="hoveredBar = i"
+          >
+            <div
+              class="w-full rounded-sm bg-gradient-to-t from-primary to-fuchsia-500/70 transition-all duration-150"
+              :class="hoveredBar === i ? 'opacity-100 shadow-md shadow-primary/30' : hoveredBar === null ? 'opacity-90' : 'opacity-40'"
+              :style="{ height: `${bar.heightPct}%` }"
+            />
+            <!-- Tooltip — anchored above the bar, follows hoveredBar via the parent's data. -->
+            <div
+              v-if="hoveredBar === i"
+              class="pointer-events-none absolute -top-9 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-card px-2 py-1 text-[10px] shadow-lg"
+            >
+              <div class="font-medium">
+                {{ bar.label }}
+              </div>
+              <div class="text-muted-foreground">
+                {{ bar.commits }} {{ t('insights.commits') }}
+              </div>
+            </div>
+          </div>
         </div>
         <div class="flex justify-between text-[10px] text-muted-foreground">
-          <span>{{ sparkline[0]?.month }}</span>
-          <span>{{ sparkline[sparkline.length - 1]?.month }}</span>
+          <span>{{ sparkline[0]?.label }}</span>
+          <span>{{ sparkline[sparkline.length - 1]?.label }}</span>
         </div>
       </div>
       <div v-if="insights.topAuthors.length > 0" class="space-y-1.5">

@@ -19,6 +19,10 @@ const { data: quota, refresh: refreshQuota } = useFetch<QuotaResponse>('/api/me/
 
 // Refresh when login state flips so the pill updates after sign-in/out.
 watch(() => loggedIn.value, () => void refreshQuota())
+// Refresh whenever a chat turn completes — useChat bumps this counter
+// after `done` so the pill reflects the token spend in near real time.
+const quotaBump = useState<number>('quota-bump', () => 0)
+watch(quotaBump, () => void refreshQuota())
 
 const quotaPill = computed(() => {
   const q = quota.value

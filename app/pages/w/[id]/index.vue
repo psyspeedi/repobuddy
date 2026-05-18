@@ -199,7 +199,15 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
 
 <template>
   <div v-if="wsData" class="flex flex-1 flex-col gap-4 min-h-0">
-    <header class="space-y-1">
+    <header class="space-y-2">
+      <NuxtLink
+        v-if="loggedIn"
+        to="/"
+        class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <span aria-hidden="true">←</span>
+        {{ t('workspace.backToList') }}
+      </NuxtLink>
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-2xl font-bold">

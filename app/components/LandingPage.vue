@@ -130,6 +130,22 @@ const { data: publicList } = await useFetch<{ workspaces: PublicWorkspace[] }>(
       </div>
     </section>
 
+    <!-- Supported languages -->
+    <section class="space-y-3">
+      <h2 class="text-center text-lg font-semibold uppercase tracking-wide text-muted-foreground">
+        {{ t('landing.languages.title') }}
+      </h2>
+      <p class="mx-auto max-w-xl text-center text-sm text-muted-foreground">
+        {{ t('landing.languages.subtitle') }}
+      </p>
+      <div class="flex flex-wrap justify-center gap-2 text-sm font-medium">
+        <span class="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-sky-700 dark:text-sky-300">TypeScript</span>
+        <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-amber-700 dark:text-amber-300">JavaScript</span>
+        <span class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:text-emerald-300">Python</span>
+        <span class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-cyan-700 dark:text-cyan-300">Go</span>
+      </div>
+    </section>
+
     <!-- Stack -->
     <section class="space-y-3">
       <h2 class="text-center text-lg font-semibold uppercase tracking-wide text-muted-foreground">
