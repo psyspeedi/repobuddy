@@ -1,5 +1,24 @@
 import { z } from 'zod'
 
+/**
+ * Treat empty strings the same as missing values. dotenv parses
+ * `FOO=` as `FOO=""`, which Zod's `.url()` then rejects — surfaces as
+ * "Invalid url" on optional vars that the user left blank in the
+ * template. Wrapping with this preprocess lets us keep `.optional()`
+ * semantics for blank lines.
+ */
+const optionalUrl = () =>
+  z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().url().optional(),
+  )
+
+const optionalString = () =>
+  z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.string().optional(),
+  )
+
 const EnvSchema = z
   .object({
     DATABASE_URL: z.string().url().or(z.string().startsWith('postgres://')),
@@ -8,7 +27,7 @@ const EnvSchema = z
     // Legacy single-key path. Still works on its own — when set, used as
     // fallback for both LLM and embeddings if the unified vars below are
     // empty. At least one of OPENAI_API_KEY or LLM_API_KEY must be present.
-    OPENAI_API_KEY: z.string().optional(),
+    OPENAI_API_KEY: optionalString(),
     OPENAI_MODEL_EXTRACTION: z.string().default('gpt-4o-mini'),
     OPENAI_MODEL_PLANNING: z.string().default('gpt-4o'),
     OPENAI_EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
@@ -17,15 +36,16 @@ const EnvSchema = z
     // Together, Ollama, vLLM, anything that speaks the OpenAI chat
     // completions / embeddings API. When EMBEDDING_BASE_URL/_API_KEY are
     // unset, they fall through to LLM_BASE_URL/LLM_API_KEY, which in turn
-    // fall through to OPENAI_API_KEY.
-    LLM_BASE_URL: z.string().url().optional(),
-    LLM_API_KEY: z.string().optional(),
-    LLM_MODEL_PLANNING: z.string().optional(),
-    LLM_MODEL_EXTRACTION: z.string().optional(),
+    // fall through to OPENAI_API_KEY. Empty strings in .env are treated
+    // as "not set" so leaving template defaults blank works fine.
+    LLM_BASE_URL: optionalUrl(),
+    LLM_API_KEY: optionalString(),
+    LLM_MODEL_PLANNING: optionalString(),
+    LLM_MODEL_EXTRACTION: optionalString(),
 
-    EMBEDDING_BASE_URL: z.string().url().optional(),
-    EMBEDDING_API_KEY: z.string().optional(),
-    EMBEDDING_MODEL: z.string().optional(),
+    EMBEDDING_BASE_URL: optionalUrl(),
+    EMBEDDING_API_KEY: optionalString(),
+    EMBEDDING_MODEL: optionalString(),
 
     GITHUB_CLIENT_ID: z.string().min(1, 'GITHUB_CLIENT_ID required'),
     GITHUB_CLIENT_SECRET: z.string().min(1, 'GITHUB_CLIENT_SECRET required'),

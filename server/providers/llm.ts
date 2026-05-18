@@ -175,6 +175,11 @@ export class MockLLMProvider implements LLMProvider {
   }
 }
 
+function envNonEmpty(key: string): string | undefined {
+  const v = process.env[key]
+  return v && v.length > 0 ? v : undefined
+}
+
 export function createLLMProvider(
   opts: { apiKey?: string; model?: string; baseURL?: string; mock?: boolean } = {},
 ): LLMProvider {
@@ -182,9 +187,10 @@ export function createLLMProvider(
     return new MockLLMProvider()
   }
   // Resolution order: explicit opts → LLM_* (unified) → OPENAI_* (legacy).
+  // Empty strings from .env are treated as "not set".
   const apiKey =
-    opts.apiKey ?? process.env.LLM_API_KEY ?? process.env.OPENAI_API_KEY
-  const baseURL = opts.baseURL ?? process.env.LLM_BASE_URL
+    opts.apiKey ?? envNonEmpty('LLM_API_KEY') ?? envNonEmpty('OPENAI_API_KEY')
+  const baseURL = opts.baseURL ?? envNonEmpty('LLM_BASE_URL')
   if (!apiKey) {
     throw new Error('No LLM API key configured (LLM_API_KEY or OPENAI_API_KEY)')
   }

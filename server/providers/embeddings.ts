@@ -130,6 +130,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+function envNonEmpty(key: string): string | undefined {
+  const v = process.env[key]
+  return v && v.length > 0 ? v : undefined
+}
+
 export function createEmbeddingsProvider(
   opts: Partial<OpenAIProviderOptions> & { mock?: boolean } = {},
 ): EmbeddingsProvider {
@@ -139,14 +144,15 @@ export function createEmbeddingsProvider(
   // Resolution: explicit opts → EMBEDDING_* → LLM_* → OPENAI_*.
   // Embedding endpoint can differ from chat endpoint (Groq has no embeddings,
   // so a typical setup is LLM_BASE_URL=https://api.groq.com/openai/v1 +
-  // EMBEDDING_BASE_URL=https://api.openai.com/v1).
+  // EMBEDDING_BASE_URL=https://api.openai.com/v1). Empty .env values are
+  // treated as "not set".
   const apiKey =
     opts.apiKey
-    ?? process.env.EMBEDDING_API_KEY
-    ?? process.env.LLM_API_KEY
-    ?? process.env.OPENAI_API_KEY
+    ?? envNonEmpty('EMBEDDING_API_KEY')
+    ?? envNonEmpty('LLM_API_KEY')
+    ?? envNonEmpty('OPENAI_API_KEY')
   const baseURL =
-    opts.baseURL ?? process.env.EMBEDDING_BASE_URL ?? process.env.LLM_BASE_URL
+    opts.baseURL ?? envNonEmpty('EMBEDDING_BASE_URL') ?? envNonEmpty('LLM_BASE_URL')
   if (!apiKey) {
     throw new Error(
       'No embeddings API key configured (EMBEDDING_API_KEY, LLM_API_KEY or OPENAI_API_KEY)',
