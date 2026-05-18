@@ -48,7 +48,7 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background text-foreground">
+  <div class="flex min-h-screen flex-col bg-background text-foreground">
     <header class="border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div class="container mx-auto flex items-center justify-between px-4 py-3">
         <NuxtLink to="/" class="text-lg font-semibold tracking-tight">
@@ -117,7 +117,7 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
         </div>
       </div>
     </header>
-    <main class="container mx-auto px-4 py-6">
+    <main class="container mx-auto flex flex-1 flex-col px-4 py-6 min-h-0">
       <slot />
     </main>
   </div>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 definePageMeta({ auth: false })
 
 const { t } = useI18n()
+const { loggedIn } = useUserSession()
 const route = useRoute()
 const workspaceId = String(route.params.id)
 
@@ -90,7 +91,11 @@ const lastAssistant = computed(() =>
 )
 
 onMounted(async () => {
-  await Promise.all([chat.loadHistory(), chatSessions.refresh()])
+  // Skip the chat-history fetch for guests — they have no persisted
+  // sessions, so /api/chat/sessions would just return an empty list.
+  const tasks: Promise<unknown>[] = [chat.loadHistory()]
+  if (loggedIn.value) tasks.push(chatSessions.refresh())
+  await Promise.all(tasks)
   scrollToBottom()
 
   // Honour ?ask=<prefilled question> — used by the graph detail panel's
@@ -193,7 +198,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
 </script>
 
 <template>
-  <div v-if="wsData" class="space-y-4">
+  <div v-if="wsData" class="flex flex-1 flex-col gap-4 min-h-0">
     <header class="space-y-1">
       <div class="flex items-center justify-between">
         <div>
@@ -332,9 +337,12 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
 
     <section
       v-if="isReady"
-      class="flex h-[calc(100vh-14rem)] gap-3"
+      class="flex flex-1 gap-3 min-h-[400px]"
     >
+      <!-- Hide the chat history sidebar for guests — their sessions are
+           ephemeral, so the list would always be empty and useless. -->
       <ChatSessionsList
+        v-if="loggedIn"
         :sessions="chatSessions.sessions.value"
         :loading="chatSessions.loading.value"
         :active-session-id="chat.sessionId.value"
@@ -342,8 +350,8 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
         @select="selectSession"
         @delete="deleteSession"
       />
-      <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
-        <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4">
+      <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card min-h-0">
+        <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4 min-h-0">
           <p v-if="chat.messages.value.length === 0" class="text-center text-sm text-muted-foreground">
             {{ t('workspace.askPrompt') }}
           </p>
