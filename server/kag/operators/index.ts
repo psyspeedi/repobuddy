@@ -88,7 +88,24 @@ export async function findSymbol(
   ctx: OperatorContext,
 ): Promise<GraphEntity[]> {
   const limit = params.limit ?? 20
-  const needle = params.name.toLowerCase()
+  // Planner sometimes calls find_symbol without a `name` for broad
+  // questions ("what functions are there"). Treat empty/missing name as
+  // "list by type" instead of crashing on .toLowerCase() of undefined.
+  const rawName = typeof params.name === 'string' ? params.name.trim() : ''
+  if (!rawName) {
+    if (!params.type) return []
+    return ctx.db
+      .select(entityProjection())
+      .from(entities)
+      .where(
+        and(
+          eq(entities.workspaceId, ctx.workspaceId),
+          eq(entities.type, params.type),
+        ),
+      )
+      .limit(limit)
+  }
+  const needle = rawName.toLowerCase()
 
   // Phase 1: exact match (unless caller already requested fuzzy).
   const exactConditions = [

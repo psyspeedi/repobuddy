@@ -39,6 +39,7 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 
 - Always end with an \`answer\` step whose \`context\` is a list of step refs (entities + chunks).
 - If the user mentions any identifier that looks like a class/function/type name (CamelCase, snake_case, contains digits, or appears in code), use \`find_symbol\`. Strip surrounding natural-language words from the \`name\` parameter — only the bare identifier. Prefer \`fuzzy: true\` when the name might be embedded in longer qualified names (e.g. "ZodBigInt" → also matches "ZodBigIntDef").
+- DO NOT call \`find_symbol\` with an empty or missing \`name\`. For "list all functions / classes / files" type questions (no specific identifier), use \`hybrid_search\` or \`search_docs\` for prose, or \`find_by_concept\` for semantic enumeration.
 - Use \`find_by_concept\` only when there is no concrete identifier — for genuinely fuzzy semantic queries ("where is discount logic").
 - For multi-hop "who calls X transitively" — use get_callers with transitive: true.
 - For broad / architectural / "tell me about this project" / "how does X work overall" questions — use \`search_docs\` (covers READMEs, docs/*.md, design notes) as the primary retrieval step, optionally combined with \`hybrid_search\` for code snippets. Bumping limit to 15 is fine on such broad queries.
