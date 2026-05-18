@@ -1,10 +1,34 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
-import { Sun, Moon, Globe } from 'lucide-vue-next'
+import { Sun, Moon, Globe, Settings } from 'lucide-vue-next'
 
 const colorMode = useColorMode()
 const { loggedIn, user, clear } = useUserSession()
 const { t, locale, locales, setLocale } = useI18n()
+
+interface QuotaResponse {
+  bypass: boolean
+  viewerKind: 'user' | 'admin' | 'guest'
+  limits: { workspacesPerDay: number; messagesPerDay: number; tokensPerDay: number }
+  used: { workspaces: number; messages: number; tokens: number }
+}
+
+const { data: quota, refresh: refreshQuota } = useFetch<QuotaResponse>('/api/me/quota', {
+  default: () => null as unknown as QuotaResponse,
+})
+
+// Refresh when login state flips so the pill updates after sign-in/out.
+watch(() => loggedIn.value, () => void refreshQuota())
+
+const quotaPill = computed(() => {
+  const q = quota.value
+  if (!q || q.bypass) return null
+  const tokensK = (n: number): string => `${Math.round(n / 1000)}k`
+  return {
+    messages: `${q.used.messages}/${q.limits.messagesPerDay}`,
+    tokens: `${tokensK(q.used.tokens)}/${tokensK(q.limits.tokensPerDay)}`,
+  }
+})
 
 function toggleTheme(): void {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
@@ -68,7 +92,21 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
             <Sun v-if="colorMode.value === 'dark'" class="h-4 w-4" />
             <Moon v-else class="h-4 w-4" />
           </Button>
+          <span
+            v-if="quotaPill"
+            class="hidden items-center gap-2 rounded-full border border-border bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground sm:inline-flex"
+            :title="t('nav.quotaTitle')"
+          >
+            <span>{{ t('nav.quotaMessages') }}: {{ quotaPill.messages }}</span>
+            <span class="text-border">·</span>
+            <span>{{ t('nav.quotaTokens') }}: {{ quotaPill.tokens }}</span>
+          </span>
           <template v-if="loggedIn">
+            <NuxtLink to="/settings" :title="t('nav.settings')">
+              <Button variant="ghost" size="icon" :aria-label="t('nav.settings')">
+                <Settings class="h-4 w-4" />
+              </Button>
+            </NuxtLink>
             <span class="hidden text-sm text-muted-foreground sm:inline">
               {{ user?.login }}
             </span>

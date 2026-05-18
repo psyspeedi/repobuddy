@@ -13,6 +13,14 @@ import { planQuestion } from '../../kag/planner'
 import { executePlan } from '../../kag/executor'
 import { extractCitations } from '../../kag/operators/answer'
 import { readAccess } from '../../lib/workspace-access'
+import { isAdminLogin } from '../../lib/admin'
+import {
+  assertCanSendMessage,
+  consumeMessage,
+  recordTokenUsage,
+  type QuotaContext,
+} from '../../lib/quotas'
+import { users } from '../../db/schema'
 import { getLogger } from '../../lib/logger'
 
 const log = getLogger().child({ component: 'api/chat' })
@@ -35,6 +43,23 @@ export default defineEventHandler(async (event) => {
   // on a public workspace; their session is ephemeral (not persisted).
   const { workspace: ws, viewer } = await readAccess(event, body.workspaceId)
   const isGuest = viewer.kind === 'guest'
+
+  // Build the quota context and gate the request BEFORE we open the SSE
+  // stream. Admin login bypasses; BYOK status is resolved later and used
+  // only to skip the token-write at the end (the message-count check
+  // still runs to deter abuse).
+  let quotaCtx: QuotaContext
+  if (isGuest) {
+    quotaCtx = { kind: 'guest', id: (viewer as { guestId: string }).guestId }
+  } else {
+    const uid = (viewer as { userId: string }).userId
+    // Re-check admin status by login (cheap join already done in readAccess
+    // via users table; do a quick lookup since viewer doesn't carry it).
+    const [u] = await db.select({ githubLogin: users.githubLogin })
+      .from(users).where(eq(users.id, uid)).limit(1)
+    quotaCtx = { kind: 'user', id: uid, bypass: isAdminLogin(u?.githubLogin) }
+  }
+  await assertCanSendMessage(quotaCtx)
 
   // For owners/admins we persist the session + messages so /api/chat/sessions
   // can show the history. For guests we skip persistence entirely — keeps
@@ -184,6 +209,15 @@ export default defineEventHandler(async (event) => {
           trace: result.trace,
           tokensUsed: inputTokens + outputTokens,
         })
+      }
+
+      // 6) Quota accounting — only after a successful generation so a
+      // failed call doesn't burn the user's allotment. Skip when BYOK
+      // is in effect since the user is paying their own bill.
+      const skipTokens = usesByok
+      await consumeMessage(quotaCtx)
+      if (!skipTokens) {
+        await recordTokenUsage(quotaCtx, inputTokens + outputTokens)
       }
 
       await stream.push({

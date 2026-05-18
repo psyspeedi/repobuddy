@@ -8,7 +8,32 @@
     "signIn": "Sign in",
     "themeLight": "Light theme",
     "themeDark": "Dark theme",
-    "language": "Language"
+    "language": "Language",
+    "settings": "Settings",
+    "quotaTitle": "Your daily usage. Admins and BYOK users bypass enforcement.",
+    "quotaMessages": "msgs",
+    "quotaTokens": "tokens"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure your own LLM endpoint so the server doesn't charge against the shared quota.",
+    "byokTitle": "Bring your own API key (BYOK)",
+    "byokHelp": "Point CodeGraph at any OpenAI-compatible endpoint (OpenAI, Groq, OpenRouter, Together, Ollama, vLLM…). When configured, your requests bypass the daily token limit because you're paying your own bill.",
+    "byokActive": "Active",
+    "baseUrl": "Base URL",
+    "baseUrlHint": "Default is https://api.openai.com/v1. Use Groq: https://api.groq.com/openai/v1, OpenRouter: https://openrouter.ai/api/v1, Ollama: http://localhost:11434/v1.",
+    "model": "Chat / planning model",
+    "embeddingModel": "Embedding model",
+    "apiKey": "API key",
+    "apiKeyHint": "Encrypted at rest. Leave blank to keep the existing key.",
+    "apiKeyExistingPlaceholder": "leave blank to keep existing",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Settings saved.",
+    "clear": "Remove BYOK",
+    "cleared": "BYOK cleared. Server defaults will be used.",
+    "clearConfirm": "Remove your API key from the server?",
+    "saveFailed": "Failed to save settings."
   },
   "landing": {
     "hero": {

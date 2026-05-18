@@ -3,12 +3,16 @@ import { workspaces } from '../../db/schema'
 import { getIndexWorkspaceQueue } from '../../queues'
 import { CreateWorkspaceSchema } from '#shared/schemas/workspace'
 import { requireValidUser } from '../../lib/auth'
+import { isAdminLogin } from '../../lib/admin'
+import { assertCanCreateWorkspace, consumeWorkspace } from '../../lib/quotas'
 import { getLogger } from '../../lib/logger'
 
 const log = getLogger().child({ component: 'api/workspaces/create' })
 
 export default defineEventHandler(async (event) => {
   const user = await requireValidUser(event)
+  const isAdmin = isAdminLogin(user.githubLogin)
+  await assertCanCreateWorkspace({ kind: 'user', id: user.id, bypass: isAdmin })
   const config = useRuntimeConfig(event)
   const body = await readBody(event)
   const parsed = CreateWorkspaceSchema.safeParse(body)
@@ -54,6 +58,7 @@ export default defineEventHandler(async (event) => {
     { workspaceId: created.id, userId: user.id },
     { jobId: created.id },
   )
+  await consumeWorkspace({ kind: 'user', id: user.id, bypass: isAdmin })
   log.info({ workspaceId: created.id, jobId: job.id }, 'workspace enqueued')
 
   return { workspace: created, jobId: job.id }
