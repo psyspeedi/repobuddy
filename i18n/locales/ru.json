@@ -14,6 +14,55 @@
     "quotaMessages": "сообщ.",
     "quotaTokens": "ток."
   },
+  "admin": {
+    "title": "Админка",
+    "subtitle": "Наблюдаемость сервиса и массовые действия. Видна GitHub-логинам из ADMIN_LOGINS.",
+    "tabs": {
+      "overview": "Обзор",
+      "users": "Пользователи",
+      "workspaces": "Рабочие пространства",
+      "audit": "Аудит"
+    },
+    "cards": {
+      "users": "Пользователи",
+      "active30d": "{n} активных за 30 дней",
+      "workspaces": "Пространства",
+      "todaySpend": "LLM сегодня",
+      "cap": "из ${cap} лимита/день",
+      "weekSpend": "LLM 7 дней",
+      "weekHint": "сумма всех фаз × всех пространств"
+    },
+    "overview": {
+      "intro": "Графики живут в Grafana. Тут — быстрая сводка для оператора.",
+      "grafanaHint": "дашборды метрик и логов"
+    },
+    "users": {
+      "login": "Логин",
+      "email": "Email",
+      "ws": "WS",
+      "msgs30d": "Сообщ. 30д",
+      "byok": "BYOK",
+      "created": "Регистрация"
+    },
+    "workspaces": {
+      "name": "Пространство",
+      "owner": "Владелец",
+      "status": "Статус",
+      "cost": "Расход",
+      "public": "Публ.",
+      "lastIndexed": "Последняя индексация",
+      "selectedCount": "Выбрано: {n}",
+      "bulkDelete": "Удалить {n}"
+    },
+    "audit": {
+      "when": "Когда",
+      "actor": "Кто",
+      "action": "Действие",
+      "target": "Цель",
+      "ip": "IP"
+    },
+    "bulkDeleteConfirm": "Удалить {n} пространств(о)? Это необратимо."
+  },
   "settings": {
     "title": "Настройки",
     "subtitle": "Подключи свой LLM-эндпоинт, чтобы запросы не списывались с общего лимита.",

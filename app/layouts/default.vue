@@ -13,6 +13,8 @@ interface QuotaResponse {
   used: { workspaces: number; messages: number; tokens: number }
 }
 
+const isAdmin = computed(() => quota.value?.viewerKind === 'admin')
+
 const { data: quota, refresh: refreshQuota } = useFetch<QuotaResponse>('/api/me/quota', {
   default: () => null as unknown as QuotaResponse,
 })
@@ -106,6 +108,9 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
             <span>{{ t('nav.quotaTokens') }}: {{ quotaPill.tokens }}</span>
           </span>
           <template v-if="loggedIn">
+            <NuxtLink v-if="isAdmin" to="/admin" class="hidden text-xs font-medium text-primary hover:underline sm:inline">
+              {{ t('admin.title') }}
+            </NuxtLink>
             <NuxtLink to="/settings" :title="t('nav.settings')">
               <Button variant="ghost" size="icon" :aria-label="t('nav.settings')">
                 <Settings class="h-4 w-4" />

@@ -14,6 +14,55 @@
     "quotaMessages": "msgs",
     "quotaTokens": "tokens"
   },
+  "admin": {
+    "title": "Admin",
+    "subtitle": "Service-wide observability and bulk actions. Visible to GitHub logins listed in ADMIN_LOGINS.",
+    "tabs": {
+      "overview": "Overview",
+      "users": "Users",
+      "workspaces": "Workspaces",
+      "audit": "Audit log"
+    },
+    "cards": {
+      "users": "Users",
+      "active30d": "{n} active in 30d",
+      "workspaces": "Workspaces",
+      "todaySpend": "LLM today",
+      "cap": "of ${cap} daily cap",
+      "weekSpend": "LLM 7 days",
+      "weekHint": "sum of all phases × all workspaces"
+    },
+    "overview": {
+      "intro": "For graphs use Grafana. This page is the operator's quick-glance.",
+      "grafanaHint": "metrics + logs dashboards"
+    },
+    "users": {
+      "login": "Login",
+      "email": "Email",
+      "ws": "WS",
+      "msgs30d": "Msgs 30d",
+      "byok": "BYOK",
+      "created": "Joined"
+    },
+    "workspaces": {
+      "name": "Workspace",
+      "owner": "Owner",
+      "status": "Status",
+      "cost": "Cost",
+      "public": "Public",
+      "lastIndexed": "Last indexed",
+      "selectedCount": "Selected: {n}",
+      "bulkDelete": "Delete {n}"
+    },
+    "audit": {
+      "when": "When",
+      "actor": "Actor",
+      "action": "Action",
+      "target": "Target",
+      "ip": "IP"
+    },
+    "bulkDeleteConfirm": "Delete {n} workspace(s)? This cannot be undone."
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "Configure your own LLM endpoint so the server doesn't charge against the shared quota.",
