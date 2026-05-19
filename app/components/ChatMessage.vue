@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { marked } from 'marked'
 import DOMPurify from 'isomorphic-dompurify'
+import { Copy, Check } from 'lucide-vue-next'
 
 interface Citation {
   kind: 'chunk' | 'entity'
@@ -68,6 +69,20 @@ function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
 }
 
+// Copy raw markdown — useful when the user wants to paste a finding
+// into an issue / PR. Citation markers stay as-is; downstream renderer
+// can resolve them or leave them visible.
+const copied = ref(false)
+async function copyMarkdown(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(props.content)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1500)
+  } catch {
+    // Clipboard API unavailable in some browsers / contexts.
+  }
+}
+
 function onClick(e: MouseEvent): void {
   const target = e.target as HTMLElement | null
   if (!target) return
@@ -108,6 +123,17 @@ function onClick(e: MouseEvent): void {
           class="text-[10px] tabular-nums text-muted-foreground"
           :title="t('chat.tokensPerSecTitle')"
         >{{ tokensPerSec }} {{ t('chat.tokensPerSec') }}</span>
+        <button
+          v-if="role === 'assistant' && !pending && content"
+          type="button"
+          class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-muted-foreground hover:bg-accent hover:text-foreground"
+          :title="t('chat.copyMarkdown')"
+          @click="copyMarkdown"
+        >
+          <Check v-if="copied" class="h-3 w-3 text-emerald-500" />
+          <Copy v-else class="h-3 w-3" />
+          {{ copied ? t('chat.copied') : t('chat.copy') }}
+        </button>
         <NuxtLink
           v-if="graphHighlightUrl"
           :to="graphHighlightUrl"

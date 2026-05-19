@@ -90,6 +90,30 @@ const lastAssistant = computed(() =>
   [...chat.messages.value].reverse().find((m) => m.role === 'assistant') ?? null,
 )
 
+// Keyboard shortcuts:
+//   Cmd/Ctrl + Enter — submit (works from anywhere on the page).
+//   Cmd/Ctrl + K     — focus the chat input.
+//   Esc              — close any open side panel (viewer/inspector
+//                      stays, but the modal dismisses).
+const chatInput = ref<HTMLInputElement | null>(null)
+function onKeydown(e: KeyboardEvent): void {
+  const meta = e.metaKey || e.ctrlKey
+  if (meta && e.key === 'Enter') {
+    e.preventDefault()
+    if (!chat.streaming.value && inputText.value.trim()) void submit()
+    return
+  }
+  if (meta && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault()
+    chatInput.value?.focus()
+    return
+  }
+  if (e.key === 'Escape') {
+    if (deleteOpen.value) deleteOpen.value = false
+    else if (chat.streaming.value) chat.cancel()
+  }
+}
+
 onMounted(async () => {
   // Skip the chat-history fetch for guests — they have no persisted
   // sessions, so /api/chat/sessions would just return an empty list.
@@ -97,6 +121,15 @@ onMounted(async () => {
   if (loggedIn.value) tasks.push(chatSessions.refresh())
   await Promise.all(tasks)
   scrollToBottom()
+  window.addEventListener('keydown', onKeydown)
+
+  // Honour ?session=<uuid> — share link target. Switches the chat
+  // to the referenced session (loads its history if persisted).
+  const sessionQ = route.query.session
+  if (typeof sessionQ === 'string' && /^[0-9a-f-]{36}$/i.test(sessionQ)) {
+    await chat.switchSession(sessionQ)
+    scrollToBottom()
+  }
 
   // Honour ?ask=<prefilled question> — used by the graph detail panel's
   // "Ask AI" button to hand off the user mid-flow.
@@ -107,6 +140,25 @@ onMounted(async () => {
     await navigateTo({ path: route.path }, { replace: true })
   }
 })
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') window.removeEventListener('keydown', onKeydown)
+})
+
+// Share-chat URL — copies a deep link to the current session. Works
+// for owners (history persisted) and for guests on public workspaces
+// (the link will simply land on an empty chat for the reader).
+const shareCopied = ref(false)
+async function shareChat(): Promise<void> {
+  const url = `${window.location.origin}/w/${workspaceId}?session=${chat.sessionId.value}`
+  try {
+    await navigator.clipboard.writeText(url)
+    shareCopied.value = true
+    setTimeout(() => { shareCopied.value = false }, 1500)
+  } catch {
+    // ignore
+  }
+}
 
 function onOpenChunk(chunkId: string): void {
   openChunkId.value = chunkId
@@ -374,6 +426,17 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
         @delete="deleteSession"
       />
       <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card min-h-0">
+        <div class="flex items-center justify-end gap-2 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+          <button
+            type="button"
+            class="hover:text-foreground"
+            :title="t('workspace.shareTitle')"
+            @click="shareChat"
+          >
+            {{ shareCopied ? t('workspace.shareCopied') : t('workspace.share') }}
+          </button>
+          <span class="hidden tabular-nums sm:inline">⌘K · ⌘↵</span>
+        </div>
         <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4 min-h-0">
           <div v-if="chat.messages.value.length === 0" class="space-y-4">
             <p class="text-center text-sm text-muted-foreground">
@@ -411,6 +474,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
           @submit.prevent="submit"
         >
           <input
+            ref="chatInput"
             v-model="inputText"
             type="text"
             :placeholder="t('workspace.askPlaceholder')"
