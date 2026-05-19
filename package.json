@@ -37,7 +37,8 @@
     "db:studio": "drizzle-kit studio",
     "dev:worker": "tsx watch server/workers/index.ts",
     "build:worker": "tsx server/workers/build.ts",
-    "backfill:insights": "tsx scripts/backfill-git-insights.ts"
+    "backfill:insights": "tsx scripts/backfill-git-insights.ts",
+    "backfill:cost": "tsx scripts/backfill-cost-log.ts"
   },
   "dependencies": {
     "@nuxtjs/color-mode": "^3.5.2",

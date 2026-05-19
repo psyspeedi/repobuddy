@@ -1,6 +1,7 @@
 import { OPERATORS, type OperatorContext, type OperatorName } from './operators'
 import type { Plan, PlanStep } from '#shared/schemas/plan'
 import { getLogger } from '../lib/logger'
+import { operatorLatency, operatorRuns } from '../lib/metrics'
 
 const log = getLogger().child({ component: 'kag/executor' })
 
@@ -55,6 +56,7 @@ export async function executePlan(
     if (!op) throw new PlanExecutionError(step.id, step.op, `unknown operator: ${step.op}`)
     const params = resolveReferences(step.params, results)
     const start = Date.now()
+    const stopTimer = operatorLatency.startTimer({ op: step.op })
     try {
       const out = op(params as never, ctx)
       // Detect async generator (streaming) vs promise.
@@ -67,6 +69,8 @@ export async function executePlan(
           durationMs: Date.now() - start,
           summary: '<stream>',
         })
+        operatorRuns.inc({ op: step.op, outcome: 'stream' })
+        stopTimer()
         // We don't drain the stream here — the caller will iterate it.
         // No further steps should depend on the stream's value.
         continue
@@ -80,6 +84,8 @@ export async function executePlan(
         durationMs: Date.now() - start,
         summary: summarise(result),
       })
+      operatorRuns.inc({ op: step.op, outcome: 'ok' })
+      stopTimer()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       trace.push({
@@ -89,6 +95,8 @@ export async function executePlan(
         durationMs: Date.now() - start,
         error: msg,
       })
+      operatorRuns.inc({ op: step.op, outcome: 'error' })
+      stopTimer()
       log.warn({ step: step.id, op: step.op, err: msg }, 'step failed')
       throw new PlanExecutionError(step.id, step.op, err)
     }

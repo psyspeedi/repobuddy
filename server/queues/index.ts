@@ -1,6 +1,7 @@
 import { Queue, type ConnectionOptions } from 'bullmq'
 
 export const INDEX_WORKSPACE_QUEUE = 'index-workspace'
+export const DIGEST_QUEUE = 'daily-digest'
 
 export interface IndexWorkspaceJobData {
   workspaceId: string
@@ -13,8 +14,14 @@ export interface IndexWorkspaceJobResult {
   durationMs: number
 }
 
+export interface DigestJobData {
+  /** ISO date the digest covers (yesterday in UTC). */
+  day: string
+}
+
 let _connection: ConnectionOptions | null = null
 let _queue: Queue<IndexWorkspaceJobData, IndexWorkspaceJobResult> | null = null
+let _digestQueue: Queue<DigestJobData> | null = null
 
 export function getRedisConnection(redisUrl: string): ConnectionOptions {
   if (!_connection) {
@@ -51,10 +58,43 @@ export function getIndexWorkspaceQueue(
   return _queue
 }
 
+export function getDigestQueue(redisUrl: string): Queue<DigestJobData> {
+  if (!_digestQueue) {
+    _digestQueue = new Queue<DigestJobData>(DIGEST_QUEUE, {
+      connection: getRedisConnection(redisUrl),
+      defaultJobOptions: {
+        attempts: 2,
+        removeOnComplete: { count: 14 },
+        removeOnFail: { count: 14 },
+      },
+    })
+  }
+  return _digestQueue
+}
+
+/**
+ * Ensure a repeatable cron job fires the digest once a day. BullMQ
+ * dedups by repeat key, so calling this on every worker boot is safe.
+ * Runs at 09:00 UTC by default — early enough to land in mailbox
+ * before standups, late enough that yesterday's UTC totals are final.
+ */
+export async function ensureDigestSchedule(redisUrl: string, cron = '0 9 * * *'): Promise<void> {
+  const q = getDigestQueue(redisUrl)
+  await q.add(
+    'daily-digest',
+    { day: new Date().toISOString().slice(0, 10) },
+    { repeat: { pattern: cron, tz: 'UTC' } },
+  )
+}
+
 export async function closeQueues(): Promise<void> {
   if (_queue) {
     await _queue.close()
     _queue = null
+  }
+  if (_digestQueue) {
+    await _digestQueue.close()
+    _digestQueue = null
   }
   _connection = null
 }

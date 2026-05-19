@@ -66,3 +66,22 @@ export const quotaBlocks = new Counter({
   labelNames: ['kind', 'metric'] as const,
   registers: [register],
 })
+
+// Per-KAG-operator instrumentation. Each step in a plan goes through
+// the executor with a known operator name; we record latency and
+// outcome separately for every op so the "Performance" dashboard can
+// spot a slow find_symbol vs. a flaky hybrid_search.
+export const operatorRuns = new Counter({
+  name: 'codegraph_kag_operator_runs_total',
+  help: 'KAG operator invocations, labelled by op and outcome.',
+  labelNames: ['op', 'outcome'] as const,
+  registers: [register],
+})
+
+export const operatorLatency = new Histogram({
+  name: 'codegraph_kag_operator_latency_seconds',
+  help: 'Latency of a single KAG operator invocation.',
+  labelNames: ['op'] as const,
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20],
+  registers: [register],
+})

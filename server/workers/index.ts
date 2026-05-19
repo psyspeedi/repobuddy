@@ -20,11 +20,19 @@ import { Worker } from 'bullmq'
 import { loadEnv } from '../lib/env'
 import { getLogger, withTrace } from '../lib/logger'
 import { closeDb, getDb } from '../db/client'
-import { closeQueues, getRedisConnection, INDEX_WORKSPACE_QUEUE } from '../queues'
+import {
+  closeQueues,
+  ensureDigestSchedule,
+  DIGEST_QUEUE,
+  getRedisConnection,
+  INDEX_WORKSPACE_QUEUE,
+} from '../queues'
 import type {
+  DigestJobData,
   IndexWorkspaceJobData,
   IndexWorkspaceJobResult,
 } from '../queues'
+import { runDailyDigest } from './digest'
 import { runIndexPipeline } from '../indexer/pipeline'
 import { resolveProvidersByUserId } from '../providers/resolve'
 
@@ -68,9 +76,23 @@ async function main(): Promise<void> {
     Sentry.captureException(err, { tags: { jobId: job?.id ?? 'unknown' } })
   })
 
+  // Daily-digest scheduler + worker. The scheduler is idempotent (BullMQ
+  // dedups by repeat key) so calling it on every boot is fine.
+  await ensureDigestSchedule(env.REDIS_URL)
+  const digestWorker = new Worker<DigestJobData>(
+    DIGEST_QUEUE,
+    async () => { await runDailyDigest(db) },
+    { connection },
+  )
+  digestWorker.on('failed', (_job, err) => {
+    log.error({ err: err.message }, 'digest job failed')
+    Sentry.captureException(err, { tags: { job: 'digest' } })
+  })
+
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'shutting down worker')
     await worker.close()
+    await digestWorker.close()
     await closeQueues()
     await closeDb()
     process.exit(0)
