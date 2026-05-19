@@ -7,6 +7,15 @@
  * Listens to BullMQ queues; HTTP is intentionally absent.
  */
 import 'dotenv/config'
+import * as Sentry from '@sentry/node'
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development',
+    tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+    serverName: 'codegraph-worker',
+  })
+}
 import { Worker } from 'bullmq'
 import { loadEnv } from '../lib/env'
 import { getLogger, withTrace } from '../lib/logger'
@@ -56,6 +65,7 @@ async function main(): Promise<void> {
     void withTrace({ jobId: job?.id }, () =>
       log.error({ err: err.message }, 'job failed'),
     )
+    Sentry.captureException(err, { tags: { jobId: job?.id ?? 'unknown' } })
   })
 
   const shutdown = async (signal: string): Promise<void> => {

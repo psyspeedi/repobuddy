@@ -80,6 +80,15 @@ const EnvSchema = z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
       .default('info'),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+
+    SENTRY_DSN: optionalUrl(),
+    SENTRY_ENVIRONMENT: optionalString(),
+    SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
+
+    TELEGRAM_BOT_TOKEN: optionalString(),
+    TELEGRAM_CHAT_ID: optionalString(),
+
+    COST_BUDGET_USD_PER_DAY: z.coerce.number().nonnegative().default(3),
   })
   .refine(
     (env) => Boolean(env.OPENAI_API_KEY || env.LLM_API_KEY),

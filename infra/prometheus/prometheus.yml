@@ -1,0 +1,18 @@
+# Prometheus scrape config for the CodeGraph stack.
+# Scrapes the Nuxt app's /api/metrics endpoint and Prometheus itself.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: codegraph
+    metrics_path: /api/metrics
+    static_configs:
+      - targets:
+          # Reach the host's Nuxt dev server from inside Docker.
+          # Override APP_METRICS_TARGET in .env if needed.
+          - host.docker.internal:3000
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

@@ -43,6 +43,8 @@
     "@nuxtjs/color-mode": "^3.5.2",
     "@nuxtjs/i18n": "^10.3.0",
     "@octokit/rest": "^22.0.1",
+    "@sentry/node": "^10.53.1",
+    "@sentry/nuxt": "^10.53.1",
     "@types/dompurify": "^3.2.0",
     "@vueuse/core": "^12.4.0",
     "@vueuse/nuxt": "^12.4.0",

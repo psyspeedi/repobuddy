@@ -12,10 +12,18 @@ export default defineNuxtConfig({
     '@nuxt/eslint',
     '@nuxtjs/color-mode',
     '@nuxtjs/i18n',
+    '@sentry/nuxt/module',
     '@vueuse/nuxt',
     'nuxt-auth-utils',
     'shadcn-nuxt',
   ],
+
+  // Sentry — picks up SENTRY_DSN from process.env at runtime. Module
+  // is a no-op when DSN is unset, so deploying without observability
+  // still works.
+  sentry: {
+    sourceMapsUploadOptions: { enabled: false },
+  },
 
   i18n: {
     locales: [

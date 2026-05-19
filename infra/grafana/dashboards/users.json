@@ -1,0 +1,53 @@
+{
+  "title": "CodeGraph — Users & workspaces",
+  "uid": "codegraph-users",
+  "schemaVersion": 39,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "tags": ["codegraph", "users"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Chat requests by viewer kind (rate / 5m)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (viewer) (rate(codegraph_chat_requests_total[5m]))",
+          "legendFormat": "{{viewer}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Index jobs (outcome)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(codegraph_index_jobs_total[1h]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Quota blocks by metric",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum by (kind, metric) (increase(codegraph_quota_blocks_total[1h]))",
+          "legendFormat": "{{kind}} / {{metric}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
