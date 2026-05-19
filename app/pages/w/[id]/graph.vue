@@ -585,7 +585,7 @@ useHead({ title: () => `${t('graph.view')} — RepoBuddy` })
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="cg-no-scroll flex flex-1 flex-col gap-3 min-h-0">
     <div class="flex items-center gap-2">
       <NuxtLink :to="`/w/${workspaceId}`">
         <Button variant="ghost" size="sm">
@@ -594,7 +594,7 @@ useHead({ title: () => `${t('graph.view')} — RepoBuddy` })
       </NuxtLink>
       <span class="text-sm text-muted-foreground">{{ t('graph.view') }}</span>
     </div>
-    <div class="flex h-[calc(100vh-14rem)] gap-4">
+    <div class="flex flex-1 gap-4 min-h-0">
     <aside class="w-56 shrink-0 space-y-3 overflow-y-auto rounded-lg border border-border bg-card p-3">
       <div class="space-y-1">
         <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">

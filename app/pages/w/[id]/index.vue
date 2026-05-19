@@ -320,7 +320,7 @@ useHead(() => {
 </script>
 
 <template>
-  <div v-if="wsData" class="flex flex-1 flex-col gap-4 min-h-0">
+  <div v-if="wsData" class="cg-no-scroll flex flex-1 flex-col gap-4 min-h-0">
     <header class="space-y-2">
       <NuxtLink
         v-if="loggedIn"

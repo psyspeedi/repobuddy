@@ -53,8 +53,15 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col bg-background text-foreground">
-    <header class="border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+  <!-- App shell: viewport-locked column. Header is fixed-height; main
+       fills the rest and is itself the scroll container for pages
+       whose root grows naturally (landing, dashboard, settings, etc).
+       Chat / graph pages override main's overflow via the
+       `cg-no-scroll` class on their root <div>, so their inner
+       scrollers handle overflow instead of the page leaking past the
+       viewport. -->
+  <div class="flex h-screen flex-col bg-background text-foreground overflow-hidden">
+    <header class="shrink-0 border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div class="container mx-auto flex items-center justify-between px-4 py-3">
         <NuxtLink to="/" class="cg-wordmark text-2xl leading-none tracking-tight">
           <span class="cg-gradient-text">{{ t('app.name') }}</span>
@@ -126,7 +133,10 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
         </div>
       </div>
     </header>
-    <main class="container mx-auto flex flex-1 flex-col px-4 py-6 min-h-0">
+    <!-- `[&:has(.cg-no-scroll)]:overflow-hidden` flips main from
+         scrollable → clipped when a child opts out (chat / graph
+         pages). Pages without the marker scroll normally. -->
+    <main class="container mx-auto flex flex-1 flex-col px-4 py-6 min-h-0 overflow-y-auto [&:has(.cg-no-scroll)]:overflow-hidden">
       <slot />
     </main>
     <OnboardingOverlay />
