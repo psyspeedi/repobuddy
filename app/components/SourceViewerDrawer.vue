@@ -33,17 +33,56 @@ const html = ref<string>('')
 const loading = ref(false)
 const error = ref<string | null>(null)
 const mode = ref<RenderMode>('code')
+// When the originally-clicked citation resolved to a diff chunk, we
+// try to swap it for the file's code chunk and remember the diff's
+// id here so the "Diff" button can jump back to the original.
+const originalDiffChunkId = ref<string | null>(null)
 
 async function load(): Promise<void> {
   if (!props.chunkId) return
   loading.value = true
   error.value = null
+  originalDiffChunkId.value = null
   try {
-    data.value = await $fetch<ChunkResponse>(
+    let resp = await $fetch<ChunkResponse>(
       `/api/workspaces/${props.workspaceId}/chunk/${props.chunkId}`,
     )
-    mode.value = detectMode(data.value.chunk)
-    html.value = await renderChunk(data.value.chunk, mode.value)
+
+    // If the clicked citation was a per-commit diff AND a source-code
+    // chunk exists for the same path, prefer the code view by default.
+    // Users complained that clicks-to-citations almost always landed
+    // them on a diff when they wanted to read the file.
+    if (resp.chunk.metadata?.kind === 'diff' && resp.chunk.filePath) {
+      const sourceResp = await $fetch<ChunkResponse>(
+        `/api/workspaces/${props.workspaceId}/chunk-by-path`,
+        { query: { path: resp.chunk.filePath, excludeId: resp.chunk.id } },
+      ).catch(() => ({ chunk: null }))
+      if (sourceResp.chunk) {
+        originalDiffChunkId.value = resp.chunk.id
+        resp = sourceResp
+      }
+    }
+
+    data.value = resp
+    mode.value = detectMode(resp.chunk)
+    html.value = await renderChunk(resp.chunk, mode.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadById(chunkId: string): Promise<void> {
+  loading.value = true
+  error.value = null
+  try {
+    const resp = await $fetch<ChunkResponse>(
+      `/api/workspaces/${props.workspaceId}/chunk/${chunkId}`,
+    )
+    data.value = resp
+    mode.value = detectMode(resp.chunk)
+    html.value = await renderChunk(resp.chunk, mode.value)
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -84,20 +123,29 @@ async function renderChunk(
 
 async function toggleMode(): Promise<void> {
   if (!data.value) return
-  // Cycle:
-  //   diff → code (same text, no +/- syntax highlighting)
-  //   code → diff if metadata.kind='diff', else code → markdown if doc-y
-  //   markdown → code
-  // Lets users escape diff view when they want to read the raw chunk
-  // rather than the per-commit unified diff.
-  const isDiffChunk = data.value.chunk.metadata?.kind === 'diff'
-  if (mode.value === 'diff') {
-    mode.value = 'code'
-  } else if (mode.value === 'code' && isDiffChunk) {
-    mode.value = 'diff'
-  } else {
-    mode.value = mode.value === 'markdown' ? 'code' : 'markdown'
+
+  // Case 1: currently showing the file's code, but the original
+  // citation was a diff. Jump back to the diff chunk by id.
+  if (originalDiffChunkId.value && data.value.chunk.metadata?.kind !== 'diff') {
+    const id = originalDiffChunkId.value
+    originalDiffChunkId.value = null
+    await loadById(id)
+    return
   }
+
+  // Case 2: a markdown ↔ code toggle for doc-y chunks (READMEs etc).
+  if (mode.value === 'markdown' || (mode.value === 'code' && data.value.chunk.sourceType === 'doc')) {
+    mode.value = mode.value === 'markdown' ? 'code' : 'markdown'
+    html.value = await renderChunk(data.value.chunk, mode.value)
+    return
+  }
+
+  // Case 3: rendering a diff chunk directly (no parallel code chunk
+  // existed). Allow flipping its visual mode between Shiki's diff
+  // grammar and plain code rendering of the same text.
+  const isDiffChunk = data.value.chunk.metadata?.kind === 'diff'
+  if (mode.value === 'diff') mode.value = 'code'
+  else if (mode.value === 'code' && isDiffChunk) mode.value = 'diff'
   html.value = await renderChunk(data.value.chunk, mode.value)
 }
 
@@ -136,24 +184,28 @@ function shikiLang(lang: string): string {
         variant="ghost"
         size="sm"
         :title="
-          mode === 'diff'
-            ? t('viewer.showCode')
-            : data.chunk.metadata?.kind === 'diff'
-              ? t('viewer.showDiff')
-              : mode === 'markdown'
-                ? t('viewer.rawTitle')
-                : t('viewer.renderTitle')
+          originalDiffChunkId
+            ? t('viewer.showDiff')
+            : mode === 'diff'
+              ? t('viewer.showCode')
+              : data.chunk.metadata?.kind === 'diff'
+                ? t('viewer.showDiff')
+                : mode === 'markdown'
+                  ? t('viewer.rawTitle')
+                  : t('viewer.renderTitle')
         "
         @click="toggleMode"
       >
         {{
-          mode === 'diff'
-            ? t('viewer.code')
-            : data.chunk.metadata?.kind === 'diff'
-              ? t('viewer.diff')
-              : mode === 'markdown'
-                ? t('viewer.raw')
-                : t('viewer.render')
+          originalDiffChunkId
+            ? t('viewer.diff')
+            : mode === 'diff'
+              ? t('viewer.code')
+              : data.chunk.metadata?.kind === 'diff'
+                ? t('viewer.diff')
+                : mode === 'markdown'
+                  ? t('viewer.raw')
+                  : t('viewer.render')
         }}
       </Button>
       <Button variant="ghost" size="sm" @click="$emit('close')">
