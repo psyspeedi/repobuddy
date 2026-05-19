@@ -72,11 +72,38 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'CodeGraph',
+      // Default tags applied to every page. Page-level useHead() can
+      // override title / og / twitter for richer per-page metadata.
+      title: 'CodeGraph — AI assistant for understanding codebases',
+      titleTemplate: '%s',
+      htmlAttrs: { lang: 'en' },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: 'AI assistant for understanding codebases' },
+        {
+          name: 'description',
+          content:
+            'CodeGraph indexes a Git repository into a hybrid knowledge graph (AST + LLM annotations + git history) and answers questions in plain language with cited sources. Supports TypeScript, JavaScript, Python, Go.',
+        },
+        { name: 'keywords', content: 'codebase, AI, knowledge graph, code search, KAG, RAG, OpenAI, AST, TypeScript, Python, Go' },
+        // Open Graph
+        { property: 'og:type', content: 'website' },
+        { property: 'og:site_name', content: 'CodeGraph' },
+        { property: 'og:title', content: 'CodeGraph — AI assistant for codebases' },
+        {
+          property: 'og:description',
+          content:
+            'Ask questions about any Git repo and get cited answers. AST + LLM annotations + git history fused into one knowledge graph.',
+        },
+        // og:image / twitter:image are intentionally absent until we
+        // ship a real share card — broken image refs trash the preview
+        // worse than no image at all. See public/og.png TODO.
+        // Twitter card
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:title', content: 'CodeGraph — AI assistant for codebases' },
+        { name: 'twitter:description', content: 'Ask questions about any Git repo and get cited answers.' },
+        // Robots — overridden on private pages via useHead.
+        { name: 'robots', content: 'index, follow' },
       ],
     },
   },

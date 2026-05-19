@@ -38,6 +38,33 @@ const { data: publicList } = await useFetch<{ workspaces: PublicWorkspace[] }>(
   '/api/workspaces/public',
   { default: () => ({ workspaces: [] }) },
 )
+
+// SEO: canonical URL + JSON-LD SoftwareApplication block. The
+// canonical depends on APP_URL which is only available at runtime
+// (nuxt.config.ts can't read it), so it's set here.
+const runtime = useRuntimeConfig()
+const canonicalUrl = (runtime.public.appUrl as string | undefined) ?? 'http://localhost:3000'
+useHead({
+  link: [
+    { rel: 'canonical', href: canonicalUrl + '/' },
+  ],
+  script: [
+    {
+      type: 'application/ld+json',
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareApplication',
+        name: 'CodeGraph',
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Any',
+        description:
+          'AI assistant for understanding codebases via a knowledge graph (AST + LLM annotations + git history). Supports TypeScript, JavaScript, Python, Go.',
+        url: canonicalUrl,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      }),
+    },
+  ],
+})
 </script>
 
 <template>

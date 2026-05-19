@@ -103,7 +103,10 @@ function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
-useHead(() => ({ title: () => `${t('admin.title')} — CodeGraph` }))
+useHead(() => ({
+  title: () => `${t('admin.title')} — CodeGraph`,
+  meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+}))
 </script>
 
 <template>
