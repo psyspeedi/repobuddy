@@ -14,6 +14,20 @@
     "quotaMessages": "msgs",
     "quotaTokens": "tokens"
   },
+  "interest": {
+    "cta": "Want more?",
+    "title": "Tell the team you'd use higher limits",
+    "sentLabel": "Noted!",
+    "sentTitle": "We saw your interest — thanks!",
+    "modalTitle": "Want more limits?",
+    "modalBody": "We're still figuring out whether to introduce paid plans. A click here tells us there's demand — and an optional note helps prioritise what you actually need (more workspaces? bigger token budget? team plan?). One submission per account.",
+    "messageLabel": "Optional note",
+    "messagePlaceholder": "e.g. I'd pay $5/mo for 10× more tokens / unlimited workspaces / etc.",
+    "send": "Send",
+    "sending": "Sending…",
+    "cancel": "Cancel",
+    "failed": "Failed to send."
+  },
   "onboarding": {
     "s1": {
       "title": "Ask anything — get cited answers",
@@ -38,7 +52,15 @@
       "overview": "Overview",
       "users": "Users",
       "workspaces": "Workspaces",
-      "audit": "Audit log"
+      "audit": "Audit log",
+      "interest": "Interest"
+    },
+    "interest": {
+      "empty": "No one has tapped \"Want more?\" yet. The button shows in the header for users who haven't bypass status.",
+      "when": "When",
+      "user": "User",
+      "kind": "Kind",
+      "message": "Message"
     },
     "cards": {
       "users": "Users",

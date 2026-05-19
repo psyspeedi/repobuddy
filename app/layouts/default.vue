@@ -107,6 +107,7 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
             <span class="text-border">·</span>
             <span>{{ t('nav.quotaTokens') }}: {{ quotaPill.tokens }}</span>
           </span>
+          <InterestButton :bypass="quota?.bypass ?? false" />
           <template v-if="loggedIn">
             <NuxtLink v-if="isAdmin" to="/admin" class="hidden text-xs font-medium text-primary hover:underline sm:inline">
               {{ t('admin.title') }}
