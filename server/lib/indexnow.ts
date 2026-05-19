@@ -4,8 +4,10 @@
  * in minutes instead of days.
  *
  * Key handshake: the search engines fetch
- * https://<host>/<KEY>.txt and expect to find <KEY> inside. We serve
- * that file via server/routes/[key].txt.ts using the runtime key.
+ * https://<host>/indexnow/<KEY>.txt and expect to find <KEY> inside.
+ * We serve that file via server/routes/indexnow/[key].txt.ts using
+ * the runtime key. The path is namespaced under /indexnow/ so the
+ * dynamic [key] parameter can't accidentally swallow the root route.
  *
  * No-op when INDEXNOW_KEY is unset — convenient for dev.
  */
@@ -25,7 +27,7 @@ export async function pingIndexNow(urls: string[]): Promise<void> {
       body: JSON.stringify({
         host: u.host,
         key,
-        keyLocation: `${host.replace(/\/$/, '')}/${key}.txt`,
+        keyLocation: `${host.replace(/\/$/, '')}/indexnow/${key}.txt`,
         urlList: urls,
       }),
     })
