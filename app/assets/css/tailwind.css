@@ -29,6 +29,12 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+
+  /* Make Tailwind's `font-sans` resolve to Nunito so utility classes
+   * pick it up everywhere (buttons, dialogs, etc) without manual
+   * font-family overrides. */
+  --font-sans: 'Nunito', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 :root {
@@ -93,6 +99,12 @@
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+  /* Nunito is the default UI typeface app-wide (rounded sans, friendly
+   * but readable at small sizes). The wordmark overrides this with
+   * Architects Daughter via .cg-wordmark. Code stays monospace.
+   * Fallback chain mirrors Tailwind's default sans for safety. */
+  font-family: 'Nunito', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background-image:
     radial-gradient(at 8% 0%, hsl(var(--primary) / 0.06) 0px, transparent 50%),
     radial-gradient(at 95% 5%, hsl(var(--accent) / 0.25) 0px, transparent 45%);
