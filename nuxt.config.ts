@@ -16,6 +16,9 @@ export default defineNuxtConfig({
     '@vueuse/nuxt',
     'nuxt-auth-utils',
     'shadcn-nuxt',
+    // Local: drops shadcn-nuxt's duplicate Button (index.ts barrel +
+    // Button.vue both register as "Button" → boot warning).
+    './modules/dedupe-components',
   ],
 
   // Sentry — picks up SENTRY_DSN from process.env at runtime. Module
