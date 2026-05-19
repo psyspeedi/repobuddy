@@ -52,6 +52,21 @@ export default defineNuxtConfig({
 
   vite: {
     plugins: [tailwindcss()],
+    optimizeDeps: {
+      // Pre-bundle these so Vite doesn't re-bundle on first navigation
+      // (it logs "discovered new dependencies at runtime" and triggers
+      // a page reload). The list reflects what every page touches via
+      // auto-imported components / composables.
+      include: [
+        '@vue/devtools-core',
+        '@vue/devtools-kit',
+        'class-variance-authority',
+        'clsx',
+        'reka-ui',
+        'tailwind-merge',
+        'lucide-vue-next',
+      ],
+    },
   },
 
   shadcn: {
@@ -171,14 +186,11 @@ export default defineNuxtConfig({
     },
   },
 
-  // Per-route caching hints picked up by Nitro:
-  //  - landing: 10-minute SWR — Google sees a fast cached HTML,
-  //    while new public workspaces appear on the next revalidation.
-  //  - /login: 1-hour SWR (content rarely changes).
-  // Private pages (/admin, /settings) don't need explicit no-cache —
-  // they require auth on every request anyway.
-  routeRules: {
-    '/': { swr: 600 },
-    '/login': { swr: 3600 },
-  },
+  // NOTE: NO SWR / prerender on `/` or `/login`.
+  // The previous configuration `'/': { swr: 600 }` served the first
+  // rendered HTML to every visitor for 10 minutes — but `/` shows
+  // landing for guests and the workspace dashboard for authenticated
+  // users. The cached HTML was leaking one user's state to everyone
+  // else (and showed "no workspaces" to real users whose cache hit
+  // a guest variant). Auth-dependent routes must not be cached.
 })
