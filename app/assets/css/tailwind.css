@@ -101,7 +101,7 @@
  * gap-*, w-N when N≤96, h-N, etc.) scales with it, giving a global
  * +20% size pass without touching individual components. */
 html {
-  font-size: 1.2rem;
+  font-size: 1.25rem;
 }
 
 body {

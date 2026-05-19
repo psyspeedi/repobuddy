@@ -1,0 +1,23 @@
+{
+  "name": "RepoBuddy",
+  "short_name": "RepoBuddy",
+  "description": "AI assistant for understanding codebases via knowledge graphs",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#7e6cf3",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

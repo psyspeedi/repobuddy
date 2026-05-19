@@ -95,13 +95,18 @@ export default defineNuxtConfig({
           content:
             'Ask questions about any Git repo and get cited answers. AST + LLM annotations + git history fused into one knowledge graph.',
         },
-        // og:image / twitter:image are intentionally absent until we
-        // ship a real share card — broken image refs trash the preview
-        // worse than no image at all. See public/og.png TODO.
+        { property: 'og:image', content: 'https://repobuddy.space/og.webp' },
+        { property: 'og:image:width', content: '1200' },
+        { property: 'og:image:height', content: '630' },
+        { property: 'og:image:type', content: 'image/webp' },
+        { property: 'og:url', content: 'https://repobuddy.space/' },
         // Twitter card
         { name: 'twitter:card', content: 'summary_large_image' },
         { name: 'twitter:title', content: 'RepoBuddy — AI assistant for codebases' },
         { name: 'twitter:description', content: 'Ask questions about any Git repo and get cited answers.' },
+        { name: 'twitter:image', content: 'https://repobuddy.space/og.webp' },
+        // Theme color picked up by browser chrome on mobile.
+        { name: 'theme-color', content: '#7e6cf3' },
         // Robots — overridden on private pages via useHead.
         { name: 'robots', content: 'index, follow' },
       ],
@@ -115,6 +120,13 @@ export default defineNuxtConfig({
           rel: 'stylesheet',
           href: 'https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Nunito:wght@400;500;600;700;800&display=swap',
         },
+        // Favicons — multiple formats so every browser / OS picks the
+        // best for its rendering pipeline.
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+        { rel: 'icon', type: 'image/png', sizes: '96x96', href: '/favicon-96x96.png' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
+        { rel: 'manifest', href: '/site.webmanifest' },
       ],
     },
   },
