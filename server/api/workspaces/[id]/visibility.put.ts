@@ -8,6 +8,7 @@ import { getDb } from '../../../db/client'
 import { users, workspaces } from '../../../db/schema'
 import { writeAccess } from '../../../lib/workspace-access'
 import { recordAudit, getClientIp } from '../../../lib/audit'
+import { pingIndexNow } from '../../../lib/indexnow'
 
 const BodySchema = z.object({ isPublic: z.boolean() })
 
@@ -36,5 +37,11 @@ export default defineEventHandler(async (event) => {
     metadata: { isPublic: body.isPublic },
     ip: getClientIp(event),
   })
+  // Notify Bing + Yandex (via IndexNow) that this URL just changed
+  // visibility. No-op when INDEXNOW_KEY is unset.
+  const appUrl = ((useRuntimeConfig(event).public.appUrl as string | undefined) ?? '').replace(/\/$/, '')
+  if (appUrl) {
+    void pingIndexNow([`${appUrl}/w/${id}`, `${appUrl}/sitemap.xml`])
+  }
   return { ok: true, isPublic: body.isPublic }
 })

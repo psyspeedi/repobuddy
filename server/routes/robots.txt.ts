@@ -19,6 +19,7 @@ export default defineEventHandler((event) => {
     'Disallow: /auth/',
     '',
     `Sitemap: ${appUrl}/sitemap.xml`,
+    `Sitemap: ${appUrl}/feed.xml`,
     '',
   ].join('\n')
 })

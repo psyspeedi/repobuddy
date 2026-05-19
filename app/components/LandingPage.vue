@@ -47,6 +47,12 @@ const canonicalUrl = (runtime.public.appUrl as string | undefined) ?? 'http://lo
 useHead({
   link: [
     { rel: 'canonical', href: canonicalUrl + '/' },
+    // hreflang alternates — the landing is served bilingually via i18n
+    // (cookie-driven, same URL). Tell Google both locales exist so it
+    // doesn't pick a "preferred" version arbitrarily.
+    { rel: 'alternate', hreflang: 'en', href: canonicalUrl + '/' },
+    { rel: 'alternate', hreflang: 'ru', href: canonicalUrl + '/' },
+    { rel: 'alternate', hreflang: 'x-default', href: canonicalUrl + '/' },
   ],
   script: [
     {

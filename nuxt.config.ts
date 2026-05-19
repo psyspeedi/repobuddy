@@ -164,4 +164,15 @@ export default defineNuxtConfig({
       appUrl: process.env.APP_URL ?? 'http://localhost:3000',
     },
   },
+
+  // Per-route caching hints picked up by Nitro:
+  //  - landing: 10-minute SWR — Google sees a fast cached HTML,
+  //    while new public workspaces appear on the next revalidation.
+  //  - /login: 1-hour SWR (content rarely changes).
+  // Private pages (/admin, /settings) don't need explicit no-cache —
+  // they require auth on every request anyway.
+  routeRules: {
+    '/': { swr: 600 },
+    '/login': { swr: 3600 },
+  },
 })

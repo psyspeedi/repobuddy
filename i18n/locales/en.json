@@ -7,6 +7,10 @@
     "confirm": "Confirm",
     "cancel": "Cancel"
   },
+  "errors": {
+    "generic": "Something went wrong.",
+    "home": "Back home"
+  },
   "nav": {
     "signOut": "Sign out",
     "signIn": "Sign in",

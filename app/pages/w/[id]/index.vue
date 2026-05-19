@@ -20,6 +20,7 @@ interface WorkspaceResponse {
     error: string | null
     stats: WorkspaceStats | null
     isPublic: boolean
+    languages: string[]
   }
   viewerIsOwner: boolean
 }
@@ -261,7 +262,53 @@ watch(
   () => scrollToBottom(),
 )
 
-useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — RepoBuddy` }))
+// Per-workspace head — gives each public workspace its own SERP card.
+// Private workspaces opt out of indexing here so even if robots.txt
+// is ignored, the meta `robots` directive keeps them out.
+const runtimeCfg = useRuntimeConfig()
+const appUrl = (runtimeCfg.public.appUrl as string | undefined)?.replace(/\/$/, '') ?? ''
+const wsCanonical = computed(() => `${appUrl}/w/${workspaceId}`)
+const wsDescription = computed(() => {
+  const ws = wsData.value?.workspace
+  if (!ws) return ''
+  const langs = ws.languages?.length ? ` Languages: ${ws.languages.join(', ')}.` : ''
+  const src = ws.sourceUrl ? ` Source: ${ws.sourceUrl}.` : ''
+  return `Explore ${ws.name} on RepoBuddy — ask questions about the codebase, see the knowledge graph, get cited answers.${langs}${src}`.slice(0, 280)
+})
+const wsJsonLd = computed(() => {
+  const ws = wsData.value?.workspace
+  if (!ws || !isPublic.value) return null
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareSourceCode',
+    name: ws.name,
+    url: wsCanonical.value,
+    codeRepository: ws.sourceUrl ?? undefined,
+    programmingLanguage: ws.languages ?? [],
+    isAccessibleForFree: true,
+  })
+})
+useHead(() => {
+  const ws = wsData.value?.workspace
+  const indexable = isPublic.value && !!ws
+  return {
+    title: `${ws?.name ?? 'Workspace'} — RepoBuddy`,
+    meta: [
+      { name: 'description', content: wsDescription.value },
+      { property: 'og:title', content: `${ws?.name ?? 'Workspace'} — RepoBuddy` },
+      { property: 'og:description', content: wsDescription.value },
+      { property: 'og:url', content: wsCanonical.value },
+      // Private / failed / pending workspaces stay out of search engines.
+      indexable
+        ? { name: 'robots', content: 'index, follow' }
+        : { name: 'robots', content: 'noindex, nofollow' },
+    ],
+    link: [{ rel: 'canonical', href: wsCanonical.value }],
+    script: wsJsonLd.value
+      ? [{ type: 'application/ld+json', innerHTML: wsJsonLd.value }]
+      : [],
+  }
+})
 </script>
 
 <template>
