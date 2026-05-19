@@ -353,7 +353,10 @@
     "noPlanYet": "No plan yet — ask a question.",
     "params": "params",
     "result": "result",
-    "error": "error"
+    "error": "error",
+    "viewFlow": "Flowchart view",
+    "viewList": "List view",
+    "flowHint": "Click a step to inspect its params and result."
   },
   "nodeDetail": {
     "askAi": "Ask AI",
