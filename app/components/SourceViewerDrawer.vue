@@ -2,7 +2,6 @@
 import { codeToHtml } from 'shiki'
 import { marked } from 'marked'
 import DOMPurify from 'isomorphic-dompurify'
-import { Button } from '@/components/ui/button'
 
 interface Props {
   workspaceId: string

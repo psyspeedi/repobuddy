@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button'
 import { Users, FolderOpen, DollarSign, FileClock, Trash2 } from 'lucide-vue-next'
 
 definePageMeta({ middleware: ['admin'] })

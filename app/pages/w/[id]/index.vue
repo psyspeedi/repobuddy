@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button'
 
 // Guests need to reach the page; server-side readAccess decides whether
 // the workspace is publicly visible. If not, the API returns 404 and

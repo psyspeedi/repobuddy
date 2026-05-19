@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button'
 import type { ChatSessionListItem } from '@/composables/useChatSessions'
 
 interface Props {

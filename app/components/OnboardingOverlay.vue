@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button'
 import { MessageSquare, Network, Sparkles } from 'lucide-vue-next'
 
 const STORAGE_KEY = 'cg-onboarding-seen-v1'

@@ -6,7 +6,6 @@
  *
  * Mounted once in layouts/default.vue.
  */
-import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-vue-next'
 
 const { t } = useI18n()

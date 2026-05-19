@@ -56,6 +56,9 @@ export default defineNuxtConfig({
     componentDir: './app/components/ui',
   },
 
+
+
+
   typescript: {
     strict: true,
     typeCheck: false,

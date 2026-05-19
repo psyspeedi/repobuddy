@@ -9,7 +9,6 @@
  * Visual goal: noticeable but not pushy — a subtle pill in the header
  * area, glow on hover, no banner / popup nag.
  */
-import { Button } from '@/components/ui/button'
 import { Sparkles, Check } from 'lucide-vue-next'
 
 interface Props {

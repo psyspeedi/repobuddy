@@ -5,7 +5,6 @@
  * error response noindexed and visually consistent with the rest of
  * the app.
  */
-import { Button } from '@/components/ui/button'
 
 interface Props {
   error: { statusCode: number; statusMessage?: string; message?: string }

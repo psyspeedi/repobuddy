@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type Graph from 'graphology'
 import type Sigma from 'sigma'
-import { Button } from '@/components/ui/button'
 
 // ---------- Constants ----------
 // Palette tuned so each colour stays readable on both the light and the

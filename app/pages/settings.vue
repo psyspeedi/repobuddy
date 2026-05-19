@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Button } from '@/components/ui/button'
 import { Key, Check, AlertCircle } from 'lucide-vue-next'
 
 const { t } = useI18n()
