@@ -4,19 +4,24 @@
  *
  * The server-side endpoints behind /admin do their own requireAdmin()
  * gate, so this middleware is just for UX (no UI flash before 403).
+ *
+ * Cookie handling: on the server side, plain `$fetch` does NOT forward
+ * the incoming request's session cookie to a self-call. We need
+ * `useRequestFetch()` which clones the H3 event's headers — otherwise
+ * the admin probe always returns 401 during SSR and the redirect
+ * fires even for legitimate admins.
  */
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.path !== '/admin' && !to.path.startsWith('/admin/')) return
-  const { loggedIn, user } = useUserSession()
+  const { loggedIn } = useUserSession()
   if (!loggedIn.value) {
     return navigateTo(`/login?next=${encodeURIComponent(to.fullPath)}`)
   }
-  // Resolve admin status via the dedicated endpoint — keeps the canonical
-  // ADMIN_LOGINS list on the server and out of the client bundle.
+  const fetcher = useRequestFetch()
   try {
-    await $fetch('/api/admin/overview')
+    const me = await fetcher<{ isAdmin: boolean }>('/api/me/admin')
+    if (!me.isAdmin) return navigateTo('/')
   } catch {
     return navigateTo('/')
   }
-  void user
 })
