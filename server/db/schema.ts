@@ -348,6 +348,30 @@ export const queryCache = pgTable(
   ],
 )
 
+// ---------- Audit events (admin observability) ----------
+// One row per noteworthy mutation. Used by /admin to render an event
+// timeline and to answer "who deleted X and when". Append-only.
+export const auditEvents = pgTable(
+  'audit_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // Null when an action originated from a guest or system.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    actorLogin: text('actor_login'), // denormalised for fast list rendering after cascade-delete
+    action: text('action').notNull(), // e.g. 'workspace.create', 'workspace.delete', 'workspace.visibility', 'byok.set', 'admin.delete_workspace'
+    targetType: text('target_type'),   // 'workspace' | 'user' | …
+    targetId: text('target_id'),       // free-form id of the target
+    metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+    ip: text('ip'),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('audit_events_at_idx').on(table.at),
+    index('audit_events_action_idx').on(table.action),
+    index('audit_events_user_idx').on(table.userId),
+  ],
+)
+
 // ---------- Token / cost ledger (for LLM_BUDGET_USD_PER_INDEX guardrails) ----------
 export const llmCostLog = pgTable(
   'llm_cost_log',
@@ -390,3 +414,5 @@ export type Chunk = typeof chunks.$inferSelect
 export type NewChunk = typeof chunks.$inferInsert
 export type ChatSession = typeof chatSessions.$inferSelect
 export type ChatMessage = typeof chatMessages.$inferSelect
+export type AuditEvent = typeof auditEvents.$inferSelect
+export type LlmCostLog = typeof llmCostLog.$inferSelect

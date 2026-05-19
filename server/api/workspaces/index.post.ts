@@ -5,6 +5,7 @@ import { CreateWorkspaceSchema } from '#shared/schemas/workspace'
 import { requireValidUser } from '../../lib/auth'
 import { isAdminLogin } from '../../lib/admin'
 import { assertCanCreateWorkspace, consumeWorkspace } from '../../lib/quotas'
+import { recordAudit, getClientIp } from '../../lib/audit'
 import { getLogger } from '../../lib/logger'
 
 const log = getLogger().child({ component: 'api/workspaces/create' })
@@ -59,6 +60,15 @@ export default defineEventHandler(async (event) => {
     { jobId: created.id },
   )
   await consumeWorkspace({ kind: 'user', id: user.id, bypass: isAdmin })
+  await recordAudit(db, {
+    userId: user.id,
+    actorLogin: user.githubLogin,
+    action: 'workspace.create',
+    targetType: 'workspace',
+    targetId: created.id,
+    metadata: { name: created.name, sourceType: created.sourceType, sourceUrl: created.sourceUrl },
+    ip: getClientIp(event),
+  })
   log.info({ workspaceId: created.id, jobId: job.id }, 'workspace enqueued')
 
   return { workspace: created, jobId: job.id }

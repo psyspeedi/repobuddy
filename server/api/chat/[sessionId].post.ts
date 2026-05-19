@@ -20,6 +20,8 @@ import {
   recordTokenUsage,
   type QuotaContext,
 } from '../../lib/quotas'
+import { recordCost } from '../../lib/cost-log'
+import { chatLatency, chatRequests } from '../../lib/metrics'
 import { users } from '../../db/schema'
 import { getLogger } from '../../lib/logger'
 
@@ -99,6 +101,8 @@ export default defineEventHandler(async (event) => {
     'x-accel-buffering': 'no',
   })
   const stream = createEventStream(event)
+  const latencyTimer = chatLatency.startTimer()
+  const viewerLabel = isGuest ? 'guest' : 'user'
 
   ;(async () => {
     try {
@@ -220,6 +224,22 @@ export default defineEventHandler(async (event) => {
         await recordTokenUsage(quotaCtx, inputTokens + outputTokens)
       }
 
+      // 7) Cost ledger — write regardless of BYOK so /admin shows total
+      // traffic. Operator can filter on phase to see only billable rows
+      // (or join workspaces.users on byok status when reporting).
+      await recordCost(db, {
+        workspaceId: body.workspaceId,
+        phase: 'answering',
+        model: llm.model,
+        inputTokens,
+        outputTokens,
+        costCentsPer1MInput: llm.costCentsPer1MInputTokens,
+        costCentsPer1MOutput: llm.costCentsPer1MOutputTokens,
+      })
+
+      chatRequests.inc({ status: 'ok', viewer: viewerLabel })
+      latencyTimer()
+
       await stream.push({
         event: 'done',
         data: JSON.stringify({ inputTokens, outputTokens }),
@@ -228,6 +248,8 @@ export default defineEventHandler(async (event) => {
       log.error({ err }, 'chat stream failed')
       const msg = err instanceof Error ? err.message : String(err)
       await stream.push({ event: 'error', data: msg })
+      chatRequests.inc({ status: 'error', viewer: viewerLabel })
+      latencyTimer()
     } finally {
       await stream.close()
     }

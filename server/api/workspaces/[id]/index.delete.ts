@@ -12,6 +12,7 @@ import { workspaces } from '../../../db/schema'
 import { requireValidUser } from '../../../lib/auth'
 import { getLogger } from '../../../lib/logger'
 import { isAdminLogin } from '../../../lib/admin'
+import { recordAudit, getClientIp } from '../../../lib/audit'
 
 const log = getLogger().child({ component: 'api/workspaces/delete' })
 
@@ -34,6 +35,14 @@ export default defineEventHandler(async (event) => {
   if (deleted.length === 0) {
     throw createError({ statusCode: 404, statusMessage: 'workspace not found' })
   }
+  await recordAudit(db, {
+    userId: user.id,
+    actorLogin: user.githubLogin,
+    action: isAdminLogin(user.githubLogin) ? 'admin.delete_workspace' : 'workspace.delete',
+    targetType: 'workspace',
+    targetId: id,
+    ip: getClientIp(event),
+  })
   log.info({ workspaceId: id, userId: user.id }, 'workspace deleted')
   return { ok: true }
 })

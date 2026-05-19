@@ -1,6 +1,7 @@
 import { PlanSchema, type Plan } from '#shared/schemas/plan'
 import type { LLMProvider } from '../providers/llm'
 import { getLogger } from '../lib/logger'
+import { plannerFailures } from '../lib/metrics'
 
 const log = getLogger().child({ component: 'kag/planner' })
 
@@ -227,6 +228,7 @@ export async function planQuestion(
         },
         'planner retry failed; falling back to hybrid RAG plan',
       )
+      plannerFailures.inc()
       // Final fallback: a deterministic plan that runs hybrid_search + answer.
       return {
         reasoning: 'Planner unavailable; using RAG fallback.',

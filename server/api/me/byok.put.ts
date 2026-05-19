@@ -10,6 +10,7 @@ import { users } from '../../db/schema'
 import { requireValidUser } from '../../lib/auth'
 import { encrypt } from '../../lib/crypto'
 import { loadEnv } from '../../lib/env'
+import { recordAudit, getClientIp } from '../../lib/audit'
 
 const BodySchema = z.object({
   baseUrl: z.string().url().nullable().optional(),
@@ -51,5 +52,17 @@ export default defineEventHandler(async (event) => {
     return { ok: true, changed: false }
   }
   await db.update(users).set(update).where(eq(users.id, user.id))
+  // Audit only the meaningful state transition; noisy partial updates
+  // of model / baseUrl on their own aren't security-relevant.
+  if (parsed.data.apiKey !== undefined) {
+    await recordAudit(db, {
+      userId: user.id,
+      actorLogin: user.githubLogin,
+      action: parsed.data.apiKey ? 'byok.set' : 'byok.clear',
+      targetType: 'user',
+      targetId: user.id,
+      ip: getClientIp(event),
+    })
+  }
   return { ok: true, changed: true }
 })

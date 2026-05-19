@@ -2,6 +2,7 @@ import { inArray, sql } from 'drizzle-orm'
 import type { Database } from '../db/client'
 import { chunks } from '../db/schema'
 import type { EmbeddingsProvider } from '../providers/embeddings'
+import { recordCost } from '../lib/cost-log'
 import { getLogger } from '../lib/logger'
 
 const log = getLogger().child({ component: 'indexer/embed' })
@@ -55,6 +56,22 @@ export async function embedChunks(
     processed += batch.length
     onProgress?.(processed, pending.length)
   }
+
+  // Approximate token spend for cost logging. Embedding endpoints don't
+  // return usage per-call, so we estimate ~text.length/4 (English-leaning
+  // rule of thumb). Off by 2× for non-ASCII heavy content, but good
+  // enough to spot runaway indexing costs.
+  const approxTokens = pending.reduce(
+    (s, c) => s + Math.ceil(c.text.length / 4),
+    0,
+  )
+  await recordCost(db, {
+    workspaceId,
+    phase: 'embedding',
+    model: provider.model,
+    inputTokens: approxTokens,
+    costCentsPer1MInput: provider.costCentsPer1MTokens,
+  })
 
   log.info({ workspaceId, count: processed, model: provider.model }, 'embedded chunks')
   return processed

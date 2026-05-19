@@ -15,6 +15,7 @@
  */
 import Redis from 'ioredis'
 import { loadEnv } from './env'
+import { quotaBlocks } from './metrics'
 
 let _client: Redis | null = null
 export function getQuotaRedis(): Redis {
@@ -114,6 +115,7 @@ export async function assertCanCreateWorkspace(ctx: QuotaContext): Promise<void>
   }
   const { limits, used } = await getStatus(ctx)
   if (used.workspaces >= limits.workspacesPerDay) {
+    quotaBlocks.inc({ kind: ctx.kind, metric: 'workspaces' })
     throw createError({
       statusCode: 429,
       statusMessage: `Daily workspace quota exceeded (${used.workspaces}/${limits.workspacesPerDay}). Try again tomorrow.`,
@@ -132,12 +134,14 @@ export async function assertCanSendMessage(ctx: QuotaContext): Promise<void> {
   if (ctx.bypass) return
   const { limits, used } = await getStatus(ctx)
   if (used.messages >= limits.messagesPerDay) {
+    quotaBlocks.inc({ kind: ctx.kind, metric: 'messages' })
     throw createError({
       statusCode: 429,
       statusMessage: `Daily message quota exceeded (${used.messages}/${limits.messagesPerDay}).`,
     })
   }
   if (used.tokens >= limits.tokensPerDay) {
+    quotaBlocks.inc({ kind: ctx.kind, metric: 'tokens' })
     throw createError({
       statusCode: 429,
       statusMessage: `Daily token quota exceeded (${used.tokens}/${limits.tokensPerDay}).`,

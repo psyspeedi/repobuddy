@@ -8,6 +8,7 @@ import {
   type SemanticAnnotation,
 } from '#shared/schemas/annotation'
 import { getLogger } from '../lib/logger'
+import { recordCost } from '../lib/cost-log'
 
 const log = getLogger().child({ component: 'indexer/annotate' })
 
@@ -111,6 +112,20 @@ export async function annotateAndEmbed(
           ],
           { schema: SemanticAnnotationSchema, schemaName: 'semantic_annotation' },
         )
+
+        // Approximate cost: structured() doesn't surface usage, so we
+        // estimate input from the prompt size. Output is bounded by the
+        // schema — ~200 tokens upper bound for our SemanticAnnotation.
+        const promptChars = SYSTEM_PROMPT.length + userContent.length
+        await recordCost(db, {
+          workspaceId,
+          phase: 'annotation',
+          model: llm.model,
+          inputTokens: Math.ceil(promptChars / 4),
+          outputTokens: 200,
+          costCentsPer1MInput: llm.costCentsPer1MInputTokens,
+          costCentsPer1MOutput: llm.costCentsPer1MOutputTokens,
+        })
 
         await db
           .update(entities)
