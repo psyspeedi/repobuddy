@@ -57,7 +57,7 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
   <div class="flex min-h-screen flex-col bg-background text-foreground">
     <header class="border-b border-border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
       <div class="container mx-auto flex items-center justify-between px-4 py-3">
-        <NuxtLink to="/" class="text-lg font-semibold tracking-tight">
+        <NuxtLink to="/" class="cg-wordmark text-2xl leading-none tracking-tight">
           <span class="cg-gradient-text">{{ t('app.name') }}</span>
         </NuxtLink>
         <div class="flex items-center gap-2">

@@ -105,6 +105,17 @@ body {
     radial-gradient(at 95% 5%, hsl(188 60% 30% / 0.18) 0px, transparent 50%);
 }
 
+/* Wordmark font — applied to the brand name in the header.
+ * Architects Daughter is loaded via the stylesheet link in
+ * nuxt.config.ts head.link. font-display: swap is on at the source so
+ * the page text renders immediately in a fallback.  */
+.cg-wordmark {
+  font-family: 'Architects Daughter', system-ui, sans-serif;
+  /* The handwritten font is naturally lighter than a Geometric sans —
+   * bump weight so it doesn't feel flimsy against the rest of the UI. */
+  font-weight: 400;
+}
+
 /* Gradient text utility for hero titles & emphasis. */
 .cg-gradient-text {
   background: linear-gradient(

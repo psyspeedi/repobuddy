@@ -105,6 +105,17 @@ export default defineNuxtConfig({
         // Robots — overridden on private pages via useHead.
         { name: 'robots', content: 'index, follow' },
       ],
+      link: [
+        // Google Fonts — used by the wordmark in the header. Preconnect
+        // first to shave ~100ms off the first paint; display=swap so
+        // text renders immediately in a fallback while the font loads.
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=Architects+Daughter&display=swap',
+        },
+      ],
     },
   },
 
