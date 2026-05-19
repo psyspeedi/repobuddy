@@ -96,6 +96,14 @@
   border-color: hsl(var(--border));
 }
 
+/* Bump the root font-size from the browser default 16px to ~19.2px.
+ * Every Tailwind utility that's authored in rem (text-*, p-*, m-*,
+ * gap-*, w-N when N≤96, h-N, etc.) scales with it, giving a global
+ * +20% size pass without touching individual components. */
+html {
+  font-size: 1.2rem;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
