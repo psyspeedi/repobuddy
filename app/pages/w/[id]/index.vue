@@ -377,6 +377,11 @@ useHead(() => {
           >
             {{ reindexing ? t('workspace.reindexing') : t('workspace.reindex') }}
           </Button>
+          <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/explore`">
+            <Button variant="outline" size="sm">
+              {{ t('workspace.explore') }}
+            </Button>
+          </NuxtLink>
           <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/graph`">
             <Button variant="outline" size="sm">
               {{ t('workspace.viewGraph') }}

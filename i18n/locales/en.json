@@ -212,6 +212,7 @@
   },
   "workspace": {
     "viewGraph": "View graph",
+    "explore": "Explore",
     "reindex": "Re-index",
     "reindexing": "Queuing…",
     "reindexHint": "Re-run indexing on the latest commit (picks up new diffs, files, annotations)",
@@ -323,6 +324,22 @@
     "primary": "primary",
     "context": "context",
     "edgesCount": "edges"
+  },
+  "explore": {
+    "title": "Explore",
+    "subtitle": "{n} indexed files. Click a tile to open its neighbour graph.",
+    "loading": "Loading file map…",
+    "preset": {
+      "loc": "Size",
+      "hotness": "Hotness",
+      "coverage": "Coverage"
+    },
+    "tooltip": {
+      "entities": "{n} entities",
+      "hotness": "{n} commits / 90d",
+      "tested": "tested",
+      "untested": "no tests"
+    }
   },
   "neighbours": {
     "title": "Neighbours",

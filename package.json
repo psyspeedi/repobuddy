@@ -52,6 +52,8 @@
     "bullmq": "^5.76.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "d3-hierarchy": "^3.1.2",
+    "d3-scale-chromatic": "^3.1.0",
     "dompurify": "^3.4.3",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
@@ -90,6 +92,8 @@
   "devDependencies": {
     "@nuxt/eslint": "^0.7.4",
     "@tailwindcss/vite": "^4.0.0",
+    "@types/d3-hierarchy": "^3.1.7",
+    "@types/d3-scale-chromatic": "^3.1.0",
     "@types/node": "^22.10.5",
     "@types/pg": "^8.20.0",
     "@types/unzipper": "^0.10.11",
