@@ -17,7 +17,10 @@ interface Props {
   tokensPerSec?: number
 }
 const props = defineProps<Props>()
-const emit = defineEmits<{ (e: 'open-chunk', chunkId: string): void }>()
+const emit = defineEmits<{
+  (e: 'open-chunk', chunkId: string): void
+  (e: 'open-entity', entityId: string): void
+}>()
 const { t } = useI18n()
 
 const entityCitations = computed(() =>
@@ -94,11 +97,11 @@ function onClick(e: MouseEvent): void {
   if (!id) return
   if (kind === 'chunk') {
     emit('open-chunk', id)
-  } else if (kind === 'entity' && props.workspaceId) {
-    // Entity citation → jump to graph with this node highlighted.
-    void navigateTo(
-      `/w/${props.workspaceId}/graph?highlight=${encodeURIComponent(id)}`,
-    )
+  } else if (kind === 'entity') {
+    // Entity citation → open the Neighbour Graph drawer on this node.
+    // Replaces the old "navigate to /graph?highlight=…" redirect that
+    // ripped the user out of the chat.
+    emit('open-entity', id)
   }
 }
 </script>

@@ -274,6 +274,7 @@
     "panels": {
       "reasoning": "Reasoning",
       "source": "Source",
+      "neighbours": "Neighbours",
       "sourcePlaceholder": "Click a citation in the chat (the ↗ badge after a claim) to open the referenced code here."
     }
   },
@@ -322,6 +323,13 @@
     "primary": "primary",
     "context": "context",
     "edgesCount": "edges"
+  },
+  "neighbours": {
+    "title": "Neighbours",
+    "hop": "hop",
+    "loading": "Loading neighbours…",
+    "empty": "No neighbours to show. This entity stands alone in the graph.",
+    "hint": "Click a node to re-centre the view on it."
   },
   "reasoning": {
     "title": "Reasoning",

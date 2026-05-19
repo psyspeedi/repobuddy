@@ -1,12 +1,12 @@
 import { and, eq, inArray } from 'drizzle-orm'
-import { getDb } from '../../../../db/client'
+import { getDb } from '../../../../../db/client'
 import {
   chunks as chunksTable,
   entities,
   entityChunks,
   relations,
-} from '../../../../db/schema'
-import { readAccess } from '../../../../lib/workspace-access'
+} from '../../../../../db/schema'
+import { readAccess } from '../../../../../lib/workspace-access'
 
 export default defineEventHandler(async (event) => {
   const workspaceId = getRouterParam(event, 'id')

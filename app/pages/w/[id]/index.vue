@@ -83,7 +83,12 @@ const chat = useChat(workspaceId)
 const chatSessions = useChatSessions(workspaceId)
 const inputText = ref('')
 const openChunkId = ref<string | null>(null)
-const sidePanel = ref<'inspector' | 'viewer' | null>('inspector')
+const sidePanel = ref<'inspector' | 'viewer' | 'neighbours' | null>('inspector')
+const neighbourEntityId = ref<string | null>(null)
+function openNeighbours(entityId: string): void {
+  neighbourEntityId.value = entityId
+  sidePanel.value = 'neighbours'
+}
 const scroller = ref<HTMLDivElement | null>(null)
 
 const lastAssistant = computed(() =>
@@ -525,6 +530,7 @@ useHead(() => {
             :tokens-per-sec="msg.tokensPerSec"
             :workspace-id="workspaceId"
             @open-chunk="onOpenChunk"
+            @open-entity="openNeighbours"
           />
         </div>
         <form
@@ -572,6 +578,15 @@ useHead(() => {
           >
             {{ t('chat.panels.source') }}
           </Button>
+          <Button
+            v-if="neighbourEntityId"
+            variant="outline"
+            size="sm"
+            :class="sidePanel === 'neighbours' ? 'bg-accent' : ''"
+            @click="sidePanel = 'neighbours'"
+          >
+            {{ t('chat.panels.neighbours') }}
+          </Button>
         </div>
         <ReasoningInspector
           v-if="sidePanel === 'inspector'"
@@ -590,6 +605,13 @@ useHead(() => {
         >
           {{ t('chat.panels.sourcePlaceholder') }}
         </aside>
+        <EntityNeighbourGraph
+          v-else-if="sidePanel === 'neighbours' && neighbourEntityId"
+          :workspace-id="workspaceId"
+          :entity-id="neighbourEntityId"
+          @close="sidePanel = 'inspector'"
+          @focus="openNeighbours"
+        />
       </div>
     </section>
   </div>
