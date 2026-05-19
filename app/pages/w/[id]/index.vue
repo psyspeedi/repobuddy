@@ -412,12 +412,15 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
 
     <section
       v-if="isReady"
-      class="flex flex-1 gap-3 min-h-[400px]"
+      class="flex flex-1 flex-col gap-3 min-h-[400px] lg:flex-row"
     >
       <!-- Hide the chat history sidebar for guests — their sessions are
-           ephemeral, so the list would always be empty and useless. -->
+           ephemeral, so the list would always be empty and useless.
+           On small screens hide too — full-width chat reads better than
+           a cramped column. -->
       <ChatSessionsList
         v-if="loggedIn"
+        class="hidden lg:flex"
         :sessions="chatSessions.sessions.value"
         :loading="chatSessions.loading.value"
         :active-session-id="chat.sessionId.value"
@@ -496,7 +499,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
         </form>
       </div>
 
-      <div v-if="sidePanel" class="flex w-[420px] shrink-0 flex-col gap-2">
+      <div v-if="sidePanel" class="hidden w-[420px] shrink-0 flex-col gap-2 lg:flex">
         <div class="flex gap-1">
           <Button
             variant="outline"

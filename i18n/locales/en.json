@@ -14,6 +14,23 @@
     "quotaMessages": "msgs",
     "quotaTokens": "tokens"
   },
+  "onboarding": {
+    "s1": {
+      "title": "Ask anything — get cited answers",
+      "body": "Type a question. Every claim in the answer carries a clickable citation (↗ opens the source, ◆ jumps to the graph)."
+    },
+    "s2": {
+      "title": "Reasoning is transparent",
+      "body": "The Reasoning panel on the right shows the plan the AI ran — find_symbol → get_callers → answer. Click a step to inspect its result."
+    },
+    "s3": {
+      "title": "Explore the graph",
+      "body": "View Graph (top right) opens the knowledge graph. Filter by type, switch presets (Code / Git / Semantic), and entities cited in chat highlight automatically."
+    },
+    "skip": "Skip",
+    "next": "Next",
+    "finish": "Got it"
+  },
   "admin": {
     "title": "Admin",
     "subtitle": "Service-wide observability and bulk actions. Visible to GitHub logins listed in ADMIN_LOGINS.",

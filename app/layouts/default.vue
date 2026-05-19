@@ -129,5 +129,6 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
     <main class="container mx-auto flex flex-1 flex-col px-4 py-6 min-h-0">
       <slot />
     </main>
+    <OnboardingOverlay />
   </div>
 </template>
