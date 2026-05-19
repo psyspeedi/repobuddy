@@ -48,7 +48,7 @@ export async function sendAlert(
     critical: '🚨',
   }
   const tag = severityPrefix[opts.severity ?? 'info'] ?? ''
-  const body = `${tag} *CodeGraph*\n${message}`
+  const body = `${tag} *RepoBuddy*\n${message}`
 
   try {
     const url = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`

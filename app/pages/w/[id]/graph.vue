@@ -582,7 +582,7 @@ function clearHighlight(): void {
   sigma?.getCamera().animatedReset({ duration: 300 })
 }
 
-useHead({ title: () => `${t('graph.view')} — CodeGraph` })
+useHead({ title: () => `${t('graph.view')} — RepoBuddy` })
 </script>
 
 <template>

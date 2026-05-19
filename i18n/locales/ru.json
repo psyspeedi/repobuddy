@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "CodeGraph",
+    "name": "RepoBuddy",
     "tagline": "AI-ассистент для понимания кодовых баз через граф знаний"
   },
   "common": {
@@ -112,7 +112,7 @@
     "title": "Настройки",
     "subtitle": "Подключи свой LLM-эндпоинт, чтобы запросы не списывались с общего лимита.",
     "byokTitle": "Свой API-ключ (BYOK)",
-    "byokHelp": "CodeGraph умеет работать с любым OpenAI-совместимым эндпоинтом (OpenAI, Groq, OpenRouter, Together, Ollama, vLLM…). Когда BYOK активен — твои запросы обходят дневные токен-лимиты, потому что ты платишь сам.",
+    "byokHelp": "RepoBuddy умеет работать с любым OpenAI-совместимым эндпоинтом (OpenAI, Groq, OpenRouter, Together, Ollama, vLLM…). Когда BYOK активен — твои запросы обходят дневные токен-лимиты, потому что ты платишь сам.",
     "byokActive": "Активен",
     "baseUrl": "Base URL",
     "baseUrlHint": "По умолчанию https://api.openai.com/v1. Groq: https://api.groq.com/openai/v1, OpenRouter: https://openrouter.ai/api/v1, Ollama: http://localhost:11434/v1.",
@@ -188,7 +188,7 @@
     "footer": "Open source. Лицензия MIT."
   },
   "login": {
-    "title": "Добро пожаловать в CodeGraph",
+    "title": "Добро пожаловать в RepoBuddy",
     "subtitle": "Войди через GitHub чтобы индексировать и изучать репозитории.",
     "button": "Продолжить через GitHub",
     "errorGithub": "Не удалось авторизоваться через GitHub. Попробуй ещё раз.",
@@ -246,7 +246,7 @@
   },
   "chat": {
     "you": "Ты",
-    "assistant": "CodeGraph",
+    "assistant": "RepoBuddy",
     "showOnGraph": "Показать на графе",
     "showOnGraphTitle": "Открыть граф с подсветкой упомянутых сущностей",
     "tokensPerSec": "т/с",

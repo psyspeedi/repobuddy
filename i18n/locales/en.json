@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "CodeGraph",
+    "name": "RepoBuddy",
     "tagline": "AI assistant for understanding codebases via knowledge graphs"
   },
   "common": {
@@ -112,7 +112,7 @@
     "title": "Settings",
     "subtitle": "Configure your own LLM endpoint so the server doesn't charge against the shared quota.",
     "byokTitle": "Bring your own API key (BYOK)",
-    "byokHelp": "Point CodeGraph at any OpenAI-compatible endpoint (OpenAI, Groq, OpenRouter, Together, Ollama, vLLM…). When configured, your requests bypass the daily token limit because you're paying your own bill.",
+    "byokHelp": "Point RepoBuddy at any OpenAI-compatible endpoint (OpenAI, Groq, OpenRouter, Together, Ollama, vLLM…). When configured, your requests bypass the daily token limit because you're paying your own bill.",
     "byokActive": "Active",
     "baseUrl": "Base URL",
     "baseUrlHint": "Default is https://api.openai.com/v1. Use Groq: https://api.groq.com/openai/v1, OpenRouter: https://openrouter.ai/api/v1, Ollama: http://localhost:11434/v1.",
@@ -188,7 +188,7 @@
     "footer": "Open source. MIT licensed."
   },
   "login": {
-    "title": "Welcome to CodeGraph",
+    "title": "Welcome to RepoBuddy",
     "subtitle": "Sign in with GitHub to index and explore repositories.",
     "button": "Continue with GitHub",
     "errorGithub": "GitHub authentication failed. Please try again.",
@@ -246,7 +246,7 @@
   },
   "chat": {
     "you": "You",
-    "assistant": "CodeGraph",
+    "assistant": "RepoBuddy",
     "showOnGraph": "Show on graph",
     "showOnGraphTitle": "Open the graph with the cited entities highlighted",
     "tokensPerSec": "t/s",

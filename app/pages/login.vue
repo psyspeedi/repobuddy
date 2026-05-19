@@ -12,7 +12,7 @@ const errorMessage = computed(() => {
   return null
 })
 
-useHead({ title: () => `${t('login.title')} — CodeGraph` })
+useHead({ title: () => `${t('login.title')} — RepoBuddy` })
 </script>
 
 <template>

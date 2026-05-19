@@ -261,7 +261,7 @@ watch(
   () => scrollToBottom(),
 )
 
-useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — CodeGraph` }))
+useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — RepoBuddy` }))
 </script>
 
 <template>

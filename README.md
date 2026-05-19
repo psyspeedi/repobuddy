@@ -1,8 +1,8 @@
-# CodeGraph
+# RepoBuddy
 
 AI assistant for understanding codebases via knowledge graphs.
 
-CodeGraph indexes a public Git repository (or an uploaded ZIP) into a hybrid
+RepoBuddy indexes a public Git repository (or an uploaded ZIP) into a hybrid
 knowledge graph that combines:
 
 - **Deterministic structure** from AST: files, classes, functions, imports,

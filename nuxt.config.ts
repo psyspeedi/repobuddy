@@ -74,7 +74,7 @@ export default defineNuxtConfig({
     head: {
       // Default tags applied to every page. Page-level useHead() can
       // override title / og / twitter for richer per-page metadata.
-      title: 'CodeGraph — AI assistant for understanding codebases',
+      title: 'RepoBuddy — AI assistant for understanding codebases',
       titleTemplate: '%s',
       htmlAttrs: { lang: 'en' },
       meta: [
@@ -83,13 +83,13 @@ export default defineNuxtConfig({
         {
           name: 'description',
           content:
-            'CodeGraph indexes a Git repository into a hybrid knowledge graph (AST + LLM annotations + git history) and answers questions in plain language with cited sources. Supports TypeScript, JavaScript, Python, Go.',
+            'RepoBuddy indexes a Git repository into a hybrid knowledge graph (AST + LLM annotations + git history) and answers questions in plain language with cited sources. Supports TypeScript, JavaScript, Python, Go.',
         },
         { name: 'keywords', content: 'codebase, AI, knowledge graph, code search, KAG, RAG, OpenAI, AST, TypeScript, Python, Go' },
         // Open Graph
         { property: 'og:type', content: 'website' },
-        { property: 'og:site_name', content: 'CodeGraph' },
-        { property: 'og:title', content: 'CodeGraph — AI assistant for codebases' },
+        { property: 'og:site_name', content: 'RepoBuddy' },
+        { property: 'og:title', content: 'RepoBuddy — AI assistant for codebases' },
         {
           property: 'og:description',
           content:
@@ -100,7 +100,7 @@ export default defineNuxtConfig({
         // worse than no image at all. See public/og.png TODO.
         // Twitter card
         { name: 'twitter:card', content: 'summary_large_image' },
-        { name: 'twitter:title', content: 'CodeGraph — AI assistant for codebases' },
+        { name: 'twitter:title', content: 'RepoBuddy — AI assistant for codebases' },
         { name: 'twitter:description', content: 'Ask questions about any Git repo and get cited answers.' },
         // Robots — overridden on private pages via useHead.
         { name: 'robots', content: 'index, follow' },

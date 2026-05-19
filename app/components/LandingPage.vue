@@ -54,7 +54,7 @@ useHead({
       innerHTML: JSON.stringify({
         '@context': 'https://schema.org',
         '@type': 'SoftwareApplication',
-        name: 'CodeGraph',
+        name: 'RepoBuddy',
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'Any',
         description:

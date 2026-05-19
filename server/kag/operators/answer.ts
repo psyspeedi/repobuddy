@@ -61,7 +61,7 @@ const LOCALE_NAMES: Record<string, string> = {
 
 function buildSystemPrompt(locale: string | undefined): string {
   const langName = LOCALE_NAMES[locale ?? 'en'] ?? 'English'
-  return `You are CodeGraph, an assistant that answers questions about a codebase using ONLY the provided context.
+  return `You are RepoBuddy, an assistant that answers questions about a codebase using ONLY the provided context.
 
 Language rule:
 - ALWAYS respond in ${langName}, regardless of the question's language. This is the user's interface language and must be respected.

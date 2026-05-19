@@ -1,7 +1,7 @@
 {
-  "name": "codegraph",
+  "name": "repobuddy",
   "version": "0.0.1",
-  "description": "AI assistant for understanding codebases via knowledge graphs (KAG)",
+  "description": "RepoBuddy — AI assistant for understanding codebases via knowledge graphs (KAG)",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.0",

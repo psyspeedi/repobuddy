@@ -4,7 +4,7 @@ apiVersion: 1
 providers:
   - name: codegraph
     orgId: 1
-    folder: CodeGraph
+    folder: RepoBuddy
     type: file
     disableDeletion: false
     editable: true

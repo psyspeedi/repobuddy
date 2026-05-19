@@ -82,7 +82,7 @@ async function clearByok(): Promise<void> {
 }
 
 useHead(() => ({
-  title: () => `${t('settings.title')} — CodeGraph`,
+  title: () => `${t('settings.title')} — RepoBuddy`,
   meta: [{ name: 'robots', content: 'noindex, nofollow' }],
 }))
 </script>

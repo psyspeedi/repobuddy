@@ -5,7 +5,7 @@ import { plannerFailures } from '../lib/metrics'
 
 const log = getLogger().child({ component: 'kag/planner' })
 
-const SYSTEM_PROMPT = `You are CodeGraph's query planner. You receive a user question about a codebase and respond ONLY with a single JSON object — a plan whose steps will be executed by a graph engine. No surrounding prose, no markdown fences.
+const SYSTEM_PROMPT = `You are RepoBuddy's query planner. You receive a user question about a codebase and respond ONLY with a single JSON object — a plan whose steps will be executed by a graph engine. No surrounding prose, no markdown fences.
 
 The JSON object MUST have this top-level shape:
 {

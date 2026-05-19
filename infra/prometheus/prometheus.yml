@@ -1,4 +1,4 @@
-# Prometheus scrape config for the CodeGraph stack.
+# Prometheus scrape config for the RepoBuddy stack.
 # Scrapes the Nuxt app's /api/metrics endpoint and Prometheus itself.
 global:
   scrape_interval: 15s

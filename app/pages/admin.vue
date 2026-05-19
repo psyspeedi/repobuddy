@@ -115,7 +115,7 @@ function formatUsd(cents: number): string {
 }
 
 useHead(() => ({
-  title: () => `${t('admin.title')} — CodeGraph`,
+  title: () => `${t('admin.title')} — RepoBuddy`,
   meta: [{ name: 'robots', content: 'noindex, nofollow' }],
 }))
 </script>
