@@ -237,6 +237,8 @@
     "deleteTitle": "Permanently delete this workspace",
     "deleteFailed": "Failed to delete the workspace.",
     "reindexFailed": "Failed to queue re-index.",
+    "reindexConfirmTitle": "Re-index this workspace?",
+    "reindexConfirmBody": "We'll re-clone the repo, re-parse files, re-annotate with the LLM and re-embed chunks. This costs tokens (typically $0.20–$2 depending on repo size) and replaces the existing graph. Worth doing after the source repo gets new commits or you change the active model.",
     "visibilityFailed": "Failed to change visibility.",
     "deleteConfirmTitle": "Delete workspace?",
     "deleteConfirmBody": "This permanently removes the workspace, its graph, chunks, embeddings, and all chats. To confirm, type the workspace name: {name}",
@@ -353,6 +355,10 @@
     "render": "Render",
     "rawTitle": "Show raw markdown",
     "renderTitle": "Render as markdown",
+    "code": "Code",
+    "diff": "Diff",
+    "showCode": "Show as plain code (no diff highlighting)",
+    "showDiff": "Show as a unified diff",
     "loading": "Loading…"
   }
 }

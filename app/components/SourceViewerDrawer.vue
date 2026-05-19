@@ -84,9 +84,20 @@ async function renderChunk(
 
 async function toggleMode(): Promise<void> {
   if (!data.value) return
-  // Toggle only makes sense for markdown ↔ raw code. Diff stays diff.
-  if (mode.value === 'diff') return
-  mode.value = mode.value === 'markdown' ? 'code' : 'markdown'
+  // Cycle:
+  //   diff → code (same text, no +/- syntax highlighting)
+  //   code → diff if metadata.kind='diff', else code → markdown if doc-y
+  //   markdown → code
+  // Lets users escape diff view when they want to read the raw chunk
+  // rather than the per-commit unified diff.
+  const isDiffChunk = data.value.chunk.metadata?.kind === 'diff'
+  if (mode.value === 'diff') {
+    mode.value = 'code'
+  } else if (mode.value === 'code' && isDiffChunk) {
+    mode.value = 'diff'
+  } else {
+    mode.value = mode.value === 'markdown' ? 'code' : 'markdown'
+  }
   html.value = await renderChunk(data.value.chunk, mode.value)
 }
 
@@ -121,13 +132,29 @@ function shikiLang(lang: string): string {
         </p>
       </div>
       <Button
-        v-if="data?.chunk && mode !== 'diff'"
+        v-if="data?.chunk"
         variant="ghost"
         size="sm"
-        :title="mode === 'markdown' ? t('viewer.rawTitle') : t('viewer.renderTitle')"
+        :title="
+          mode === 'diff'
+            ? t('viewer.showCode')
+            : data.chunk.metadata?.kind === 'diff'
+              ? t('viewer.showDiff')
+              : mode === 'markdown'
+                ? t('viewer.rawTitle')
+                : t('viewer.renderTitle')
+        "
         @click="toggleMode"
       >
-        {{ mode === 'markdown' ? t('viewer.raw') : t('viewer.render') }}
+        {{
+          mode === 'diff'
+            ? t('viewer.code')
+            : data.chunk.metadata?.kind === 'diff'
+              ? t('viewer.diff')
+              : mode === 'markdown'
+                ? t('viewer.raw')
+                : t('viewer.render')
+        }}
       </Button>
       <Button variant="ghost" size="sm" @click="$emit('close')">
         ×

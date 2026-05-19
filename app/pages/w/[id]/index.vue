@@ -224,6 +224,15 @@ async function confirmDelete(): Promise<void> {
 const reindexing = ref(false)
 async function reindex(): Promise<void> {
   if (reindexing.value) return
+  // Re-indexing re-walks the repo, re-runs LLM annotation and re-embeds
+  // chunks → real token spend. Confirm so an accidental click on a
+  // ready workspace doesn't burn the daily budget.
+  const ok = await useConfirm().ask({
+    title: t('workspace.reindexConfirmTitle'),
+    body: t('workspace.reindexConfirmBody'),
+    confirmLabel: t('workspace.reindex'),
+  })
+  if (!ok) return
   reindexing.value = true
   try {
     await $fetch(`/api/workspaces/${workspaceId}/reindex`, { method: 'POST' })
@@ -546,7 +555,7 @@ useHead(() => {
         </form>
       </div>
 
-      <div v-if="sidePanel" class="hidden w-[420px] shrink-0 flex-col gap-2 lg:flex">
+      <div v-if="sidePanel" class="hidden w-[560px] shrink-0 flex-col gap-2 lg:flex">
         <div class="flex gap-1">
           <Button
             variant="outline"

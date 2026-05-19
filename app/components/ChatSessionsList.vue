@@ -37,7 +37,7 @@ async function onDelete(e: MouseEvent, id: string): Promise<void> {
 </script>
 
 <template>
-  <aside class="flex h-full w-60 shrink-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-2">
+  <aside class="flex h-full w-52 shrink-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-2">
     <div class="flex items-center justify-between gap-1 px-1">
       <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {{ t('chat.chats') }}

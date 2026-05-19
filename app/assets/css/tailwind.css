@@ -160,3 +160,54 @@ body {
   background-clip: text;
   color: transparent;
 }
+
+/* -----------------------------------------------------------------------
+ * Custom scrollbars — narrow, themed, identical on macOS/Win/Linux.
+ * macOS default scrollbar auto-hides and looks fine, but Windows /
+ * Linux default is bulky and visually inconsistent. WebKit + Firefox
+ * vendor properties cover Chrome, Edge, Safari, Firefox.
+ * ----------------------------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.6);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Shiki-rendered <pre> blocks paint the language background only behind
+ * the rendered text. When the line is wider than the container and a
+ * horizontal scrollbar appears, scrolling reveals the parent element
+ * — visible as a pale stripe to the right of the code. Force the
+ * background to extend to whichever is longer: the code or the
+ * container. */
+.shiki,
+.shiki code,
+.cg-prose pre,
+.cg-prose pre code {
+  min-width: 100%;
+  display: inline-block;
+}
+.shiki,
+.cg-prose pre {
+  /* The pre still needs to scroll horizontally — only its child <code>
+   * needs to be wide. Reset to block on the wrapper. */
+  display: block;
+}
