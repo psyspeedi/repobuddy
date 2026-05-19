@@ -346,7 +346,23 @@
     "hop": "hop",
     "loading": "Loading neighbours…",
     "empty": "No neighbours to show. This entity stands alone in the graph.",
-    "hint": "Click a node to re-centre the view on it."
+    "hint": "Click a node to re-centre the view on it.",
+    "graphView": "Graph view",
+    "treeView": "Tree view"
+  },
+  "callHierarchy": {
+    "callers": "Callers",
+    "callees": "Callees",
+    "tests": "Tests",
+    "parents": "Parents",
+    "loading": "Loading…",
+    "empty": "No entity selected.",
+    "none": {
+      "callees": "Nothing called from here.",
+      "callers": "Nobody calls this.",
+      "tests": "No tests cover this entity.",
+      "parents": "No enclosing scope."
+    }
   },
   "reasoning": {
     "title": "Reasoning",

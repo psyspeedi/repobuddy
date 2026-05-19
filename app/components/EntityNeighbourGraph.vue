@@ -11,7 +11,7 @@
  *   - the workspace explore page (treemap → click a file)
  *   - the call-hierarchy panel (focus → graph)
  */
-import { X, Sparkles } from 'lucide-vue-next'
+import { X, Sparkles, Network, List as ListIcon } from 'lucide-vue-next'
 
 interface Props {
   workspaceId: string
@@ -26,6 +26,7 @@ defineEmits<{
 const { t } = useI18n()
 const colorMode = useColorMode()
 const containerRef = ref<HTMLDivElement | null>(null)
+const view = ref<'graph' | 'tree'>('graph')
 
 interface NodeRow {
   id: string
@@ -238,6 +239,25 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-1">
         <button
           type="button"
+          class="rounded-md p-1.5 transition"
+          :class="view === 'graph' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'"
+          :title="t('neighbours.graphView')"
+          @click="view = 'graph'"
+        >
+          <Network class="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          class="rounded-md p-1.5 transition"
+          :class="view === 'tree' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'"
+          :title="t('neighbours.treeView')"
+          @click="view = 'tree'"
+        >
+          <ListIcon class="h-3.5 w-3.5" />
+        </button>
+        <button
+          v-if="view === 'graph'"
+          type="button"
           class="rounded-md px-2 py-1 text-[11px] font-medium transition"
           :class="depth === 1 ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'"
           @click="depth = 1"
@@ -245,6 +265,7 @@ onBeforeUnmount(() => {
           1{{ t('neighbours.hop') }}
         </button>
         <button
+          v-if="view === 'graph'"
           type="button"
           class="rounded-md px-2 py-1 text-[11px] font-medium transition"
           :class="depth === 2 ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'"
@@ -261,7 +282,15 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </header>
-    <div class="relative flex-1">
+    <CallHierarchy
+      v-if="view === 'tree'"
+      :workspace-id="workspaceId"
+      :entity-id="entityId"
+      class="flex-1"
+      @focus="(id) => $emit('focus', id)"
+      @close="$emit('close')"
+    />
+    <div v-else class="relative flex-1">
       <div v-if="loading" class="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
         {{ t('neighbours.loading') }}
       </div>
