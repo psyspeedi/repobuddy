@@ -131,5 +131,7 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
       <slot />
     </main>
     <OnboardingOverlay />
+    <ConfirmDialog />
+    <ToastStack />
   </div>
 </template>

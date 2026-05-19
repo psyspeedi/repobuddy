@@ -61,7 +61,7 @@ async function togglePublic(): Promise<void> {
     })
     await refreshWs()
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'Failed to toggle visibility')
+    useToast().error(err instanceof Error ? err.message : t('workspace.visibilityFailed'))
   }
 }
 
@@ -215,7 +215,7 @@ async function confirmDelete(): Promise<void> {
     )
     await navigateTo('/')
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'Delete failed')
+    useToast().error(err instanceof Error ? err.message : t('workspace.deleteFailed'))
     deleting.value = false
   }
 }
@@ -231,7 +231,7 @@ async function reindex(): Promise<void> {
     progressApi.start()
     await refreshWs()
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'Re-index failed')
+    useToast().error(err instanceof Error ? err.message : t('workspace.reindexFailed'))
   } finally {
     reindexing.value = false
   }

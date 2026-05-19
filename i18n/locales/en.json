@@ -3,6 +3,10 @@
     "name": "CodeGraph",
     "tagline": "AI assistant for understanding codebases via knowledge graphs"
   },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
   "nav": {
     "signOut": "Sign out",
     "signIn": "Sign in",
@@ -100,7 +104,9 @@
       "target": "Target",
       "ip": "IP"
     },
-    "bulkDeleteConfirm": "Delete {n} workspace(s)? This cannot be undone."
+    "bulkDeleteConfirm": "Delete {n} workspace(s)?",
+    "bulkDeleteBody": "This permanently removes the selected workspaces, including their graphs, chunks and chats. Cannot be undone.",
+    "bulkDeleteDone": "Deleted {n} workspace(s)."
   },
   "settings": {
     "title": "Settings",
@@ -120,7 +126,8 @@
     "saved": "Settings saved.",
     "clear": "Remove BYOK",
     "cleared": "BYOK cleared. Server defaults will be used.",
-    "clearConfirm": "Remove your API key from the server?",
+    "clearConfirm": "Remove your BYOK API key?",
+    "clearConfirmBody": "Server defaults will be used after this. You can paste the key again later.",
     "saveFailed": "Failed to save settings."
   },
   "landing": {
@@ -224,6 +231,9 @@
     "backToList": "Workspaces",
     "delete": "Delete",
     "deleteTitle": "Permanently delete this workspace",
+    "deleteFailed": "Failed to delete the workspace.",
+    "reindexFailed": "Failed to queue re-index.",
+    "visibilityFailed": "Failed to change visibility.",
     "deleteConfirmTitle": "Delete workspace?",
     "deleteConfirmBody": "This permanently removes the workspace, its graph, chunks, embeddings, and all chats. To confirm, type the workspace name: {name}",
     "deleteCancel": "Cancel",

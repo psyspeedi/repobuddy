@@ -78,17 +78,28 @@ function toggle(id: string): void {
 
 async function bulkDelete(): Promise<void> {
   if (selected.value.size === 0) return
-  if (!confirm(t('admin.bulkDeleteConfirm', { n: selected.value.size }))) return
-  await ($fetch as unknown as (url: string, init: RequestInit) => Promise<unknown>)(
-    '/api/admin/bulk-delete',
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ids: [...selected.value] }),
-    },
-  )
-  selected.value = new Set()
-  await Promise.all([refreshWs(), refreshOverview()])
+  const ok = await useConfirm().ask({
+    title: t('admin.bulkDeleteConfirm', { n: selected.value.size }),
+    body: t('admin.bulkDeleteBody'),
+    confirmLabel: t('admin.workspaces.bulkDelete', { n: selected.value.size }),
+    destructive: true,
+  })
+  if (!ok) return
+  try {
+    await ($fetch as unknown as (url: string, init: RequestInit) => Promise<unknown>)(
+      '/api/admin/bulk-delete',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: [...selected.value] }),
+      },
+    )
+    useToast().success(t('admin.bulkDeleteDone', { n: selected.value.size }))
+    selected.value = new Set()
+    await Promise.all([refreshWs(), refreshOverview()])
+  } catch (err) {
+    useToast().error(err instanceof Error ? err.message : 'Failed')
+  }
 }
 
 const costRatio = computed(() => {

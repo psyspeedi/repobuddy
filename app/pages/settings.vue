@@ -52,7 +52,13 @@ async function save(): Promise<void> {
 
 async function clearByok(): Promise<void> {
   if (saving.value) return
-  if (!confirm(t('settings.clearConfirm'))) return
+  const ok = await useConfirm().ask({
+    title: t('settings.clearConfirm'),
+    body: t('settings.clearConfirmBody'),
+    confirmLabel: t('settings.clear'),
+    destructive: true,
+  })
+  if (!ok) return
   saving.value = true
   try {
     await $fetch('/api/me/byok', {

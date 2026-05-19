@@ -46,7 +46,7 @@ async function submit(): Promise<void> {
     message.value = ''
     await refresh()
   } catch (err) {
-    alert(err instanceof Error ? err.message : t('interest.failed'))
+    useToast().error(err instanceof Error ? err.message : t('interest.failed'))
   } finally {
     submitting.value = false
   }
