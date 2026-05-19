@@ -22,6 +22,10 @@ export interface ChatMessageData {
   pending?: boolean
   plan?: PlanData
   trace?: TraceEntry[]
+  /** Tokens per second for the most recently completed assistant turn. */
+  tokensPerSec?: number
+  /** Filled with the abort signal when the message is still streaming so the UI can call cancel(). */
+  aborted?: boolean
 }
 
 interface HistoryMessage {
@@ -76,6 +80,10 @@ export function useChat(workspaceId: string) {
   const messages = ref<ChatMessageData[]>([])
   const streaming = ref(false)
   const historyLoaded = ref(false)
+  // Abort handle for the in-flight chat fetch. Set in send(), cleared
+  // when streaming ends. cancel() aborts and lets send() exit cleanly.
+  let activeController: AbortController | null = null
+  let startedAt = 0
 
   async function loadHistory(): Promise<void> {
     try {
@@ -110,10 +118,13 @@ export function useChat(workspaceId: string) {
     ]
     streaming.value = true
 
+    activeController = new AbortController()
+    startedAt = Date.now()
     try {
       const response = await fetch(`/api/chat/${sessionId.value}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        signal: activeController.signal,
         body: JSON.stringify({
           workspaceId,
           question: trimmed,
@@ -142,14 +153,27 @@ export function useChat(workspaceId: string) {
     } catch (err) {
       const last = messages.value.at(-1)
       if (last && last.role === 'assistant') {
-        last.content = `Error: ${err instanceof Error ? err.message : String(err)}`
+        const isAbort =
+          (err instanceof DOMException && err.name === 'AbortError')
+          || (err instanceof Error && err.name === 'AbortError')
+        if (isAbort) {
+          last.aborted = true
+          if (!last.content) last.content = '_(stopped by user)_'
+        } else {
+          last.content = `Error: ${err instanceof Error ? err.message : String(err)}`
+        }
         last.pending = false
       }
     } finally {
       streaming.value = false
+      activeController = null
       const last = messages.value.at(-1)
       if (last) last.pending = false
     }
+  }
+
+  function cancel(): void {
+    if (activeController) activeController.abort()
   }
 
   function handleSseChunk(raw: string): void {
@@ -198,6 +222,14 @@ export function useChat(workspaceId: string) {
       }
     } else if (event === 'done') {
       last.pending = false
+      // Compute tokens/sec from elapsed wall-clock and the totals in the
+      // done payload. Display is fully optional; falls back gracefully.
+      try {
+        const payload = JSON.parse(data) as { inputTokens?: number; outputTokens?: number }
+        const elapsed = Math.max(0.5, (Date.now() - startedAt) / 1000)
+        const total = (payload.outputTokens ?? 0)
+        if (total > 0) last.tokensPerSec = Math.round(total / elapsed)
+      } catch { /* malformed */ }
       // Tell the layout's quota pill to re-fetch /api/me/quota now that
       // the server has recorded this message's tokens.
       quotaBump.value++
@@ -232,6 +264,7 @@ export function useChat(workspaceId: string) {
     historyLoaded,
     switchSession,
     send,
+    cancel,
     loadHistory,
     newSession,
   }

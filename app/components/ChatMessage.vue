@@ -13,6 +13,7 @@ interface Props {
   invalid?: string[]
   citations?: Citation[]
   workspaceId?: string
+  tokensPerSec?: number
 }
 const props = defineProps<Props>()
 const emit = defineEmits<{ (e: 'open-chunk', chunkId: string): void }>()
@@ -101,14 +102,21 @@ function onClick(e: MouseEvent): void {
         {{ role === 'user' ? t('chat.you') : t('chat.assistant') }}
         <span v-if="pending" class="ml-2 animate-pulse text-primary">…</span>
       </span>
-      <NuxtLink
-        v-if="graphHighlightUrl"
-        :to="graphHighlightUrl"
-        class="rounded bg-accent/40 px-2 py-0.5 text-[10px] normal-case tracking-normal hover:bg-accent"
-        :title="t('chat.showOnGraphTitle')"
-      >
-        {{ t('chat.showOnGraph') }}
-      </NuxtLink>
+      <span class="flex items-center gap-2">
+        <span
+          v-if="role === 'assistant' && tokensPerSec && tokensPerSec > 0"
+          class="text-[10px] tabular-nums text-muted-foreground"
+          :title="t('chat.tokensPerSecTitle')"
+        >{{ tokensPerSec }} {{ t('chat.tokensPerSec') }}</span>
+        <NuxtLink
+          v-if="graphHighlightUrl"
+          :to="graphHighlightUrl"
+          class="rounded bg-accent/40 px-2 py-0.5 text-[10px] normal-case tracking-normal hover:bg-accent"
+          :title="t('chat.showOnGraphTitle')"
+        >
+          {{ t('chat.showOnGraph') }}
+        </NuxtLink>
+      </span>
     </div>
     <div class="cg-prose text-sm leading-relaxed" v-html="html" @click="onClick" />
   </div>

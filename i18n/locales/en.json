@@ -171,6 +171,14 @@
     "askPlaceholder": "Ask about the repo…",
     "send": "Send",
     "askPrompt": "Ask anything about this repository.",
+    "stop": "Stop",
+    "suggest": {
+      "q1": "What is this project about?",
+      "q2": "What functions and classes are in this project?",
+      "q3": "Show me the main entry points",
+      "q4": "Where is error handling implemented?",
+      "q5": "Walk me through the recent commits"
+    },
     "backToList": "Workspaces",
     "delete": "Delete",
     "deleteTitle": "Permanently delete this workspace",
@@ -189,6 +197,8 @@
     "assistant": "CodeGraph",
     "showOnGraph": "Show on graph",
     "showOnGraphTitle": "Open the graph with the cited entities highlighted",
+    "tokensPerSec": "t/s",
+    "tokensPerSecTitle": "Output tokens per second for this turn",
     "chats": "Chats",
     "newChat": "+ New",
     "noChats": "No saved chats yet.",

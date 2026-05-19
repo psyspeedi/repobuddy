@@ -132,6 +132,21 @@ async function deleteSession(id: string): Promise<void> {
   }
 }
 
+// Suggested questions — surfaced when the chat is empty. The list is
+// localised; keep it short (5 items) so the page doesn't feel like a
+// menu. Guest-friendly: nothing here requires an account.
+const suggestedQuestions = computed(() => [
+  t('workspace.suggest.q1'),
+  t('workspace.suggest.q2'),
+  t('workspace.suggest.q3'),
+  t('workspace.suggest.q4'),
+  t('workspace.suggest.q5'),
+])
+function usePrompt(q: string): void {
+  inputText.value = q
+  void submit()
+}
+
 // Delete flow — typed-confirmation modal.
 const deleteOpen = ref(false)
 const deleteName = ref('')
@@ -360,9 +375,24 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
       />
       <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card min-h-0">
         <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4 min-h-0">
-          <p v-if="chat.messages.value.length === 0" class="text-center text-sm text-muted-foreground">
-            {{ t('workspace.askPrompt') }}
-          </p>
+          <div v-if="chat.messages.value.length === 0" class="space-y-4">
+            <p class="text-center text-sm text-muted-foreground">
+              {{ t('workspace.askPrompt') }}
+            </p>
+            <!-- Suggested questions — lowers the barrier for first-time
+                 visitors (especially guests on public workspaces). -->
+            <div class="mx-auto flex max-w-2xl flex-wrap justify-center gap-2">
+              <button
+                v-for="(q, i) in suggestedQuestions"
+                :key="i"
+                type="button"
+                class="rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-primary transition hover:bg-primary/15"
+                @click="usePrompt(q)"
+              >
+                {{ q }}
+              </button>
+            </div>
+          </div>
           <ChatMessage
             v-for="(msg, i) in chat.messages.value"
             :key="i"
@@ -371,6 +401,7 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             :pending="msg.pending"
             :invalid="msg.invalid"
             :citations="msg.citations"
+            :tokens-per-sec="msg.tokensPerSec"
             :workspace-id="workspaceId"
             @open-chunk="onOpenChunk"
           />
@@ -386,7 +417,16 @@ useHead(() => ({ title: `${wsData.value?.workspace.name ?? 'Workspace'} — Code
             class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             :disabled="chat.streaming.value"
           >
-          <Button type="submit" :disabled="chat.streaming.value || !inputText.trim()">
+          <Button
+            v-if="chat.streaming.value"
+            type="button"
+            variant="outline"
+            class="border-destructive/40 text-destructive hover:bg-destructive/10"
+            @click="chat.cancel"
+          >
+            {{ t('workspace.stop') }}
+          </Button>
+          <Button v-else type="submit" :disabled="!inputText.trim()">
             {{ t('workspace.send') }}
           </Button>
         </form>
