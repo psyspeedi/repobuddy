@@ -20,7 +20,9 @@ import {
   recordTokenUsage,
   type QuotaContext,
 } from '../../lib/quotas'
-import { recordCost } from '../../lib/cost-log'
+import { recordCost, assertWithinDailyBudget } from '../../lib/cost-log'
+import { rateLimitTake } from '../../lib/rate-limit'
+import { getClientIp } from '../../lib/audit'
 import { chatLatency, chatRequests } from '../../lib/metrics'
 import { users } from '../../db/schema'
 import { getLogger } from '../../lib/logger'
@@ -62,6 +64,23 @@ export default defineEventHandler(async (event) => {
     quotaCtx = { kind: 'user', id: uid, bypass: isAdminLogin(u?.githubLogin) }
   }
   await assertCanSendMessage(quotaCtx)
+  // Service-wide daily LLM budget. Admins / BYOK users skip it.
+  await assertWithinDailyBudget({ bypass: quotaCtx.bypass })
+
+  // Per-IP rate limit for guests only — defense against cookie-rotating
+  // scrapers. 30 requests / hour per IP. Authenticated users already
+  // ride the per-user quota gate above.
+  if (isGuest) {
+    const ip = getClientIp(event) ?? 'unknown'
+    const result = await rateLimitTake(`cg:rl:chat:ip:${ip}`, 30, 60 * 60)
+    if (!result.ok) {
+      setHeader(event, 'Retry-After', result.retryAfterSec)
+      throw createError({
+        statusCode: 429,
+        statusMessage: `Too many requests from this IP. Try again in ${Math.ceil(result.retryAfterSec / 60)} minute(s).`,
+      })
+    }
+  }
 
   // For owners/admins we persist the session + messages so /api/chat/sessions
   // can show the history. For guests we skip persistence entirely — keeps
