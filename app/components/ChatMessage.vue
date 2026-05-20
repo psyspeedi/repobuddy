@@ -23,15 +23,6 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 
-const entityCitations = computed(() =>
-  (props.citations ?? []).filter((c) => c.kind === 'entity'),
-)
-const graphHighlightUrl = computed(() => {
-  if (!props.workspaceId || entityCitations.value.length === 0) return null
-  const ids = entityCitations.value.map((c) => c.id).join(',')
-  return `/w/${props.workspaceId}/graph?highlight=${encodeURIComponent(ids)}`
-})
-
 const html = computed(() => {
   if (props.role === 'user') {
     return escapeHtml(props.content)
@@ -71,6 +62,68 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
 }
+
+const messageRoot = ref<HTMLDivElement | null>(null)
+let mermaidPromise: Promise<typeof import('mermaid').default> | null = null
+let mermaidCounter = 0
+
+async function loadMermaid(): Promise<typeof import('mermaid').default> {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((mod) => {
+      const m = mod.default
+      m.initialize({
+        startOnLoad: false,
+        theme: 'neutral',
+        securityLevel: 'strict',
+        fontFamily: 'Nunito, ui-sans-serif, system-ui, sans-serif',
+      })
+      return m
+    })
+  }
+  return mermaidPromise
+}
+
+async function renderMermaidBlocks(): Promise<void> {
+  if (props.pending) return
+  const root = messageRoot.value
+  if (!root) return
+  const blocks = root.querySelectorAll<HTMLElement>('pre code.language-mermaid')
+  if (blocks.length === 0) return
+  const mermaid = await loadMermaid()
+  for (const codeEl of Array.from(blocks)) {
+    const pre = codeEl.closest('pre')
+    if (!pre) continue
+    if (pre.dataset.mermaidRendered === '1') continue
+    const source = codeEl.textContent ?? ''
+    if (!source.trim()) continue
+    try {
+      const { svg } = await mermaid.render(`mmd-${++mermaidCounter}`, source)
+      // mermaid output is generated, but still feed it through DOMPurify
+      // (svg profile) since the source text came from an LLM — we never
+      // want untrusted text to escape into raw DOM.
+      const cleanSvg = DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+      }) as unknown as string
+      const wrapper = document.createElement('div')
+      wrapper.className = 'cg-mermaid'
+      wrapper.innerHTML = cleanSvg
+      wrapper.dataset.mermaidRendered = '1'
+      pre.replaceWith(wrapper)
+    } catch (err) {
+      pre.dataset.mermaidRendered = 'error'
+      const note = document.createElement('p')
+      note.className = 'text-[10px] text-destructive mt-1'
+      note.textContent = err instanceof Error ? `Mermaid: ${err.message}` : 'Mermaid render failed'
+      pre.after(note)
+    }
+  }
+}
+
+watch(
+  () => [props.content, props.pending] as const,
+  () => void nextTick(() => renderMermaidBlocks()),
+  { immediate: true },
+)
 
 // Copy raw markdown — useful when the user wants to paste a finding
 // into an issue / PR. Citation markers stay as-is; downstream renderer
@@ -137,17 +190,9 @@ function onClick(e: MouseEvent): void {
           <Copy v-else class="h-3 w-3" />
           {{ copied ? t('chat.copied') : t('chat.copy') }}
         </button>
-        <NuxtLink
-          v-if="graphHighlightUrl"
-          :to="graphHighlightUrl"
-          class="rounded bg-accent/40 px-2 py-0.5 text-[10px] normal-case tracking-normal hover:bg-accent"
-          :title="t('chat.showOnGraphTitle')"
-        >
-          {{ t('chat.showOnGraph') }}
-        </NuxtLink>
       </span>
     </div>
-    <div class="cg-prose text-sm leading-relaxed" v-html="html" @click="onClick" />
+    <div ref="messageRoot" class="cg-prose text-sm leading-relaxed" v-html="html" @click="onClick" />
   </div>
 </template>
 
@@ -202,5 +247,17 @@ function onClick(e: MouseEvent): void {
 .cg-prose a.cg-cite[data-invalid="true"] {
   background: hsl(var(--destructive) / 0.15);
   color: hsl(var(--destructive));
+}
+.cg-mermaid {
+  overflow-x: auto;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+}
+.cg-mermaid svg {
+  max-width: 100%;
+  height: auto;
 }
 </style>

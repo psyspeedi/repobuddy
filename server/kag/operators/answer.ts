@@ -45,6 +45,13 @@ export interface AnswerParams {
   workspace?: AnswerWorkspaceMeta
   /** UI locale — instruct the model to reply in this language. */
   responseLocale?: 'en' | 'ru'
+  /**
+   * Mermaid diagrams built by upstream operators (walkthrough). The
+   * user prompt asks the model to include them verbatim in the answer
+   * — the ChatMessage component then lazy-loads mermaid and renders
+   * each block on the client.
+   */
+  mermaidDiagrams?: string[]
 }
 
 export interface AnswerStreamChunk {
@@ -143,6 +150,21 @@ function renderUserMessage(params: AnswerParams): string {
       lines.push(c.text.slice(0, 3000))
       lines.push('```')
       lines.push('')
+    }
+  }
+
+  if (params.mermaidDiagrams && params.mermaidDiagrams.length > 0) {
+    lines.push('')
+    lines.push('## Sequence diagram')
+    lines.push(
+      'Include the following mermaid diagram verbatim in your answer'
+      + ' inside a triple-backtick fence with `mermaid` as the language tag.'
+      + ' The UI renders it as an interactive diagram next to your prose.',
+    )
+    for (const block of params.mermaidDiagrams) {
+      lines.push('```mermaid')
+      lines.push(block)
+      lines.push('```')
     }
   }
 

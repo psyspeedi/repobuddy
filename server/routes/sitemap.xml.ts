@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   for (const r of rows) {
     const lastmod = (r.lastIndexedAt ?? r.updatedAt).toISOString().slice(0, 10)
     urls.push(`<url><loc>${appUrl}/w/${r.id}</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>`)
-    urls.push(`<url><loc>${appUrl}/w/${r.id}/graph</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.4</priority></url>`)
+    urls.push(`<url><loc>${appUrl}/w/${r.id}/explore</loc><lastmod>${lastmod}</lastmod><changefreq>weekly</changefreq><priority>0.4</priority></url>`)
   }
 
   setResponseHeader(event, 'content-type', 'application/xml; charset=utf-8')

@@ -39,15 +39,15 @@
   "onboarding": {
     "s1": {
       "title": "Ask anything — get cited answers",
-      "body": "Type a question. Every claim in the answer carries a clickable citation (↗ opens the source, ◆ jumps to the graph)."
+      "body": "Type a question. Every claim in the answer carries a clickable citation (↗ opens the source, ◆ opens the entity's neighbour graph)."
     },
     "s2": {
       "title": "Reasoning is transparent",
       "body": "The Reasoning panel on the right shows the plan the AI ran — find_symbol → get_callers → answer. Click a step to inspect its result."
     },
     "s3": {
-      "title": "Explore the graph",
-      "body": "View Graph (top right) opens the knowledge graph. Filter by type, switch presets (Code / Git / Semantic), and entities cited in chat highlight automatically."
+      "title": "Explore the codebase",
+      "body": "Explore (top right) opens a treemap of every file, sized by LOC and coloured by hotness or coverage. Click a tile to dive into that file's neighbour graph."
     },
     "skip": "Skip",
     "next": "Next",
@@ -254,8 +254,6 @@
   "chat": {
     "you": "You",
     "assistant": "RepoBuddy",
-    "showOnGraph": "Show on graph",
-    "showOnGraphTitle": "Open the graph with the cited entities highlighted",
     "tokensPerSec": "t/s",
     "tokensPerSecTitle": "Output tokens per second for this turn",
     "copy": "Copy",
@@ -270,7 +268,7 @@
     "citation": {
       "invalid": "invalid citation",
       "openChunk": "open source chunk",
-      "showOnGraph": "show entity on graph"
+      "showOnGraph": "open neighbour graph for entity"
     },
     "panels": {
       "reasoning": "Reasoning",
@@ -309,6 +307,7 @@
     "topAuthors": "Top contributors"
   },
   "graph": {
+    "redirecting": "Opening the new explore view…",
     "backToChat": "← Back to chat",
     "view": "Graph view",
     "presets": "View",

@@ -574,34 +574,105 @@ export interface WalkthroughParams {
   limit?: number
 }
 
+export interface WalkthroughResult {
+  /**
+   * Flat de-duped list of every entity touched by the walkthrough
+   * (target + callees + tests + parents). Kept as a top-level field
+   * so answer's context.flat(2) loop still sees them as entities
+   * after a passing flatten.
+   */
+  entities: GraphEntity[]
+  /**
+   * Mermaid sequence diagram in source form. The answer operator
+   * inlines it into the user prompt with an instruction for the model
+   * to include the fenced block verbatim. The ChatMessage component
+   * lazy-loads mermaid to render it on the client.
+   */
+  mermaid: string
+}
+
+function sanitiseMermaidLabel(s: string): string {
+  // Mermaid actor / participant names can't contain spaces or quotes
+  // without aliasing — and aliasing every label noise-bloats the
+  // diagram. Strip everything that isn't alphanumeric/underscore.
+  return s.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 48) || 'unknown'
+}
+
+function buildMermaidSequence(
+  target: GraphEntity,
+  callees: GraphEntity[],
+  tests: GraphEntity[],
+): string {
+  const lines: string[] = ['sequenceDiagram']
+  const root = sanitiseMermaidLabel(target.name)
+  lines.push(`    participant Caller`)
+  lines.push(`    participant ${root}`)
+  lines.push(`    Caller->>+${root}: invoke`)
+  for (const c of callees.slice(0, 8)) {
+    const label = sanitiseMermaidLabel(c.name)
+    lines.push(`    ${root}->>+${label}: ${c.type === 'function' ? 'call' : 'use'}`)
+    lines.push(`    ${label}-->>-${root}: ok`)
+  }
+  lines.push(`    ${root}-->>-Caller: return`)
+  for (const t of tests.slice(0, 4)) {
+    const label = sanitiseMermaidLabel(t.name)
+    lines.push(`    Note over ${root}: covered by ${label}`)
+  }
+  return lines.join('\n')
+}
+
 export async function walkthrough(
   params: WalkthroughParams,
   ctx: OperatorContext,
-): Promise<GraphEntity[]> {
+): Promise<WalkthroughResult> {
   const list = Array.isArray(params.entity) ? params.entity : [params.entity]
   const targets = list.filter((e): e is GraphEntity => Boolean(e?.id))
-  if (targets.length === 0) return []
+  if (targets.length === 0) return { entities: [], mermaid: '' }
   const limit = params.limit ?? 20
 
   const seen = new Set<string>()
-  const out: GraphEntity[] = []
+  const entities: GraphEntity[] = []
   const pushUnique = (e: GraphEntity | undefined): void => {
     if (!e?.id || seen.has(e.id)) return
     seen.add(e.id)
-    out.push(e)
+    entities.push(e)
   }
-  for (const target of targets) {
-    pushUnique(target)
+  // Build the diagram around the FIRST target. Multiple targets is
+  // an edge case (planner usually find_symbol's a single name) — for
+  // those we render one diagram and treat the rest as entity context.
+  const primary = targets[0]
+  if (!primary) return { entities: [], mermaid: '' }
+
+  const [primaryCallees, primaryTests] = await Promise.all([
+    traverse(ctx, [primary.id], 'calls', 'out', { limit }),
+    traverse(ctx, [primary.id], 'tested_by', 'out', { limit }),
+  ])
+  pushUnique(primary)
+  for (const e of primaryCallees) pushUnique(e)
+  for (const e of primaryTests) pushUnique(e)
+  const [primaryParents] = await Promise.all([
+    traverse(ctx, [primary.id], 'contained_in', 'out', { limit: 3 }),
+  ])
+  for (const e of primaryParents) pushUnique(e)
+
+  // Pull supporting graph for any other targets without rebuilding
+  // their own diagrams — entities still go into context.
+  for (const t of targets.slice(1)) {
+    pushUnique(t)
     const [callees, tests, parents] = await Promise.all([
-      traverse(ctx, [target.id], 'calls', 'out', { limit }),
-      traverse(ctx, [target.id], 'tested_by', 'out', { limit }),
-      traverse(ctx, [target.id], 'contained_in', 'out', { limit: 3 }),
+      traverse(ctx, [t.id], 'calls', 'out', { limit }),
+      traverse(ctx, [t.id], 'tested_by', 'out', { limit }),
+      traverse(ctx, [t.id], 'contained_in', 'out', { limit: 3 }),
     ])
     for (const e of callees) pushUnique(e)
     for (const e of tests) pushUnique(e)
     for (const e of parents) pushUnique(e)
   }
-  return out
+
+  return {
+    entities,
+    mermaid: buildMermaidSequence(primary, primaryCallees, primaryTests),
+  }
 }
 
 // ---------- answer wrapper for plan executor ----------
@@ -630,6 +701,9 @@ export async function* answerOp(
 
   const seenEntityIds = new Set<string>()
   const seenChunkIds = new Set<string>()
+  // Mermaid blocks contributed by walkthrough operator runs. Inlined
+  // into the user prompt with an instruction to include them verbatim.
+  const mermaidBlocks: string[] = []
 
   // 1a) Pinned entities from the user's [entity:UUID] citations always go
   //     in first — they're the most likely thing the user wants summarised.
@@ -662,6 +736,34 @@ export async function* answerOp(
   for (const item of params.context.flat(2)) {
     if (!item || typeof item !== 'object') continue
     const obj = item as Record<string, unknown>
+    // Walkthrough envelope { entities, mermaid }: unwrap entities and
+    // collect the mermaid block for later prompt injection. Skip the
+    // chunk/entity detection below for this object — it's a container,
+    // not a leaf.
+    if (Array.isArray(obj.entities) && typeof obj.mermaid === 'string') {
+      if (obj.mermaid.trim().length > 0) mermaidBlocks.push(obj.mermaid)
+      for (const inner of obj.entities) {
+        if (!inner || typeof inner !== 'object') continue
+        const e = inner as Record<string, unknown>
+        if (typeof e.name !== 'string' || typeof e.id !== 'string') continue
+        if (seenEntityIds.has(e.id as string)) continue
+        seenEntityIds.add(e.id as string)
+        entitiesContext.push({
+          id: e.id as string,
+          name: e.name as string,
+          type: (e.type as string | undefined) ?? 'entity',
+          description: (e.description as string | null | undefined) ?? null,
+          qualifiedName: (e.qualifiedName as string | null | undefined) ?? null,
+          metadata: (e.metadata as Record<string, unknown> | null | undefined) ?? null,
+          filePath: (e.filePath as string | null | undefined) ?? null,
+          startLine: (e.startLine as number | null | undefined) ?? null,
+          endLine: (e.endLine as number | null | undefined) ?? null,
+          language: (e.language as string | null | undefined) ?? null,
+          signature: (e.signature as string | null | undefined) ?? null,
+        })
+      }
+      continue
+    }
     // Chunks come back with either `id` (search_docs, vector_search_chunks,
     // retrieve_code_chunks) or `chunkId` (hybrid_search) — accept both.
     const chunkId =
@@ -732,6 +834,7 @@ export async function* answerOp(
     style: params.style,
     workspace: ctx.workspace,
     responseLocale: ctx.responseLocale,
+    mermaidDiagrams: mermaidBlocks,
   })) {
     yield evt
   }
