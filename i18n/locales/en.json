@@ -213,6 +213,9 @@
   "workspace": {
     "viewGraph": "View graph",
     "explore": "Explore",
+    "tour": "Tour",
+    "tourHint": "Open the contributor's tour — entrypoints, core abstractions, good first issue zones",
+    "askWalkthrough": "Walk me through {name} step by step",
     "reindex": "Re-index",
     "reindexing": "Queuing…",
     "reindexHint": "Re-run indexing on the latest commit (picks up new diffs, files, annotations)",
@@ -338,6 +341,66 @@
       "hotness": "{n} commits / 90d",
       "tested": "tested",
       "untested": "no tests"
+    }
+  },
+  "onboardingPanel": {
+    "title": "Start contributing here",
+    "subtitle": "First time in this repo? Here's a contributor's-eye view — what runs, what matters, and where a safe first PR could land.",
+    "loading": "Building the tour…",
+    "error": "Couldn't build the tour. The workspace may still be indexing.",
+    "close": "Close",
+    "dismiss": "Skip for now",
+    "footer": "You can reopen this anytime via the Tour button.",
+    "kind": {
+      "main": "main",
+      "cli": "cli",
+      "http_route": "route",
+      "python_main": "python -m",
+      "readme_quickstart": "readme"
+    },
+    "entrypoints": {
+      "title": "Entrypoints",
+      "hint": "Where execution starts. Click Walkthrough to have the assistant explain one step by step.",
+      "walkthrough": "Walkthrough",
+      "empty": "No obvious entrypoints detected — try the chat with “show me the main entry”."
+    },
+    "abstractions": {
+      "title": "Core abstractions",
+      "hint": "The classes, functions and types the rest of the codebase leans on. Click to explore neighbours.",
+      "empty": "Not enough graph signal yet — let indexing finish or re-index."
+    },
+    "firstIssue": {
+      "title": "Safe first-PR zones",
+      "hint": "Files that are small, stable and covered by tests — usually safe to touch first. Pick one, ask the assistant what's inside.",
+      "open": "Open",
+      "ask": "Ask",
+      "empty": "No clearly safe zones found. Pick any small file and ask the assistant about it."
+    },
+    "firstIssueAsk": "Explain what {path} does and what a first contributor could realistically improve there.",
+    "issueAsk": "I'd like to work on issue #{number} — {title}. Where in the code should I start and what do I need to read first?",
+    "setup": {
+      "title": "How to run it locally",
+      "hint": "The fastest path from clone to running. Detected from package.json, Makefile, Dockerfile and the README.",
+      "loading": "Detecting setup commands…",
+      "empty": "Couldn't detect a deterministic setup. Check the README directly.",
+      "copy": "Copy command",
+      "readme": "Show README excerpt"
+    },
+    "issues": {
+      "title": "Open issues to pick up",
+      "hint": "Issues tagged good-first-issue, help-wanted or documentation, ranked by how much code they likely touch.",
+      "loading": "Fetching from GitHub…",
+      "empty": "No matching issues right now. The repo may not use these labels.",
+      "rateLimited": "GitHub rate-limit hit (60 req/h anonymous). Try again later.",
+      "notGithub": "This workspace isn't backed by a GitHub repo.",
+      "notFound": "Repo not found on GitHub (private or moved).",
+      "error": "Couldn't fetch issues from GitHub.",
+      "ask": "Ask",
+      "difficulty": {
+        "easy": "easy",
+        "medium": "medium",
+        "hard": "hard"
+      }
     }
   },
   "neighbours": {

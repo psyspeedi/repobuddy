@@ -225,6 +225,34 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
+// Welcome overlay — shown automatically the first time a user lands on
+// a ready workspace, then on demand via the "Tour" button. The seen
+// flag is per-(workspace, browser) and is read synchronously on mount
+// to avoid the modal flashing in after the page is interactive.
+const showOnboarding = ref(false)
+const ONBOARDING_KEY = `cg-onb-seen-${workspaceId}`
+function openOnboarding(): void {
+  showOnboarding.value = true
+}
+function closeOnboarding(): void {
+  showOnboarding.value = false
+  try { localStorage.setItem(ONBOARDING_KEY, '1') } catch { /* private mode */ }
+}
+function onOnboardWalkthrough(payload: { entityId: string; name: string }): void {
+  inputText.value = t('workspace.askWalkthrough', { name: payload.name })
+  void submit()
+}
+function onOnboardAsk(question: string): void {
+  inputText.value = question
+  void submit()
+}
+watch(isReady, (ready) => {
+  if (!ready) return
+  let seen = '1'
+  try { seen = localStorage.getItem(ONBOARDING_KEY) ?? '' } catch { /* private mode */ }
+  if (!seen) showOnboarding.value = true
+}, { immediate: true })
+
 const reindexing = ref(false)
 async function reindex(): Promise<void> {
   if (reindexing.value) return
@@ -377,14 +405,18 @@ useHead(() => {
           >
             {{ reindexing ? t('workspace.reindexing') : t('workspace.reindex') }}
           </Button>
+          <Button
+            v-if="isReady"
+            variant="outline"
+            size="sm"
+            :title="t('workspace.tourHint')"
+            @click="openOnboarding"
+          >
+            {{ t('workspace.tour') }}
+          </Button>
           <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/explore`">
             <Button variant="outline" size="sm">
               {{ t('workspace.explore') }}
-            </Button>
-          </NuxtLink>
-          <NuxtLink v-if="isReady" :to="`/w/${workspaceId}/graph`">
-            <Button variant="outline" size="sm">
-              {{ t('workspace.viewGraph') }}
             </Button>
           </NuxtLink>
           <Button
@@ -400,6 +432,15 @@ useHead(() => {
         </div>
       </div>
     </header>
+
+    <WorkspaceOnboarding
+      v-if="showOnboarding"
+      :workspace-id="workspaceId"
+      @close="closeOnboarding"
+      @walkthrough="onOnboardWalkthrough"
+      @open-entity="openNeighbours"
+      @ask="onOnboardAsk"
+    />
 
     <!-- Delete confirmation modal -->
     <div
