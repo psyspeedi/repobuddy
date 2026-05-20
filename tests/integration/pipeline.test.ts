@@ -50,7 +50,7 @@ let events: QueueEvents
 const tempRepos: string[] = []
 
 async function makeTempGitRepo(fixture: string): Promise<string> {
-  const workdir = await mkdtemp(join(tmpdir(), 'codegraph-pipeline-'))
+  const workdir = await mkdtemp(join(tmpdir(), 'repobuddy-pipeline-'))
   await cp(fixture, workdir, { recursive: true })
   const git = simpleGit({ baseDir: workdir })
   await git.init()

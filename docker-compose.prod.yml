@@ -1,7 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: codegraph-postgres
+    container_name: repobuddy-postgres
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?required}
@@ -20,7 +20,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: codegraph-redis
+    container_name: repobuddy-redis
     restart: always
     command: redis-server --save 60 1 --loglevel warning
     volumes:
@@ -31,7 +31,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
       target: runner
-    container_name: codegraph-app
+    container_name: repobuddy-app
     restart: always
     environment:
       PROCESS_ROLE: web
@@ -55,7 +55,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
       target: runner
-    container_name: codegraph-worker
+    container_name: repobuddy-worker
     restart: always
     environment:
       PROCESS_ROLE: worker
@@ -72,7 +72,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    container_name: codegraph-caddy
+    container_name: repobuddy-caddy
     restart: always
     ports:
       - "80:80"

@@ -22,7 +22,7 @@ export interface FetchedSource {
 }
 
 export async function fetchGitHub(url: string): Promise<FetchedSource> {
-  const workdir = await mkdtemp(join(tmpdir(), 'codegraph-clone-'))
+  const workdir = await mkdtemp(join(tmpdir(), 'repobuddy-clone-'))
   log.info({ url, workdir }, 'cloning github repo')
 
   const git = simpleGit({ baseDir: workdir })
@@ -48,7 +48,7 @@ export async function fetchGitHub(url: string): Promise<FetchedSource> {
 export async function extractZip(
   zipPath: string,
 ): Promise<FetchedSource> {
-  const workdir = await mkdtemp(join(tmpdir(), 'codegraph-zip-'))
+  const workdir = await mkdtemp(join(tmpdir(), 'repobuddy-zip-'))
   await mkdir(workdir, { recursive: true })
 
   await new Promise<void>((resolve, reject) => {

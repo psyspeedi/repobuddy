@@ -35,7 +35,7 @@ interface HistoryMessage {
   trace?: unknown
 }
 
-const STORAGE_PREFIX = 'codegraph:session:'
+const STORAGE_PREFIX = 'repobuddy:session:'
 
 function readPersistedSession(workspaceId: string): string | null {
   if (typeof window === 'undefined') return null

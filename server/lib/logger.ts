@@ -15,7 +15,7 @@ const isDev = process.env.NODE_ENV !== 'production'
 
 const baseLogger: Logger = pino({
   level: process.env.LOG_LEVEL ?? 'info',
-  base: { service: 'codegraph', role: process.env.PROCESS_ROLE ?? 'web' },
+  base: { service: 'repobuddy', role: process.env.PROCESS_ROLE ?? 'web' },
   timestamp: pino.stdTimeFunctions.isoTime,
   mixin() {
     const ctx = traceStorage.getStore()

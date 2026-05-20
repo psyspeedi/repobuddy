@@ -8,7 +8,7 @@ import { extractGitHistory } from '../../server/indexer/git/history'
 let workdir: string
 
 beforeAll(async () => {
-  workdir = await mkdtemp(join(tmpdir(), 'codegraph-test-git-'))
+  workdir = await mkdtemp(join(tmpdir(), 'repobuddy-test-git-'))
   const git = simpleGit({ baseDir: workdir })
   await git.init()
   await git.addConfig('user.email', 'test@example.com')
@@ -62,7 +62,7 @@ describe('extractGitHistory', () => {
   })
 
   it('returns empty result for non-repo directory', async () => {
-    const tmp = await mkdtemp(join(tmpdir(), 'codegraph-test-notgit-'))
+    const tmp = await mkdtemp(join(tmpdir(), 'repobuddy-test-notgit-'))
     try {
       const hist = await extractGitHistory(tmp)
       expect(hist.commits).toEqual([])

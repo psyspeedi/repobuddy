@@ -2,7 +2,7 @@
 apiVersion: 1
 
 providers:
-  - name: codegraph
+  - name: repobuddy
     orgId: 1
     folder: RepoBuddy
     type: file

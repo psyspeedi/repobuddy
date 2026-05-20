@@ -21,7 +21,7 @@ import { getDb } from '../db/client'
 import { users, workspaces, type Workspace } from '../db/schema'
 import { isAdminLogin } from './admin'
 
-const GUEST_COOKIE = 'codegraph-guest'
+const GUEST_COOKIE = 'repobuddy-guest'
 
 export interface ReadAccessOk {
   workspace: Workspace

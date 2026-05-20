@@ -1,11 +1,11 @@
 {
   "title": "RepoBuddy — KAG performance",
-  "uid": "codegraph-performance",
+  "uid": "repobuddy-performance",
   "schemaVersion": 39,
   "timezone": "browser",
   "refresh": "30s",
   "time": { "from": "now-3h", "to": "now" },
-  "tags": ["codegraph", "performance"],
+  "tags": ["repobuddy", "performance"],
   "panels": [
     {
       "id": 1,
@@ -15,7 +15,7 @@
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum by (op) (rate(codegraph_kag_operator_runs_total[5m]))",
+          "expr": "sum by (op) (rate(repobuddy_kag_operator_runs_total[5m]))",
           "legendFormat": "{{op}}",
           "refId": "A"
         }
@@ -29,7 +29,7 @@
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum by (op) (rate(codegraph_kag_operator_runs_total{outcome=\"error\"}[5m]))",
+          "expr": "sum by (op) (rate(repobuddy_kag_operator_runs_total{outcome=\"error\"}[5m]))",
           "legendFormat": "{{op}}",
           "refId": "A"
         }
@@ -44,7 +44,7 @@
       "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (op, le) (rate(codegraph_kag_operator_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (op, le) (rate(repobuddy_kag_operator_latency_seconds_bucket[5m])))",
           "legendFormat": "{{op}}",
           "refId": "A"
         }
@@ -58,7 +58,7 @@
       "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (op, le) (rate(codegraph_kag_operator_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (op, le) (rate(repobuddy_kag_operator_latency_seconds_bucket[5m])))",
           "legendFormat": "{{op}}",
           "refId": "A"
         }
@@ -72,7 +72,7 @@
       "gridPos": { "x": 0, "y": 16, "w": 12, "h": 6 },
       "targets": [
         {
-          "expr": "sort_desc(sum by (op) (rate(codegraph_kag_operator_latency_seconds_sum[1h])) / sum by (op) (rate(codegraph_kag_operator_latency_seconds_count[1h])))",
+          "expr": "sort_desc(sum by (op) (rate(repobuddy_kag_operator_latency_seconds_sum[1h])) / sum by (op) (rate(repobuddy_kag_operator_latency_seconds_count[1h])))",
           "legendFormat": "{{op}}",
           "refId": "A"
         }
@@ -87,12 +87,12 @@
       "gridPos": { "x": 12, "y": 16, "w": 12, "h": 6 },
       "targets": [
         {
-          "expr": "sum(rate(codegraph_planner_failures_total[5m]))",
+          "expr": "sum(rate(repobuddy_planner_failures_total[5m]))",
           "legendFormat": "planner fallback",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(codegraph_chat_requests_total{status=\"ok\"}[5m]))",
+          "expr": "sum(rate(repobuddy_chat_requests_total{status=\"ok\"}[5m]))",
           "legendFormat": "chat ok",
           "refId": "B"
         }

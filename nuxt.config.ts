@@ -37,7 +37,7 @@ export default defineNuxtConfig({
     strategy: 'no_prefix',
     detectBrowserLanguage: {
       useCookie: true,
-      cookieKey: 'codegraph-i18n',
+      cookieKey: 'repobuddy-i18n',
       redirectOn: 'root',
     },
   },
@@ -169,7 +169,7 @@ export default defineNuxtConfig({
     // nuxt-auth-utils wires session and OAuth from these keys
     session: {
       password: process.env.NUXT_SESSION_PASSWORD ?? '',
-      name: 'codegraph-session',
+      name: 'repobuddy-session',
       cookie: {
         sameSite: 'lax',
       },

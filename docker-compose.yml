@@ -1,26 +1,26 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: codegraph-postgres
+    container_name: repobuddy-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-codegraph}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codegraph}
-      POSTGRES_DB: ${POSTGRES_DB:-codegraph}
+      POSTGRES_USER: ${POSTGRES_USER:-repobuddy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-repobuddy}
+      POSTGRES_DB: ${POSTGRES_DB:-repobuddy}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codegraph}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-repobuddy}"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: codegraph-redis
+    container_name: repobuddy-redis
     restart: unless-stopped
     command: redis-server --save 60 1 --loglevel warning
     ports:
@@ -39,7 +39,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.55.0
-    container_name: codegraph-prometheus
+    container_name: repobuddy-prometheus
     restart: unless-stopped
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -54,7 +54,7 @@ services:
 
   loki:
     image: grafana/loki:3.2.0
-    container_name: codegraph-loki
+    container_name: repobuddy-loki
     restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
@@ -65,7 +65,7 @@ services:
 
   promtail:
     image: grafana/promtail:3.2.0
-    container_name: codegraph-promtail
+    container_name: repobuddy-promtail
     restart: unless-stopped
     command: -config.file=/etc/promtail/promtail-config.yaml
     volumes:
@@ -76,7 +76,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.3.0
-    container_name: codegraph-grafana
+    container_name: repobuddy-grafana
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}

@@ -8,10 +8,10 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_DIR=${BACKUP_DIR:-/backups}
 mkdir -p "$BACKUP_DIR"
 
-OUT="$BACKUP_DIR/codegraph-${TIMESTAMP}.sql.gz"
+OUT="$BACKUP_DIR/repobuddy-${TIMESTAMP}.sql.gz"
 echo "[backup] writing $OUT"
-pg_dump -U "${POSTGRES_USER:-codegraph}" "${POSTGRES_DB:-codegraph}" | gzip > "$OUT"
+pg_dump -U "${POSTGRES_USER:-repobuddy}" "${POSTGRES_DB:-repobuddy}" | gzip > "$OUT"
 
 # Keep the 14 most recent backups.
-ls -1t "$BACKUP_DIR"/codegraph-*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm --
+ls -1t "$BACKUP_DIR"/repobuddy-*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm --
 echo "[backup] done"

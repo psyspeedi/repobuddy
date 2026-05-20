@@ -23,7 +23,7 @@ async function applyRawSqlMigrations(sql: postgres.Sql): Promise<void> {
   }
 
   await sql.unsafe(`
-    CREATE TABLE IF NOT EXISTS "_codegraph_raw_migrations" (
+    CREATE TABLE IF NOT EXISTS "_repobuddy_raw_migrations" (
       name text PRIMARY KEY,
       applied_at timestamptz NOT NULL DEFAULT now()
     );
@@ -32,7 +32,7 @@ async function applyRawSqlMigrations(sql: postgres.Sql): Promise<void> {
   for (const file of files) {
     const rows = await sql<{ exists: boolean }[]>`
       SELECT EXISTS (
-        SELECT 1 FROM "_codegraph_raw_migrations" WHERE name = ${file}
+        SELECT 1 FROM "_repobuddy_raw_migrations" WHERE name = ${file}
       ) AS exists
     `
     if (rows[0]?.exists) continue
@@ -41,7 +41,7 @@ async function applyRawSqlMigrations(sql: postgres.Sql): Promise<void> {
     console.log(`[migrate] applying raw SQL: ${file}`)
     await sql.unsafe(content)
     await sql`
-      INSERT INTO "_codegraph_raw_migrations" (name) VALUES (${file})
+      INSERT INTO "_repobuddy_raw_migrations" (name) VALUES (${file})
     `
   }
 }

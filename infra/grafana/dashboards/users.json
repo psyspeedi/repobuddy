@@ -1,11 +1,11 @@
 {
   "title": "RepoBuddy — Users & workspaces",
-  "uid": "codegraph-users",
+  "uid": "repobuddy-users",
   "schemaVersion": 39,
   "timezone": "browser",
   "refresh": "1m",
   "time": { "from": "now-7d", "to": "now" },
-  "tags": ["codegraph", "users"],
+  "tags": ["repobuddy", "users"],
   "panels": [
     {
       "id": 1,
@@ -15,7 +15,7 @@
       "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum by (viewer) (rate(codegraph_chat_requests_total[5m]))",
+          "expr": "sum by (viewer) (rate(repobuddy_chat_requests_total[5m]))",
           "legendFormat": "{{viewer}}",
           "refId": "A"
         }
@@ -29,7 +29,7 @@
       "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "sum by (outcome) (increase(codegraph_index_jobs_total[1h]))",
+          "expr": "sum by (outcome) (increase(repobuddy_index_jobs_total[1h]))",
           "legendFormat": "{{outcome}}",
           "refId": "A"
         }
@@ -43,7 +43,7 @@
       "gridPos": { "x": 0, "y": 8, "w": 24, "h": 6 },
       "targets": [
         {
-          "expr": "sum by (kind, metric) (increase(codegraph_quota_blocks_total[1h]))",
+          "expr": "sum by (kind, metric) (increase(repobuddy_quota_blocks_total[1h]))",
           "legendFormat": "{{kind}} / {{metric}}",
           "refId": "A"
         }

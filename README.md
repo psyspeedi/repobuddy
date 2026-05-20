@@ -55,7 +55,7 @@ BM25-style full-text) RAG so the user always gets a response.
 Requirements: **Node 22+**, **pnpm 9+**, **Docker** (for Postgres+Redis).
 
 ```bash
-git clone <this-repo> codegraph && cd codegraph
+git clone <this-repo> repobuddy && cd repobuddy
 pnpm install
 cp .env.example .env          # fill in OPENAI_API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
 openssl rand -base64 32       # → NUXT_SESSION_PASSWORD
@@ -201,7 +201,7 @@ docker compose -f docker-compose.prod.yml exec app node -e "import('./.worker/mi
 # or rebuild image with pnpm db:migrate baked into entrypoint.
 
 # Nightly backup (host cron)
-0 3 * * *  docker compose -f /srv/codegraph/docker-compose.prod.yml \
+0 3 * * *  docker compose -f /srv/repobuddy/docker-compose.prod.yml \
              exec -T postgres /usr/local/bin/backup.sh
 ```
 
