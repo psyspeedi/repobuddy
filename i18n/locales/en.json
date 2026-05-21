@@ -136,37 +136,37 @@
   },
   "landing": {
     "hero": {
-      "title": "Understand any codebase, fast.",
-      "subtitle": "Index a Git repository into a hybrid knowledge graph (AST + LLM annotations + git history) and ask questions in plain language with cited sources.",
+      "title": "Your first PR to any open-source repo. Faster.",
+      "subtitle": "RepoBuddy indexes a project into a knowledge graph, then shows you what runs, what matters, and where a safe first contribution could land — so you stop bouncing off unfamiliar codebases.",
       "cta": "Sign in with GitHub",
       "cta2": "Already have an account? Open dashboard"
     },
     "features": {
-      "title": "What you can do",
+      "title": "How it walks you in",
       "items": {
         "0": {
-          "title": "Ask questions, get cited answers",
-          "body": "Each fact in the response is linked to a specific code chunk or graph entity. Click the citation to see the source."
+          "title": "Get oriented in minutes",
+          "body": "The contributor's tour surfaces entry points, the classes and functions everything depends on, and small stable files safe for a first PR — derived from the graph, not the README."
         },
         "1": {
-          "title": "Reason over multi-hop questions",
-          "body": "A planner turns your question into a sequence of graph operators (find_symbol → get_callers → answer) and shows the plan + trace."
+          "title": "Pick up real issues",
+          "body": "Open GitHub issues tagged good-first-issue / help-wanted are linked back to the code they touch and ranked by how much surface area they cover."
         },
         "2": {
-          "title": "Interactive graph explorer",
-          "body": "Sigma.js viewer with type filters, view presets (Code / Git / Semantic), entity search, and highlight-from-chat."
+          "title": "Run it locally on the first try",
+          "body": "Setup commands auto-extracted from package.json, Makefile, Dockerfile and the README's Quick Start section. One click to copy."
         },
         "3": {
-          "title": "Per-commit diffs in context",
-          "body": "Commit metadata + the unified diff are stored as searchable chunks, so you can ask 'what changed here' and get specifics."
+          "title": "Follow a flow as a diagram",
+          "body": "Walkthrough turns a function or route into a Mermaid sequence diagram of its actual call chain — so a 12-step transaction reads in 30 seconds."
         },
         "4": {
-          "title": "Library-friendly",
-          "body": "JSDoc / docstrings extracted, examples folder indexed as docs, tests linked back to the entities they cover."
+          "title": "Ask anything, get cited answers",
+          "body": "Each claim links to a specific chunk or entity. A KAG planner stitches multi-hop reasoning (find_symbol → get_callers → answer) and shows the plan + trace inline."
         },
         "5": {
-          "title": "Git-history aware",
-          "body": "Activity, maintainers, fix-to-feat ratio, hot files, breaking-change frequency — surfaced as insights so you know what you're getting into."
+          "title": "Judge project health at a glance",
+          "body": "Hotness, active maintainers, fix-to-feat ratio, bus factor, breaking-change frequency — so you know if the project is worth contributing to before you sink hours."
         }
       }
     },
@@ -175,15 +175,15 @@
       "items": {
         "0": "Nuxt 4 + Nitro",
         "1": "Postgres 16 + pgvector",
-        "2": "OpenAI gpt-4o (planning) + gpt-4o-mini (annotation)",
-        "3": "Sigma.js + Graphology",
+        "2": "OpenAI gpt-4o + gpt-4o-mini",
+        "3": "d3-hierarchy + Sigma.js + Mermaid",
         "4": "ts-morph + web-tree-sitter",
         "5": "BullMQ + Redis"
       }
     },
     "public": {
-      "title": "Try it on a public project",
-      "subtitle": "These workspaces are open to anyone — explore the graph and chat with a guest token budget. No account needed."
+      "title": "Try it on a project you might contribute to",
+      "subtitle": "These workspaces are open to anyone — open the tour, ask questions, skim the issues. No account needed."
     },
     "languages": {
       "title": "Supported languages",

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import {
-  MessageSquare,
-  Network,
+  Compass,
+  Github,
+  Terminal,
   Workflow,
-  GitCommit,
-  BookOpen,
+  MessageSquare,
   Activity,
 } from 'lucide-vue-next'
 
@@ -14,12 +14,15 @@ const { loggedIn } = useUserSession()
 // Each feature gets a distinct tint so the cards read as a colourful
 // grid rather than six identical boxes. Colors come from Tailwind's
 // default palette and work in both light/dark themes.
+// Order = the contributor journey: get oriented → find work → run
+// it locally → understand a flow → ask questions → judge project
+// health. Each icon picks up the dominant action of its card.
 const features = computed(() => [
-  { key: '0', icon: MessageSquare, tint: 'bg-violet-500/15 text-violet-600 dark:text-violet-300 ring-violet-500/30' },
-  { key: '1', icon: Workflow, tint: 'bg-sky-500/15 text-sky-600 dark:text-sky-300 ring-sky-500/30' },
-  { key: '2', icon: Network, tint: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 ring-emerald-500/30' },
-  { key: '3', icon: GitCommit, tint: 'bg-rose-500/15 text-rose-600 dark:text-rose-300 ring-rose-500/30' },
-  { key: '4', icon: BookOpen, tint: 'bg-amber-500/15 text-amber-600 dark:text-amber-300 ring-amber-500/30' },
+  { key: '0', icon: Compass, tint: 'bg-violet-500/15 text-violet-600 dark:text-violet-300 ring-violet-500/30' },
+  { key: '1', icon: Github, tint: 'bg-sky-500/15 text-sky-600 dark:text-sky-300 ring-sky-500/30' },
+  { key: '2', icon: Terminal, tint: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 ring-emerald-500/30' },
+  { key: '3', icon: Workflow, tint: 'bg-rose-500/15 text-rose-600 dark:text-rose-300 ring-rose-500/30' },
+  { key: '4', icon: MessageSquare, tint: 'bg-amber-500/15 text-amber-600 dark:text-amber-300 ring-amber-500/30' },
   { key: '5', icon: Activity, tint: 'bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-300 ring-fuchsia-500/30' },
 ])
 
@@ -63,7 +66,7 @@ useHead({
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'Any',
         description:
-          'AI assistant for understanding codebases via a knowledge graph (AST + LLM annotations + git history). Supports TypeScript, JavaScript, Python, Go.',
+          'RepoBuddy helps developers contribute to open-source projects faster. Indexes a Git repository into a knowledge graph, surfaces entrypoints, safe first-PR zones, and links GitHub issues back to the code. Supports TypeScript, JavaScript, Python, Go.',
         url: canonicalUrl,
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
       }),
