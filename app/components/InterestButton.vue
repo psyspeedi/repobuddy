@@ -73,7 +73,11 @@ async function submit(): Promise<void> {
       <span class="hidden sm:inline">{{ t('interest.sentLabel') }}</span>
     </span>
 
-    <!-- Modal -->
+    <!-- Modal — teleported to <body> so the header's backdrop-filter
+         doesn't pull `position: fixed` into a new containing block,
+         which previously offset the modal toward the header instead
+         of the viewport. -->
+    <Teleport to="body">
     <div
       v-if="open"
       class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur"
@@ -109,5 +113,6 @@ async function submit(): Promise<void> {
         </div>
       </div>
     </div>
+    </Teleport>
   </span>
 </template>

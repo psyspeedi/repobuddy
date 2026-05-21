@@ -133,11 +133,17 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
         </div>
       </div>
     </header>
-    <!-- `[&:has(.cg-no-scroll)]:overflow-hidden` flips main from
-         scrollable → clipped when a child opts out (chat / graph
-         pages). Pages without the marker scroll normally. -->
-    <main class="container mx-auto flex flex-1 flex-col px-4 py-6 min-h-0 overflow-y-auto [&:has(.cg-no-scroll)]:overflow-hidden">
-      <slot />
+    <!-- Main is full-viewport-width so the vertical scrollbar sits
+         at the right edge of the window, not inside the centered
+         `container mx-auto` wrapper (looked off-center on landing).
+         The inner wrapper applies the container constraint + padding
+         for normal pages; pages that opt out via `cg-no-scroll`
+         (chat / explore) want full bleed AND no main-level scroll,
+         so we drop both width and overflow there. -->
+    <main class="flex flex-1 flex-col min-h-0 overflow-y-auto [&:has(.cg-no-scroll)]:overflow-hidden">
+      <div class="container mx-auto flex flex-1 flex-col px-4 py-6 min-h-0">
+        <slot />
+      </div>
     </main>
     <OnboardingOverlay />
     <ConfirmDialog />
