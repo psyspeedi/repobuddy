@@ -30,6 +30,7 @@ The JSON object MUST have this top-level shape:
 - retrieve_code_chunks({ entities, limit? }) → Chunk[]
 - get_summary({ entity }) → { id, name, type, description }[]
 - walkthrough({ entity, limit? }) → { entity, callees, tests, parents }[]   (entity-centric tour: direct callees + tests covering it + enclosing parent)
+- list_issues({ labels?, state?, limit? }) → { issues: { number, title, url, labels, bodyExcerpt, updatedAt }[] }   (open GitHub issues from the workspace's source repo; only useful when the question asks about issues / what to contribute / what's open / what needs work)
 - answer({ question, context, style? }) → streaming response with inline citations
 
 ## Reference syntax
@@ -45,6 +46,7 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 - For multi-hop "who calls X transitively" — use get_callers with transitive: true.
 - For broad / architectural / "tell me about this project" / "how does X work overall" questions — use \`search_docs\` (covers READMEs, docs/*.md, design notes) as the primary retrieval step, optionally combined with \`hybrid_search\` for code snippets. Bumping limit to 15 is fine on such broad queries.
 - For "walk me through X" / "how does X work" / "explain X step by step" / "проведи меня по X" — first resolve X via find_symbol, then use \`walkthrough\` to gather callees + tests + parent, then retrieve_code_chunks of those for the answer.
+- For "are there any issues" / "what can I work on" / "good first issues" / "что можно поделать" / "есть issues" / "what's open" — call \`list_issues\` (optionally with labels like ["good first issue", "help wanted"]). Pass the returned envelope to \`answer\` so it can render the list with links. Issues live OUTSIDE the indexed graph — \`find_by_concept\` / \`hybrid_search\` will NOT find them.
 - The question may be in any language (Russian, Chinese, etc.). Extract identifiers verbatim; do not translate them.
 - Keep plans concise: 2-5 steps is usually right.`
 
@@ -161,6 +163,23 @@ const FEW_SHOTS = [
             question: 'Tell me about this project.',
             context: ['$s1', '$s2'],
             style: 'detailed',
+          },
+        },
+      ],
+    },
+  },
+  {
+    question: 'Are there any open issues I could pick up?',
+    plan: {
+      reasoning: 'Asking about open GitHub issues — list_issues is the only operator that reaches outside the indexed graph to fetch them.',
+      steps: [
+        { id: 's1', op: 'list_issues', params: { labels: ['good first issue', 'help wanted'], limit: 15 } },
+        {
+          id: 's2',
+          op: 'answer',
+          params: {
+            question: 'Are there any open issues I could pick up?',
+            context: ['$s1'],
           },
         },
       ],

@@ -52,6 +52,20 @@ export interface AnswerParams {
    * each block on the client.
    */
   mermaidDiagrams?: string[]
+  /**
+   * Open GitHub issues collected by the list_issues operator. Rendered
+   * as a dedicated section in the user prompt; the model is asked to
+   * cite issue numbers (#42) and link out to the actual URL when
+   * recommending which to pick up.
+   */
+  issues?: {
+    number: number
+    title: string
+    url: string
+    labels: string[]
+    bodyExcerpt: string
+    updatedAt: string
+  }[]
 }
 
 export interface AnswerStreamChunk {
@@ -151,6 +165,23 @@ function renderUserMessage(params: AnswerParams): string {
       lines.push('```')
       lines.push('')
     }
+  }
+
+  if (params.issues && params.issues.length > 0) {
+    lines.push('')
+    lines.push('## Open GitHub issues')
+    lines.push(
+      'These are the open issues fetched from the project repo. When the user'
+      + ' asks about issues to work on, summarise them here and link them by'
+      + ' number (#N) — include the URL in markdown link form so the user can'
+      + ' open them.',
+    )
+    for (const i of params.issues) {
+      const labels = i.labels.length > 0 ? ` [${i.labels.join(', ')}]` : ''
+      lines.push(`- [#${i.number}](${i.url})${labels}: ${i.title}`)
+      if (i.bodyExcerpt) lines.push(`  > ${i.bodyExcerpt}`)
+    }
+    lines.push('')
   }
 
   if (params.mermaidDiagrams && params.mermaidDiagrams.length > 0) {

@@ -6,6 +6,7 @@
  * Operators are pure with respect to the database — they read graph state
  * but never mutate it.
  */
+import { Octokit } from '@octokit/rest'
 import { and, eq, ilike, inArray, or, sql } from 'drizzle-orm'
 import type { Database } from '../../db/client'
 import { chunks, entities, relations } from '../../db/schema'
@@ -675,6 +676,101 @@ export async function walkthrough(
   }
 }
 
+// ---------- list_issues ----------
+/**
+ * Fetch open GitHub issues for the workspace's source repo (when it
+ * lives on GitHub). Pure read — no entity matching here; the planner
+ * can chain find_symbol if it needs to link an issue to code. The
+ * answer operator picks up the envelope below and renders a section
+ * in the user prompt with title / number / labels / URL, instructing
+ * the model to cite issue numbers (e.g. "#42") in its answer.
+ *
+ * Anonymous Octokit (60 req/h per IP) — same budget as the
+ * github-issues REST endpoint that powers the Tour overlay.
+ */
+export interface ListIssuesParams {
+  /** Optional label filter. Defaults to a broad open-issue scan. */
+  labels?: string[]
+  state?: 'open' | 'closed' | 'all'
+  /** Cap on results. Default 15, max 30. */
+  limit?: number
+}
+
+export interface IssueResult {
+  number: number
+  title: string
+  url: string
+  labels: string[]
+  bodyExcerpt: string
+  updatedAt: string
+}
+
+export interface IssuesEnvelope {
+  /** Marker for answerOp's context loop to distinguish from chunks/entities. */
+  issues: IssueResult[]
+  /** Diagnostic — surfaced in trace, never goes into the LLM prompt. */
+  reason?: 'no_source_url' | 'not_github' | 'rate_limited' | 'repo_not_found' | 'fetch_failed'
+}
+
+const KAG_GH_URL_RE = /github\.com\/([^/]+)\/([^/.]+)/
+
+export async function listIssues(
+  params: ListIssuesParams,
+  ctx: OperatorContext,
+): Promise<IssuesEnvelope> {
+  const sourceUrl = ctx.workspace?.sourceUrl ?? null
+  if (!sourceUrl) return { issues: [], reason: 'no_source_url' }
+  const match = sourceUrl.match(KAG_GH_URL_RE)
+  if (!match) return { issues: [], reason: 'not_github' }
+  const owner = match[1] as string
+  const repo = match[2] as string
+  const limit = Math.min(Math.max(params.limit ?? 15, 1), 30)
+  const labels = params.labels && params.labels.length > 0
+    ? params.labels.join(',')
+    : undefined
+
+  const octokit = new Octokit()
+  try {
+    const res = await octokit.rest.issues.listForRepo({
+      owner,
+      repo,
+      state: params.state ?? 'open',
+      labels,
+      per_page: limit,
+      sort: 'updated',
+      direction: 'desc',
+    })
+    const issuesOnly = res.data.filter((i) => !('pull_request' in i && i.pull_request))
+    return {
+      issues: issuesOnly.slice(0, limit).map((i) => ({
+        number: i.number,
+        title: i.title,
+        url: i.html_url,
+        labels: (i.labels ?? [])
+          .map((l) => (typeof l === 'string' ? l : (l.name ?? '')))
+          .filter(Boolean),
+        bodyExcerpt: excerptIssueBody(i.body ?? ''),
+        updatedAt: i.updated_at,
+      })),
+    }
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 0
+    return {
+      issues: [],
+      reason: status === 403 ? 'rate_limited' : status === 404 ? 'repo_not_found' : 'fetch_failed',
+    }
+  }
+}
+
+function excerptIssueBody(body: string): string {
+  const cleaned = body
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\n{2,}/g, ' ')
+    .replace(/[#*_`>]/g, '')
+    .trim()
+  return cleaned.length > 280 ? cleaned.slice(0, 277) + '…' : cleaned
+}
+
 // ---------- answer wrapper for plan executor ----------
 export async function* answerOp(
   params: {
@@ -704,6 +800,10 @@ export async function* answerOp(
   // Mermaid blocks contributed by walkthrough operator runs. Inlined
   // into the user prompt with an instruction to include them verbatim.
   const mermaidBlocks: string[] = []
+  // GitHub issues collected from list_issues envelopes. Rendered as a
+  // dedicated section in the user prompt; the model is asked to cite
+  // issue numbers (#42) in its answer.
+  const issueResults: IssueResult[] = []
 
   // 1a) Pinned entities from the user's [entity:UUID] citations always go
   //     in first — they're the most likely thing the user wants summarised.
@@ -736,6 +836,13 @@ export async function* answerOp(
   for (const item of params.context.flat(2)) {
     if (!item || typeof item !== 'object') continue
     const obj = item as Record<string, unknown>
+    // list_issues envelope { issues: [...] }: collect for prompt
+    // injection. Container shape, not a leaf — skip chunk/entity
+    // detection below.
+    if (Array.isArray(obj.issues) && obj.issues.every((it) => it && typeof it === 'object' && typeof (it as { number?: unknown }).number === 'number')) {
+      for (const it of obj.issues as IssueResult[]) issueResults.push(it)
+      continue
+    }
     // Walkthrough envelope { entities, mermaid }: unwrap entities and
     // collect the mermaid block for later prompt injection. Skip the
     // chunk/entity detection below for this object — it's a container,
@@ -835,6 +942,7 @@ export async function* answerOp(
     workspace: ctx.workspace,
     responseLocale: ctx.responseLocale,
     mermaidDiagrams: mermaidBlocks,
+    issues: issueResults,
   })) {
     yield evt
   }
@@ -894,6 +1002,7 @@ export type OperatorName =
   | 'retrieve_code_chunks'
   | 'get_summary'
   | 'walkthrough'
+  | 'list_issues'
   | 'answer'
 
 export const OPERATORS: Record<
@@ -915,5 +1024,6 @@ export const OPERATORS: Record<
   retrieve_code_chunks: retrieveCodeChunks as never,
   get_summary: getSummary as never,
   walkthrough: walkthrough as never,
+  list_issues: listIssues as never,
   answer: answerOp as never,
 }
