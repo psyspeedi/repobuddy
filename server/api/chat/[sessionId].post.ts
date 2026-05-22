@@ -12,6 +12,7 @@ import { resolveProvidersByUserId } from '../../providers/resolve'
 import { planQuestion } from '../../kag/planner'
 import { executePlan } from '../../kag/executor'
 import { extractCitations } from '../../kag/operators/answer'
+import { runAgenticAnswer } from '../../kag/agentic'
 import { readAccess } from '../../lib/workspace-access'
 import { isAdminLogin } from '../../lib/admin'
 import {
@@ -33,6 +34,14 @@ const BodySchema = z.object({
   question: z.string().min(1).max(2000),
   workspaceId: z.string().uuid(),
   locale: z.enum(['en', 'ru']).optional(),
+  /**
+   * 'planned' (default) — KAG planner produces a static multi-step
+   *   plan, executor runs it, answer operator finalises.
+   * 'agentic' — LLM gets KAG operators as function-calling tools and
+   *   loops (max 8 iterations) until it can answer. More expensive,
+   *   slower, more thorough. Opt-in per request.
+   */
+  mode: z.enum(['planned', 'agentic']).optional().default('planned'),
 })
 
 export default defineEventHandler(async (event) => {
@@ -148,56 +157,102 @@ export default defineEventHandler(async (event) => {
       // the answer ends with ↗ → source viewer, not ◆ → graph.
       const pinnedChunks = citedIds.length > 0 ? await loadPinnedChunks(db, body.workspaceId, citedIds) : []
 
-      // 1) Plan.
-      const plan = await planQuestion(llm, body.question, {
-        workspaceName: ws.name,
-        languages: ws.languages,
-        stats: ws.stats as Record<string, number>,
-      })
-      await stream.push({ event: 'plan', data: JSON.stringify(plan) })
-
-      // 2) Execute.
-      const result = await executePlan(plan, {
-        workspaceId: body.workspaceId,
-        db,
-        embeddings,
-        workspace: {
-          name: ws.name,
-          sourceUrl: ws.sourceUrl,
-          languages: ws.languages,
-          stats: ws.stats as Record<string, number> | null,
-        },
-        llm,
-        pinnedEntities,
-        pinnedChunks,
-        responseLocale: body.locale ?? 'en',
-      })
-
-      // Emit trace early so the inspector can render even while the answer streams.
-      await stream.push({ event: 'trace', data: JSON.stringify(result.trace) })
-
-      // 3) Drain the final answer stream (if any).
       let assembled = ''
       let inputTokens = 0
       let outputTokens = 0
-      if (result.finalStream) {
-        for await (const evt of result.finalStream as AsyncIterable<{
-          type: string
-          text?: string
-          inputTokens?: number
-          outputTokens?: number
-        }>) {
+      // Planned-mode plan + trace, populated only in the planner branch.
+      // Agentic mode produces a synthetic trace from tool steps.
+      let savedPlan: unknown = null
+      let savedTrace: unknown = null
+
+      if (body.mode === 'agentic') {
+        // Agentic loop — LLM gets KAG operators as tools, loops on its
+        // own until it can compose an answer. trace is built from
+        // tool_step events as they arrive.
+        const ctx = {
+          workspaceId: body.workspaceId,
+          db,
+          embeddings,
+          workspace: {
+            name: ws.name,
+            sourceUrl: ws.sourceUrl,
+            languages: ws.languages,
+            stats: ws.stats as Record<string, number> | null,
+          },
+          llm,
+          pinnedEntities,
+          pinnedChunks,
+          responseLocale: body.locale ?? 'en',
+        }
+        const toolSteps: unknown[] = []
+        savedPlan = { mode: 'agentic' }
+        for await (const evt of runAgenticAnswer(llm, ctx, body.question, {
+          responseLocale: body.locale ?? 'en',
+        })) {
           if (evt.type === 'text' && evt.text) {
             assembled += evt.text
             await stream.push({ event: 'text', data: evt.text })
+          } else if (evt.type === 'tool_step' && evt.toolStep) {
+            toolSteps.push(evt.toolStep)
+            await stream.push({ event: 'tool_step', data: JSON.stringify(evt.toolStep) })
           } else if (evt.type === 'done') {
             inputTokens = evt.inputTokens ?? 0
             outputTokens = evt.outputTokens ?? 0
           }
         }
+        savedTrace = { mode: 'agentic', steps: toolSteps }
+        await stream.push({ event: 'trace', data: JSON.stringify(savedTrace) })
       } else {
-        assembled = 'No answer was produced by the plan.'
-        await stream.push({ event: 'text', data: assembled })
+        // 1) Plan.
+        const plan = await planQuestion(llm, body.question, {
+          workspaceName: ws.name,
+          languages: ws.languages,
+          stats: ws.stats as Record<string, number>,
+        })
+        await stream.push({ event: 'plan', data: JSON.stringify(plan) })
+        savedPlan = plan
+
+        // 2) Execute.
+        const result = await executePlan(plan, {
+          workspaceId: body.workspaceId,
+          db,
+          embeddings,
+          workspace: {
+            name: ws.name,
+            sourceUrl: ws.sourceUrl,
+            languages: ws.languages,
+            stats: ws.stats as Record<string, number> | null,
+          },
+          llm,
+          pinnedEntities,
+          pinnedChunks,
+          responseLocale: body.locale ?? 'en',
+        })
+        savedTrace = result.trace
+
+        // Emit trace early so the inspector can render even while the answer streams.
+        await stream.push({ event: 'trace', data: JSON.stringify(result.trace) })
+
+        // 3) Drain the final answer stream (if any).
+        if (result.finalStream) {
+          for await (const evt of result.finalStream as AsyncIterable<{
+            type: string
+            text?: string
+            inputTokens?: number
+            outputTokens?: number
+          }>) {
+            if (evt.type === 'text' && evt.text) {
+              assembled += evt.text
+              await stream.push({ event: 'text', data: evt.text })
+            } else if (evt.type === 'done') {
+              inputTokens = evt.inputTokens ?? 0
+              outputTokens = evt.outputTokens ?? 0
+            }
+          }
+        } else {
+          assembled = 'No answer was produced by the plan.'
+          await stream.push({ event: 'text', data: assembled })
+        }
       }
 
       // 4) Verify citations.
@@ -228,8 +283,8 @@ export default defineEventHandler(async (event) => {
           sessionId: sessionRowId,
           role: 'assistant',
           content: assembled,
-          plan,
-          trace: result.trace,
+          plan: savedPlan as never,
+          trace: savedTrace as never,
           tokensUsed: inputTokens + outputTokens,
         })
       }

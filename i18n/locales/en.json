@@ -216,6 +216,8 @@
     "tour": "Tour",
     "tourHint": "Open the contributor's tour — entrypoints, core abstractions, good first issue zones",
     "askWalkthrough": "Walk me through {name} step by step",
+    "autoExplore": "Auto-explore",
+    "autoExploreHint": "Let the assistant call graph operators (find_symbol, walkthrough, list_issues…) on its own as it answers. Slower and more expensive per question, but the answer grounds in more code.",
     "reindex": "Re-index",
     "reindexing": "Queuing…",
     "reindexHint": "Re-run indexing on the latest commit (picks up new diffs, files, annotations)",

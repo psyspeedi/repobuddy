@@ -106,7 +106,10 @@ export function useChat(workspaceId: string) {
     }
   }
 
-  async function send(question: string): Promise<void> {
+  async function send(
+    question: string,
+    opts: { mode?: 'planned' | 'agentic' } = {},
+  ): Promise<void> {
     if (streaming.value) return
     const trimmed = question.trim()
     if (!trimmed) return
@@ -129,6 +132,7 @@ export function useChat(workspaceId: string) {
           workspaceId,
           question: trimmed,
           locale: i18n.locale.value,
+          mode: opts.mode ?? 'planned',
         }),
       })
       if (!response.ok || !response.body) {

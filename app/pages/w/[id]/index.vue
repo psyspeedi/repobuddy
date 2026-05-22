@@ -279,11 +279,21 @@ async function reindex(): Promise<void> {
   }
 }
 
+// Auto-explore = agentic mode. Persisted in localStorage so a user
+// who turned it on once doesn't have to re-flip it every session.
+const autoExplore = ref(false)
+if (import.meta.client) {
+  try { autoExplore.value = localStorage.getItem('cg-auto-explore') === '1' } catch { /* private mode */ }
+}
+watch(autoExplore, (v) => {
+  try { localStorage.setItem('cg-auto-explore', v ? '1' : '0') } catch { /* private mode */ }
+})
+
 async function submit(): Promise<void> {
   if (chat.streaming.value || !inputText.value.trim()) return
   const q = inputText.value
   inputText.value = ''
-  await chat.send(q)
+  await chat.send(q, { mode: autoExplore.value ? 'agentic' : 'planned' })
   scrollToBottom()
   void chatSessions.refresh()
 }
@@ -583,6 +593,14 @@ useHead(() => {
           class="flex items-center gap-2 border-t border-border p-3"
           @submit.prevent="submit"
         >
+          <label
+            class="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+            :class="autoExplore ? 'border-primary/40 bg-primary/10 text-primary' : ''"
+            :title="t('workspace.autoExploreHint')"
+          >
+            <input v-model="autoExplore" type="checkbox" class="h-3 w-3 accent-primary">
+            {{ t('workspace.autoExplore') }}
+          </label>
           <input
             ref="chatInput"
             v-model="inputText"

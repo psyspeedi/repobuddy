@@ -5,8 +5,34 @@ import { getLogger } from '../lib/logger'
 const log = getLogger().child({ component: 'providers/llm' })
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  /** Set on assistant messages that requested tool calls. */
+  tool_calls?: ToolCall[]
+  /** Set on tool messages so the model can attribute the result. */
+  tool_call_id?: string
+}
+
+export interface ToolDefinition {
+  name: string
+  description: string
+  /** JSON Schema for the operator's parameters. */
+  parameters: Record<string, unknown>
+}
+
+export interface ToolCall {
+  id: string
+  name: string
+  /** Raw JSON-encoded arguments straight from the LLM. Parse client-side. */
+  arguments: string
+}
+
+export interface ToolStreamingChunk {
+  type: 'text' | 'tool_call' | 'done'
+  text?: string
+  toolCalls?: ToolCall[]
+  inputTokens?: number
+  outputTokens?: number
 }
 
 export interface StreamingChunk {
@@ -31,6 +57,18 @@ export interface LLMProvider {
   stream(messages: ChatMessage[], opts?: { temperature?: number }): AsyncGenerator<StreamingChunk>
   /** One-shot structured generation; throws on schema validation failure. */
   structured<T>(messages: ChatMessage[], opts: StructuredOutputOptions<T>): Promise<T>
+  /**
+   * Stream a response with tool-use enabled. Each turn yields either
+   * `text` chunks (final-answer prose), a single `tool_call` chunk
+   * carrying one or more parallel calls the caller must execute, or
+   * `done` with usage totals. After the caller runs the tools it
+   * appends `role: 'tool'` messages and re-invokes this method.
+   */
+  streamWithTools(
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    opts?: { temperature?: number },
+  ): AsyncGenerator<ToolStreamingChunk>
 }
 
 class OpenAILLMProvider implements LLMProvider {
@@ -60,7 +98,8 @@ class OpenAILLMProvider implements LLMProvider {
   ): AsyncGenerator<StreamingChunk> {
     const response = await this.client.chat.completions.create({
       model: this.model,
-      messages,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: messages as any,
       temperature: opts.temperature ?? 0.2,
       stream: true,
       stream_options: { include_usage: true },
@@ -79,6 +118,90 @@ class OpenAILLMProvider implements LLMProvider {
     yield { type: 'done', inputTokens, outputTokens }
   }
 
+  async *streamWithTools(
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    opts: { temperature?: number } = {},
+  ): AsyncGenerator<ToolStreamingChunk> {
+    // Convert our ChatMessage[] into OpenAI's tool-aware shape. The
+    // SDK requires tool messages to carry tool_call_id, and assistant
+    // messages with tool_calls to include those calls structurally.
+    const oaiMessages = messages.map((m) => {
+      if (m.role === 'tool') {
+        return { role: 'tool' as const, content: m.content, tool_call_id: m.tool_call_id ?? '' }
+      }
+      if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
+        return {
+          role: 'assistant' as const,
+          content: m.content || null,
+          tool_calls: m.tool_calls.map((t) => ({
+            id: t.id,
+            type: 'function' as const,
+            function: { name: t.name, arguments: t.arguments },
+          })),
+        }
+      }
+      return { role: m.role, content: m.content }
+    })
+    const oaiTools = tools.map((t) => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }))
+
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: oaiMessages as any,
+      tools: oaiTools,
+      tool_choice: 'auto',
+      temperature: opts.temperature ?? 0.2,
+      stream: true,
+      stream_options: { include_usage: true },
+    })
+
+    // Tool-call fragments arrive split across deltas (matched by index).
+    // Accumulate, emit once at the end of the turn.
+    const toolCallsByIndex = new Map<number, { id: string; name: string; arguments: string }>()
+    let inputTokens = 0
+    let outputTokens = 0
+
+    for await (const event of response) {
+      const delta = event.choices[0]?.delta
+      if (!delta) continue
+      if (typeof delta.content === 'string' && delta.content.length > 0) {
+        yield { type: 'text', text: delta.content }
+      }
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0
+          const cur = toolCallsByIndex.get(idx) ?? { id: '', name: '', arguments: '' }
+          if (tc.id) cur.id = tc.id
+          if (tc.function?.name) cur.name = tc.function.name
+          if (tc.function?.arguments) cur.arguments += tc.function.arguments
+          toolCallsByIndex.set(idx, cur)
+        }
+      }
+      if (event.usage) {
+        inputTokens = event.usage.prompt_tokens
+        outputTokens = event.usage.completion_tokens
+      }
+    }
+
+    if (toolCallsByIndex.size > 0) {
+      const calls = [...toolCallsByIndex.values()].map((c) => ({
+        id: c.id,
+        name: c.name,
+        arguments: c.arguments,
+      }))
+      yield { type: 'tool_call', toolCalls: calls }
+    }
+    yield { type: 'done', inputTokens, outputTokens }
+  }
+
   async structured<T>(
     messages: ChatMessage[],
     opts: StructuredOutputOptions<T>,
@@ -91,7 +214,8 @@ class OpenAILLMProvider implements LLMProvider {
     // is handled by the caller (see kag/planner.ts).
     const completion = await this.client.chat.completions.create({
       model: this.model,
-      messages,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: messages as any,
       response_format: { type: 'json_object' },
       temperature: 0.1,
     })
@@ -155,6 +279,18 @@ export class MockLLMProvider implements LLMProvider {
 
   async *stream(messages: ChatMessage[]): AsyncGenerator<StreamingChunk> {
     void messages
+    const text = this.nextText ?? 'mock response'
+    this.nextText = null
+    yield { type: 'text', text }
+    yield { type: 'done', inputTokens: 10, outputTokens: 10 }
+  }
+
+  async *streamWithTools(
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+  ): AsyncGenerator<ToolStreamingChunk> {
+    void messages
+    void tools
     const text = this.nextText ?? 'mock response'
     this.nextText = null
     yield { type: 'text', text }
