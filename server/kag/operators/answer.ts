@@ -65,6 +65,15 @@ export interface AnswerParams {
     labels: string[]
     bodyExcerpt: string
     updatedAt: string
+    relatedEntities?: {
+      entityId: string
+      name: string
+      type: string
+      filePath: string | null
+      qualifiedName: string | null
+      description: string | null
+      inDegree: number
+    }[]
   }[]
 }
 
@@ -91,6 +100,10 @@ Citation rules:
 - After every factual claim, cite the source inline. Citations use the
   exact form [chunk:UUID] for code/doc snippets and [entity:UUID] for
   graph entities. UUIDs come from the context block; do not invent them.
+- GitHub issues are NOT entities and NOT chunks. Cite issue numbers
+  as plain text "#42" together with a markdown link [#42](issue-url).
+  Never wrap an issue number in [entity:...] or [chunk:...] — those
+  carry UUIDs only.
 - If the context is insufficient, say so plainly. Do not fabricate.
 
 Style:
@@ -169,17 +182,28 @@ function renderUserMessage(params: AnswerParams): string {
 
   if (params.issues && params.issues.length > 0) {
     lines.push('')
-    lines.push('## Open GitHub issues')
+    lines.push('## GitHub issues')
     lines.push(
-      'These are the open issues fetched from the project repo. When the user'
-      + ' asks about issues to work on, summarise them here and link them by'
-      + ' number (#N) — include the URL in markdown link form so the user can'
-      + ' open them.',
+      'Each issue below carries pre-linked `relatedEntities` — these are real'
+      + ' classes/functions/files in the indexed graph that the issue text'
+      + ' references. The "Source chunks" / "Entities in scope" sections later'
+      + ' in this prompt CONTAIN their code. When the user asks "where do I'
+      + ' start" or "how should I fix this issue", ground your recommendation'
+      + ' in those entities and cite [chunk:UUID] / [entity:UUID] from the'
+      + ' context — DO NOT just point the user back to GitHub. Cite the issue'
+      + ' itself as [#N](url) (plain markdown link).',
     )
     for (const i of params.issues) {
       const labels = i.labels.length > 0 ? ` [${i.labels.join(', ')}]` : ''
       lines.push(`- [#${i.number}](${i.url})${labels}: ${i.title}`)
       if (i.bodyExcerpt) lines.push(`  > ${i.bodyExcerpt}`)
+      if (i.relatedEntities && i.relatedEntities.length > 0) {
+        const refs = i.relatedEntities.map((e) => {
+          const where = e.filePath ? ` (${e.filePath})` : ''
+          return `${e.name}${where}`
+        }).join(', ')
+        lines.push(`  Related code: ${refs}`)
+      }
     }
     lines.push('')
   }

@@ -30,7 +30,7 @@ The JSON object MUST have this top-level shape:
 - retrieve_code_chunks({ entities, limit? }) → Chunk[]
 - get_summary({ entity }) → { id, name, type, description }[]
 - walkthrough({ entity, limit? }) → { entity, callees, tests, parents }[]   (entity-centric tour: direct callees + tests covering it + enclosing parent)
-- list_issues({ labels?, state?, limit? }) → { issues: { number, title, url, labels, bodyExcerpt, updatedAt }[] }   (open GitHub issues from the workspace's source repo; only useful when the question asks about issues / what to contribute / what's open / what needs work)
+- list_issues({ labels?, state?, limit?, issueNumber? }) → { issues: { number, title, url, labels, bodyExcerpt, updatedAt, relatedEntities[] }[], relatedChunks: Chunk[] }   (open GitHub issues from the workspace's source repo, ALREADY LINKED to indexed code via relatedEntities + relatedChunks. Use issueNumber to focus a single issue; otherwise lists up to the configured limit of open issues)
 - answer({ question, context, style? }) → streaming response with inline citations
 
 ## Reference syntax
@@ -46,7 +46,8 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 - For multi-hop "who calls X transitively" — use get_callers with transitive: true.
 - For broad / architectural / "tell me about this project" / "how does X work overall" questions — use \`search_docs\` (covers READMEs, docs/*.md, design notes) as the primary retrieval step, optionally combined with \`hybrid_search\` for code snippets. Bumping limit to 15 is fine on such broad queries.
 - For "walk me through X" / "how does X work" / "explain X step by step" / "проведи меня по X" — first resolve X via find_symbol, then use \`walkthrough\` to gather callees + tests + parent, then retrieve_code_chunks of those for the answer.
-- For "are there any issues" / "what can I work on" / "good first issues" / "что можно поделать" / "есть issues" / "what's open" — call \`list_issues\` (optionally with labels like ["good first issue", "help wanted"]). Pass the returned envelope to \`answer\` so it can render the list with links. Issues live OUTSIDE the indexed graph — \`find_by_concept\` / \`hybrid_search\` will NOT find them.
+- For "are there any issues" / "what can I work on" / "good first issues" / "что можно поделать" / "есть issues" / "what's open" — call \`list_issues\` (optionally with labels like ["good first issue", "help wanted"]). Pass the returned envelope to \`answer\`. The operator already linked relatedEntities + relatedChunks, so the answer can ground in real code.
+- For a SPECIFIC issue ("I want to work on issue #42", "issue #191", "помоги с #42") — call \`list_issues\` with \`issueNumber: 42\` (no labels). The envelope contains that one issue + its relatedEntities + relatedChunks. Skip further retrieval unless relatedEntities is empty AND the issue body contains identifiers worth chasing — in that case follow up with \`find_symbol\` / \`hybrid_search\` on those identifiers.
 - The question may be in any language (Russian, Chinese, etc.). Extract identifiers verbatim; do not translate them.
 - Keep plans concise: 2-5 steps is usually right.`
 
@@ -180,6 +181,24 @@ const FEW_SHOTS = [
           params: {
             question: 'Are there any open issues I could pick up?',
             context: ['$s1'],
+          },
+        },
+      ],
+    },
+  },
+  {
+    question: 'I want to work on issue #42 — where do I start in the code?',
+    plan: {
+      reasoning: 'Specific issue — fetch it with issueNumber so the operator pre-links relatedEntities and relatedChunks. The answer step grounds in those.',
+      steps: [
+        { id: 's1', op: 'list_issues', params: { issueNumber: 42 } },
+        {
+          id: 's2',
+          op: 'answer',
+          params: {
+            question: 'I want to work on issue #42 — where do I start in the code?',
+            context: ['$s1'],
+            style: 'detailed',
           },
         },
       ],

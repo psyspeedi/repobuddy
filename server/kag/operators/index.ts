@@ -12,6 +12,14 @@ import type { Database } from '../../db/client'
 import { chunks, entities, relations } from '../../db/schema'
 import type { EmbeddingsProvider } from '../../providers/embeddings'
 import type { LLMProvider } from '../../providers/llm'
+import {
+  excerptIssueBody,
+  extractRefs,
+  fetchChunksForEntities,
+  lookupEntitiesByRefs,
+  type LinkedChunk,
+  type LinkedEntity,
+} from '../../lib/github-issue-linking'
 import { hybridSearch } from './hybrid_search'
 import { answer, type AnswerStreamChunk } from './answer'
 
@@ -678,22 +686,27 @@ export async function walkthrough(
 
 // ---------- list_issues ----------
 /**
- * Fetch open GitHub issues for the workspace's source repo (when it
- * lives on GitHub). Pure read — no entity matching here; the planner
- * can chain find_symbol if it needs to link an issue to code. The
- * answer operator picks up the envelope below and renders a section
- * in the user prompt with title / number / labels / URL, instructing
- * the model to cite issue numbers (e.g. "#42") in its answer.
+ * Fetch GitHub issues for the workspace's source repo and link them
+ * back to indexed code. The envelope returned here travels into
+ * answerOp, which renders:
+ *   - the issue list with #N / labels / URL / body excerpt,
+ *   - the matched code entities + their chunks so the model can
+ *     ground its answer in real source.
  *
- * Anonymous Octokit (60 req/h per IP) — same budget as the
- * github-issues REST endpoint that powers the Tour overlay.
+ * Two modes:
+ *   - issueNumber set: fetch that single issue (octokit.issues.get)
+ *   - otherwise: list open issues, optionally filtered by labels
+ *
+ * Anonymous Octokit (60 req/h per IP).
  */
 export interface ListIssuesParams {
   /** Optional label filter. Defaults to a broad open-issue scan. */
   labels?: string[]
   state?: 'open' | 'closed' | 'all'
-  /** Cap on results. Default 15, max 30. */
+  /** Cap on results. Default 15, max 30. Ignored when issueNumber set. */
   limit?: number
+  /** Focus a single issue by number — answers "tell me about #42". */
+  issueNumber?: number
 }
 
 export interface IssueResult {
@@ -703,11 +716,19 @@ export interface IssueResult {
   labels: string[]
   bodyExcerpt: string
   updatedAt: string
+  /** Entities the issue text mentions that exist in the graph. */
+  relatedEntities: LinkedEntity[]
 }
 
 export interface IssuesEnvelope {
-  /** Marker for answerOp's context loop to distinguish from chunks/entities. */
+  /** Marker for answerOp's context loop. */
   issues: IssueResult[]
+  /**
+   * De-duped chunks linked to every issue's relatedEntities. answerOp
+   * lifts them into the main `chunks` list so [chunk:UUID] citations
+   * work in the answer.
+   */
+  relatedChunks: LinkedChunk[]
   /** Diagnostic — surfaced in trace, never goes into the LLM prompt. */
   reason?: 'no_source_url' | 'not_github' | 'rate_limited' | 'repo_not_found' | 'fetch_failed'
 }
@@ -719,9 +740,9 @@ export async function listIssues(
   ctx: OperatorContext,
 ): Promise<IssuesEnvelope> {
   const sourceUrl = ctx.workspace?.sourceUrl ?? null
-  if (!sourceUrl) return { issues: [], reason: 'no_source_url' }
+  if (!sourceUrl) return { issues: [], relatedChunks: [], reason: 'no_source_url' }
   const match = sourceUrl.match(KAG_GH_URL_RE)
-  if (!match) return { issues: [], reason: 'not_github' }
+  if (!match) return { issues: [], relatedChunks: [], reason: 'not_github' }
   const owner = match[1] as string
   const repo = match[2] as string
   const limit = Math.min(Math.max(params.limit ?? 15, 1), 30)
@@ -730,45 +751,96 @@ export async function listIssues(
     : undefined
 
   const octokit = new Octokit()
+  let rawIssues: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>['data']
   try {
-    const res = await octokit.rest.issues.listForRepo({
-      owner,
-      repo,
-      state: params.state ?? 'open',
-      labels,
-      per_page: limit,
-      sort: 'updated',
-      direction: 'desc',
-    })
-    const issuesOnly = res.data.filter((i) => !('pull_request' in i && i.pull_request))
-    return {
-      issues: issuesOnly.slice(0, limit).map((i) => ({
-        number: i.number,
-        title: i.title,
-        url: i.html_url,
-        labels: (i.labels ?? [])
-          .map((l) => (typeof l === 'string' ? l : (l.name ?? '')))
-          .filter(Boolean),
-        bodyExcerpt: excerptIssueBody(i.body ?? ''),
-        updatedAt: i.updated_at,
-      })),
+    if (params.issueNumber) {
+      const single = await octokit.rest.issues.get({
+        owner,
+        repo,
+        issue_number: params.issueNumber,
+      })
+      // Single-issue fetch returns one object — wrap to keep the same
+      // downstream pipeline.
+      rawIssues = [single.data] as typeof rawIssues
+    } else {
+      let res = await octokit.rest.issues.listForRepo({
+        owner,
+        repo,
+        state: params.state ?? 'open',
+        labels,
+        per_page: limit,
+        sort: 'updated',
+        direction: 'desc',
+      })
+      // Many repos don't use canonical contributor labels; fall back
+      // to ALL open issues so we surface something.
+      if (res.data.length === 0 && labels) {
+        res = await octokit.rest.issues.listForRepo({
+          owner,
+          repo,
+          state: params.state ?? 'open',
+          per_page: limit,
+          sort: 'updated',
+          direction: 'desc',
+        })
+      }
+      rawIssues = res.data
     }
   } catch (err) {
     const status = (err as { status?: number }).status ?? 0
     return {
       issues: [],
+      relatedChunks: [],
       reason: status === 403 ? 'rate_limited' : status === 404 ? 'repo_not_found' : 'fetch_failed',
     }
   }
-}
 
-function excerptIssueBody(body: string): string {
-  const cleaned = body
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/\n{2,}/g, ' ')
-    .replace(/[#*_`>]/g, '')
-    .trim()
-  return cleaned.length > 280 ? cleaned.slice(0, 277) + '…' : cleaned
+  // Drop PRs from list mode (the issues endpoint returns both).
+  const issuesOnly = rawIssues.filter((i) => !('pull_request' in i && i.pull_request))
+  if (issuesOnly.length === 0) return { issues: [], relatedChunks: [] }
+
+  // Collect refs across all issues so we lookup entities once.
+  const allRefs = new Set<string>()
+  const refsPerIssue = new Map<number, Set<string>>()
+  for (const i of issuesOnly) {
+    const text = `${i.title}\n${i.body ?? ''}`
+    const refs = extractRefs(text)
+    refsPerIssue.set(i.number, refs)
+    for (const r of refs) allRefs.add(r)
+  }
+  const entityMatches = allRefs.size > 0
+    ? await lookupEntitiesByRefs(ctx.db, ctx.workspaceId, [...allRefs])
+    : new Map<string, LinkedEntity[]>()
+
+  // Build per-issue relatedEntities by walking that issue's refs.
+  const allRelatedEntityIds = new Set<string>()
+  const finalIssues: IssueResult[] = issuesOnly.slice(0, limit).map((i) => {
+    const refs = refsPerIssue.get(i.number) ?? new Set<string>()
+    const linked = new Map<string, LinkedEntity>()
+    for (const r of refs) {
+      const hits = entityMatches.get(r.toLowerCase()) ?? []
+      for (const e of hits) linked.set(e.entityId, e)
+    }
+    const related = [...linked.values()].slice(0, 8)
+    for (const e of related) allRelatedEntityIds.add(e.entityId)
+    return {
+      number: i.number,
+      title: i.title,
+      url: i.html_url,
+      labels: (i.labels ?? [])
+        .map((l) => (typeof l === 'string' ? l : (l.name ?? '')))
+        .filter(Boolean),
+      bodyExcerpt: excerptIssueBody(i.body ?? ''),
+      updatedAt: i.updated_at,
+      relatedEntities: related,
+    }
+  })
+
+  const relatedChunks = allRelatedEntityIds.size > 0
+    ? await fetchChunksForEntities(ctx.db, ctx.workspaceId, [...allRelatedEntityIds])
+    : []
+
+  return { issues: finalIssues, relatedChunks }
 }
 
 // ---------- answer wrapper for plan executor ----------
@@ -836,11 +908,42 @@ export async function* answerOp(
   for (const item of params.context.flat(2)) {
     if (!item || typeof item !== 'object') continue
     const obj = item as Record<string, unknown>
-    // list_issues envelope { issues: [...] }: collect for prompt
-    // injection. Container shape, not a leaf — skip chunk/entity
-    // detection below.
+    // list_issues envelope { issues, relatedChunks }: collect issues
+    // for prompt injection AND lift linked code into the main entity /
+    // chunk context so [chunk:UUID] / [entity:UUID] citations work.
     if (Array.isArray(obj.issues) && obj.issues.every((it) => it && typeof it === 'object' && typeof (it as { number?: unknown }).number === 'number')) {
-      for (const it of obj.issues as IssueResult[]) issueResults.push(it)
+      for (const it of obj.issues as IssueResult[]) {
+        issueResults.push(it)
+        for (const e of it.relatedEntities ?? []) {
+          if (seenEntityIds.has(e.entityId)) continue
+          seenEntityIds.add(e.entityId)
+          entitiesContext.push({
+            id: e.entityId,
+            name: e.name,
+            type: e.type,
+            description: e.description,
+            qualifiedName: e.qualifiedName,
+            metadata: null,
+            filePath: e.filePath,
+            startLine: null,
+            endLine: null,
+            language: null,
+            signature: null,
+          })
+        }
+      }
+      const relatedChunks = (obj.relatedChunks as LinkedChunk[] | undefined) ?? []
+      for (const c of relatedChunks) {
+        if (seenChunkIds.has(c.id)) continue
+        seenChunkIds.add(c.id)
+        chunks.push({
+          id: c.id,
+          text: c.text,
+          filePath: c.filePath,
+          startLine: c.startLine,
+          endLine: c.endLine,
+        })
+      }
       continue
     }
     // Walkthrough envelope { entities, mermaid }: unwrap entities and
