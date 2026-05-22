@@ -74,7 +74,9 @@ async function findEntrypoints(
 ): Promise<EntrypointHit[]> {
   const out: EntrypointHit[] = []
 
-  // 1. package.json — main / bin / scripts.start
+  // 1. package.json — main / bin / scripts.start. Shallowest-path-first
+  // so the root manifest wins; nested workspaces / examples are picked
+  // up only if no root package.json exists at all.
   const packageJsonChunks = await db
     .select({ text: chunks.text, filePath: chunks.filePath })
     .from(chunks)
@@ -84,11 +86,16 @@ async function findEntrypoints(
         sql`${chunks.filePath} LIKE '%package.json'`,
       ),
     )
+    .orderBy(sql`length(${chunks.filePath}) ASC`)
     .limit(10)
+  // Keep only the shallowest manifest(s). If the root is "package.json"
+  // (depth 1) use just that; otherwise fall back to the next-shallowest.
+  const minDepth = packageJsonChunks
+    .map((c) => (c.filePath?.split('/').length ?? Infinity))
+    .reduce((a, b) => Math.min(a, b), Infinity)
   for (const c of packageJsonChunks) {
     if (!c.filePath) continue
-    // We only care about the top-level manifest, not nested workspaces.
-    if (c.filePath.split('/').length > 2 && !c.filePath.endsWith('/package.json')) continue
+    if (c.filePath.split('/').length > minDepth) continue
     try {
       const pkg = JSON.parse(c.text) as {
         name?: string

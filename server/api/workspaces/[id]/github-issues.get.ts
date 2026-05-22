@@ -88,6 +88,20 @@ export default defineEventHandler(async (event) => {
       direction: 'desc',
     })
     raw = res.data
+    // Lots of repos don't use the canonical contributor-friendly labels.
+    // Fall back to ALL open issues so the panel isn't empty just because
+    // maintainers haven't tagged anything as "good first issue".
+    if (raw.length === 0) {
+      const fallback = await octokit.rest.issues.listForRepo({
+        owner,
+        repo,
+        state: 'open',
+        per_page: 30,
+        sort: 'updated',
+        direction: 'desc',
+      })
+      raw = fallback.data
+    }
   } catch (err) {
     const status = (err as { status?: number }).status ?? 0
     return {
@@ -188,7 +202,14 @@ async function lookupEntities(
 
   // 1. Entities by lowercased name / qualified_name exact match —
   // single round trip via unnest + join.
+  //
+  // Drizzle serialises a JS array passed as ${arr} into a row
+  // constructor `($1, $2, ...)`, NOT a Postgres array literal, which
+  // breaks `::text[]` ("cannot cast type record to text[]"). We build
+  // the array explicitly with ARRAY[...] + sql.join so the planner
+  // sees an honest text[].
   if (namesOnly.length > 0) {
+    const arrayLiteral = sql`ARRAY[${sql.join(namesOnly.map((n) => sql`${n}`), sql`, `)}]::text[]`
     const rows = await db.execute<{
       id: string
       name: string
@@ -198,7 +219,7 @@ async function lookupEntities(
       in_degree: number
     }>(sql`
       WITH targets AS (
-        SELECT unnest(${namesOnly}::text[]) AS lookup
+        SELECT unnest(${arrayLiteral}) AS lookup
       )
       SELECT e.id, e.name, e.type, e.file_path,
              t.lookup,
@@ -246,10 +267,11 @@ async function lookupEntities(
       .limit(3)
     if (rows.length === 0) continue
     const ids = rows.map((r) => r.id)
+    const idsArray = sql`ARRAY[${sql.join(ids.map((id) => sql`${id}`), sql`, `)}]::uuid[]`
     const degrees = await db.execute<{ to_entity_id: string; n: number }>(sql`
       SELECT to_entity_id, count(*)::int AS n
       FROM ${relations}
-      WHERE workspace_id = ${workspaceId} AND to_entity_id = ANY(${ids}::uuid[])
+      WHERE workspace_id = ${workspaceId} AND to_entity_id = ANY(${idsArray})
       GROUP BY to_entity_id
     `)
     const inDegreeBy = new Map<string, number>()

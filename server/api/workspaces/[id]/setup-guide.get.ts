@@ -47,6 +47,10 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const db = getDb(config.databaseUrl as string)
 
+  // Shallowest-path-first so the root manifests + top-level README come
+  // first, even when the repo has dozens of nested package.json files
+  // (example: example collections, monorepos). Limit raised to 80 to
+  // tolerate big monorepos where many manifests share the same depth.
   const signalFiles = await db
     .select({ filePath: chunks.filePath, text: chunks.text })
     .from(chunks)
@@ -68,7 +72,8 @@ export default defineEventHandler(async (event) => {
         )`,
       ),
     )
-    .limit(40)
+    .orderBy(sql`length(${chunks.filePath}) ASC`)
+    .limit(80)
 
   const guide: SetupGuide = {
     steps: [],
