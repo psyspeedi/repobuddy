@@ -16,6 +16,11 @@ const REF_RE = /`([^`\n]{2,80})`/g
 const PATH_RE = /(?<![\w/])([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|rb|md))/g
 
 export interface LinkedEntity {
+  /** Canonical entity id. Duplicated as `entityId` for the REST
+   * endpoint / Tour UI which read that key, and as `id` so KAG
+   * operator chains ($s1.issues[0].relatedEntities → walkthrough →
+   * get_callers) match the GraphEntity-shaped `id` field they expect. */
+  id: string
   entityId: string
   name: string
   type: string
@@ -94,6 +99,7 @@ export async function lookupEntitiesByRefs(
     for (const r of rows) {
       const list = out.get(r.lookup) ?? []
       list.push({
+        id: r.id,
         entityId: r.id,
         name: r.name,
         type: r.type,
@@ -130,6 +136,7 @@ export async function lookupEntitiesByRefs(
     const list = out.get(p) ?? []
     for (const r of rows) {
       list.push({
+        id: r.id,
         entityId: r.id,
         name: r.name,
         type: r.type,

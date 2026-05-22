@@ -31,6 +31,7 @@ The JSON object MUST have this top-level shape:
 - get_summary({ entity }) → { id, name, type, description }[]
 - walkthrough({ entity, limit? }) → { entity, callees, tests, parents }[]   (entity-centric tour: direct callees + tests covering it + enclosing parent)
 - list_issues({ labels?, state?, limit?, issueNumber? }) → { issues: { number, title, url, labels, bodyExcerpt, updatedAt, relatedEntities[] }[], relatedChunks: Chunk[] }   (open GitHub issues from the workspace's source repo, ALREADY LINKED to indexed code via relatedEntities + relatedChunks. Use issueNumber to focus a single issue; otherwise lists up to the configured limit of open issues)
+- get_project_overview({}) → { entrypoints, coreAbstractions, goodFirstIssues, hotFiles, stats }   (snapshot of the whole workspace — main entrypoints, classes/functions everything depends on, hot files, safe-first-PR zones, entity-type stats. Use for broad orientation questions or as a first step before diving deeper)
 - answer({ question, context, style? }) → streaming response with inline citations
 
 ## Reference syntax
@@ -44,10 +45,11 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 - For "list / enumerate all X" questions (functions, classes, files, types, modules — no specific identifier), call \`find_symbol\` with ONLY the \`type\` parameter set (no \`name\`). It returns up to \`limit\` entities of that type. Pair with \`get_summary\` to surface their LLM-generated descriptions. Bumping limit to 30-50 is fine for these.
 - Use \`find_by_concept\` only when there is no concrete identifier — for genuinely fuzzy semantic queries ("where is discount logic").
 - For multi-hop "who calls X transitively" — use get_callers with transitive: true.
-- For broad / architectural / "tell me about this project" / "how does X work overall" questions — use \`search_docs\` (covers READMEs, docs/*.md, design notes) as the primary retrieval step, optionally combined with \`hybrid_search\` for code snippets. Bumping limit to 15 is fine on such broad queries.
+- For broad / architectural / "tell me about this project" / "how does X work overall" / "what does this repo do" / "что это за проект" questions — START with \`get_project_overview\` (entrypoints + core abstractions + hot files + stats). Combine with \`search_docs\` for README context and optionally \`hybrid_search\` for code snippets. The overview lifts core abstractions into the entity context automatically, so the answer can cite them directly.
 - For "walk me through X" / "how does X work" / "explain X step by step" / "проведи меня по X" — first resolve X via find_symbol, then use \`walkthrough\` to gather callees + tests + parent, then retrieve_code_chunks of those for the answer.
 - For "are there any issues" / "what can I work on" / "good first issues" / "что можно поделать" / "есть issues" / "what's open" — call \`list_issues\` (optionally with labels like ["good first issue", "help wanted"]). Pass the returned envelope to \`answer\`. The operator already linked relatedEntities + relatedChunks, so the answer can ground in real code.
-- For a SPECIFIC issue ("I want to work on issue #42", "issue #191", "помоги с #42") — call \`list_issues\` with \`issueNumber: 42\` (no labels). The envelope contains that one issue + its relatedEntities + relatedChunks. Skip further retrieval unless relatedEntities is empty AND the issue body contains identifiers worth chasing — in that case follow up with \`find_symbol\` / \`hybrid_search\` on those identifiers.
+- For a SPECIFIC issue ("I want to work on issue #42", "issue #191", "помоги с #42") — call \`list_issues\` with \`issueNumber: 42\` (no labels). The operator returns relatedEntities + relatedChunks but for issue-resolution questions you should ALWAYS expand further — pick 2-3 top relatedEntities and run \`walkthrough\` on the entity-shaped ones (functions, classes) AND \`get_callers\` to surface who depends on each, then \`retrieve_code_chunks\` on every entity gathered (initial + walkthrough + callers). The answer step then has the issue text + its direct linked code + the callers + the walkthrough — enough to actually recommend a starting point and a fix, not just point back to GitHub.
+  When relatedEntities is empty AND the issue body contains identifiers worth chasing, fall back to \`find_symbol\` / \`hybrid_search\` on those identifiers before the answer step.
 - The question may be in any language (Russian, Chinese, etc.). Extract identifiers verbatim; do not translate them.
 - Keep plans concise: 2-5 steps is usually right.`
 
@@ -145,17 +147,13 @@ const FEW_SHOTS = [
   {
     question: 'Tell me about this project.',
     plan: {
-      reasoning: 'Broad question — primary signal is docs (README, design notes); add code overview for completeness.',
+      reasoning: 'Broad orientation question — start with get_project_overview for structured signals (entrypoints + core abstractions + hot files + stats), add docs for narrative context, end with answer.',
       steps: [
-        {
-          id: 's1',
-          op: 'search_docs',
-          params: { query: 'project overview architecture main features', limit: 15 },
-        },
+        { id: 's1', op: 'get_project_overview', params: {} },
         {
           id: 's2',
-          op: 'hybrid_search',
-          params: { query: 'main entry points top-level modules', limit: 6 },
+          op: 'search_docs',
+          params: { query: 'project overview architecture main features', limit: 12 },
         },
         {
           id: 's3',
@@ -189,15 +187,18 @@ const FEW_SHOTS = [
   {
     question: 'I want to work on issue #42 — where do I start in the code?',
     plan: {
-      reasoning: 'Specific issue — fetch it with issueNumber so the operator pre-links relatedEntities and relatedChunks. The answer step grounds in those.',
+      reasoning: 'Specific issue resolution — fetch it, then expand the top relatedEntities (walkthrough + callers) so the answer can ground in real code, not just point back to GitHub.',
       steps: [
         { id: 's1', op: 'list_issues', params: { issueNumber: 42 } },
+        { id: 's2', op: 'walkthrough', params: { entity: '$s1.issues[0].relatedEntities', limit: 8 } },
+        { id: 's3', op: 'get_callers', params: { target: '$s1.issues[0].relatedEntities', transitive: false, limit: 12 } },
+        { id: 's4', op: 'retrieve_code_chunks', params: { entities: '$s3' } },
         {
-          id: 's2',
+          id: 's5',
           op: 'answer',
           params: {
             question: 'I want to work on issue #42 — where do I start in the code?',
-            context: ['$s1'],
+            context: ['$s1', '$s2', '$s3', '$s4'],
             style: 'detailed',
           },
         },

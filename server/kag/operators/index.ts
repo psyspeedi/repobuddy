@@ -20,6 +20,7 @@ import {
   type LinkedChunk,
   type LinkedEntity,
 } from '../../lib/github-issue-linking'
+import { getProjectOverview, type ProjectOverview } from '../../lib/project-overview'
 import { hybridSearch } from './hybrid_search'
 import { answer, type AnswerStreamChunk } from './answer'
 
@@ -843,6 +844,29 @@ export async function listIssues(
   return { issues: finalIssues, relatedChunks }
 }
 
+// ---------- get_project_overview ----------
+/**
+ * Returns a structured snapshot of the workspace — entrypoints, core
+ * abstractions (top by in-degree), safe-first-PR zones, hot files, and
+ * entity-type stats. The planner uses this for broad "tell me about
+ * this project / where do I start" questions and as grounding for
+ * answers that need a sense of scale before diving deeper.
+ *
+ * Same helper that powers the Tour overlay — single source of truth.
+ */
+export interface ProjectOverviewParams {
+  /** No params yet — the operator is intentionally parameterless so
+   * the planner can call it unconditionally for orientation. */
+  _?: never
+}
+
+export async function getProjectOverviewOp(
+  _params: ProjectOverviewParams,
+  ctx: OperatorContext,
+): Promise<ProjectOverview> {
+  return getProjectOverview(ctx.db, ctx.workspaceId)
+}
+
 // ---------- answer wrapper for plan executor ----------
 export async function* answerOp(
   params: {
@@ -876,6 +900,10 @@ export async function* answerOp(
   // dedicated section in the user prompt; the model is asked to cite
   // issue numbers (#42) in its answer.
   const issueResults: IssueResult[] = []
+  // Project overview from get_project_overview operator. Surfaced in
+  // the prompt with entrypoints + core abstractions + stats so the
+  // model can ground broad/orientation questions.
+  let overview: ProjectOverview | null = null
 
   // 1a) Pinned entities from the user's [entity:UUID] citations always go
   //     in first — they're the most likely thing the user wants summarised.
@@ -908,6 +936,36 @@ export async function* answerOp(
   for (const item of params.context.flat(2)) {
     if (!item || typeof item !== 'object') continue
     const obj = item as Record<string, unknown>
+    // get_project_overview envelope: detected by the presence of
+    // entrypoints + coreAbstractions + stats keys together (other
+    // envelopes carry one or two but never this combo).
+    if (
+      Array.isArray(obj.entrypoints)
+      && Array.isArray(obj.coreAbstractions)
+      && obj.stats && typeof obj.stats === 'object'
+    ) {
+      overview = obj as unknown as ProjectOverview
+      // Lift abstraction entities into the entity context so the model
+      // can cite [entity:UUID] when summarising what depends on what.
+      for (const e of overview.coreAbstractions ?? []) {
+        if (seenEntityIds.has(e.id)) continue
+        seenEntityIds.add(e.id)
+        entitiesContext.push({
+          id: e.id,
+          name: e.name,
+          type: e.type,
+          description: e.description,
+          qualifiedName: e.qualifiedName,
+          metadata: null,
+          filePath: e.filePath,
+          startLine: null,
+          endLine: null,
+          language: null,
+          signature: null,
+        })
+      }
+      continue
+    }
     // list_issues envelope { issues, relatedChunks }: collect issues
     // for prompt injection AND lift linked code into the main entity /
     // chunk context so [chunk:UUID] / [entity:UUID] citations work.
@@ -1046,6 +1104,7 @@ export async function* answerOp(
     responseLocale: ctx.responseLocale,
     mermaidDiagrams: mermaidBlocks,
     issues: issueResults,
+    overview,
   })) {
     yield evt
   }
@@ -1106,6 +1165,7 @@ export type OperatorName =
   | 'get_summary'
   | 'walkthrough'
   | 'list_issues'
+  | 'get_project_overview'
   | 'answer'
 
 export const OPERATORS: Record<
@@ -1128,5 +1188,6 @@ export const OPERATORS: Record<
   get_summary: getSummary as never,
   walkthrough: walkthrough as never,
   list_issues: listIssues as never,
+  get_project_overview: getProjectOverviewOp as never,
   answer: answerOp as never,
 }

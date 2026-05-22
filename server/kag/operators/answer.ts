@@ -1,4 +1,5 @@
 import type { LLMProvider, ChatMessage } from '../../providers/llm'
+import type { ProjectOverview } from '../../lib/project-overview'
 
 export interface AnswerContextChunk {
   id: string
@@ -58,6 +59,13 @@ export interface AnswerParams {
    * cite issue numbers (#42) and link out to the actual URL when
    * recommending which to pick up.
    */
+  /**
+   * Project overview snapshot from get_project_overview. When present,
+   * an "Orientation" section is added to the user prompt so the model
+   * can summarise the codebase confidently for broad / first-time
+   * questions ("tell me about this project", "where do I start").
+   */
+  overview?: ProjectOverview | null
   issues?: {
     number: number
     title: string
@@ -155,6 +163,47 @@ function renderUserMessage(params: AnswerParams): string {
         .map((k) => `${k}=${ws.stats?.[k]}`)
       if (interesting.length > 0) lines.push(`- stats: ${interesting.join(', ')}`)
     }
+    lines.push('')
+  }
+
+  if (params.overview) {
+    const ov = params.overview
+    lines.push('## Orientation (project overview)')
+    if (ov.entrypoints.length > 0) {
+      lines.push('### Entrypoints')
+      for (const e of ov.entrypoints.slice(0, 6)) {
+        const id = e.id ? ` [entity:${e.id}]` : ''
+        lines.push(`- (${e.kind}) ${e.name} — \`${e.filePath}\`${id}`)
+      }
+    }
+    if (ov.coreAbstractions.length > 0) {
+      lines.push('### Core abstractions (top by in-degree)')
+      for (const a of ov.coreAbstractions.slice(0, 8)) {
+        const where = a.filePath ? ` in \`${a.filePath}\`` : ''
+        const desc = a.description ? ` — ${a.description.slice(0, 120)}` : ''
+        lines.push(`- ${a.type} \`${a.name}\` [entity:${a.id}] (←${a.inDegree})${where}${desc}`)
+      }
+    }
+    if (ov.hotFiles.length > 0) {
+      lines.push('### Hot files (most changed in 90d)')
+      for (const h of ov.hotFiles.slice(0, 6)) {
+        lines.push(`- \`${h.filePath}\` [entity:${h.id}] (${h.hotness} commits)`)
+      }
+    }
+    if (ov.goodFirstIssues.length > 0) {
+      lines.push('### Safe first-PR zones')
+      for (const z of ov.goodFirstIssues.slice(0, 4)) {
+        lines.push(`- \`${z.filePath}\` [entity:${z.id}] — ${z.reasons.join(', ')}`)
+      }
+    }
+    const tot = ov.stats.totalEntities
+    const byType = Object.entries(ov.stats.entitiesByType)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([t, n]) => `${t}=${n}`)
+      .join(', ')
+    lines.push(`### Stats`)
+    lines.push(`- ${tot} entities total (${byType})`)
     lines.push('')
   }
 
