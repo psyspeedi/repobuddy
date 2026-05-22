@@ -50,5 +50,10 @@ export type ChunkSourceType =
    * planner a way to surface usage examples specifically when answering
    * "how do I use X" style questions. */
   | 'example'
+  /** Project manifests that aren't AST-parseable but carry setup signals
+   * (package.json, pyproject.toml, Makefile, Dockerfile, docker-compose,
+   * go.mod, Cargo.toml). Indexed as whole-file chunks so the onboarding
+   * endpoints can read pkg.scripts, Makefile targets, etc. */
+  | 'config'
 
 export type ChatRole = 'user' | 'assistant'

@@ -192,6 +192,35 @@ export async function runIndexPipeline(
         }
       }
 
+      // 5b'. Project manifests — package.json / Makefile / Dockerfile / etc.
+      // These aren't AST-parseable and aren't markdown, so without this
+      // step they never reach the chunks table. The onboarding + setup
+      // endpoints rely on chunks.file_path / chunks.text to read
+      // pkg.scripts, Makefile targets, the README's Quick Start, etc.
+      // 256KB cap per file is enough to cover real-world manifests
+      // without bloating the chunk store.
+      const MANIFEST_RE = /(^|\/)(package\.json|pyproject\.toml|Makefile|Dockerfile|go\.mod|Cargo\.toml|docker-compose(\..+)?\.ya?ml)$/i
+      const MANIFEST_MAX_BYTES = 256 * 1024
+      const manifestFiles = walked.files.filter(
+        (f) => MANIFEST_RE.test(f.relPath) && f.sizeBytes > 0 && f.sizeBytes <= MANIFEST_MAX_BYTES,
+      )
+      for (const m of manifestFiles) {
+        try {
+          const text = await readFile(m.absPath, 'utf-8')
+          const lineCount = text.split('\n').length
+          allChunks.push({
+            filePath: m.relPath,
+            startLine: 1,
+            endLine: lineCount,
+            text,
+            sourceType: 'config',
+            metadata: { language: m.language ?? 'unknown' },
+          })
+        } catch {
+          /* skip unreadable manifest */
+        }
+      }
+
       // 5c. Derive `tested_by` relations: for every test-file entity, look at
       // its outgoing `imports` relations and emit a tested_by edge from each
       // top-level entity defined in the imported file back to the test
