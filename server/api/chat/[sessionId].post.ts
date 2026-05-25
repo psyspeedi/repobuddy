@@ -42,6 +42,17 @@ const BodySchema = z.object({
    *   slower, more thorough. Opt-in per request.
    */
   mode: z.enum(['planned', 'agentic']).optional().default('planned'),
+  /**
+   * Session focus — entities / files / issues the user has pinned for
+   * this chat. Auto-loaded into pinnedEntities / pinnedChunks for
+   * every turn so the model retains context across the conversation.
+   * Caller is the client (useChat persists in localStorage).
+   */
+  focus: z.object({
+    entityIds: z.array(z.string().uuid()).max(15).optional(),
+    filePaths: z.array(z.string().min(1).max(300)).max(15).optional(),
+    issueNumbers: z.array(z.number().int().min(1).max(1_000_000)).max(15).optional(),
+  }).optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -171,6 +182,39 @@ export default defineEventHandler(async (event) => {
           pinnedChunks.push(c)
         }
       }
+
+      // Session focus — apply pinned entities / files / issues from
+      // the client (persisted in localStorage). Same plumbing as the
+      // [entity:UUID] citation auto-pin: load entities + their linked
+      // chunks via entity_chunks, dedupe against what's already there.
+      const focus = body.focus
+      if (focus?.entityIds && focus.entityIds.length > 0) {
+        const newIds = focus.entityIds.filter((id) => !citedIds.includes(id))
+        if (newIds.length > 0) {
+          const ents = await loadPinnedEntities(db, body.workspaceId, newIds)
+          for (const e of ents) {
+            if (pinnedEntities.find((p) => p.id === e.id)) continue
+            pinnedEntities.push(e)
+          }
+          const focusChunks = await loadPinnedChunks(db, body.workspaceId, newIds)
+          for (const c of focusChunks) {
+            if (pinnedChunks.find((p) => p.id === c.id)) continue
+            pinnedChunks.push(c)
+          }
+        }
+      }
+      if (focus?.filePaths && focus.filePaths.length > 0) {
+        const fileChunks = await loadChunksByFilePaths(db, body.workspaceId, focus.filePaths)
+        for (const c of fileChunks) {
+          if (pinnedChunks.find((p) => p.id === c.id)) continue
+          pinnedChunks.push(c)
+        }
+      }
+      // issueNumbers — the agentic / planned answer operators will pick
+      // them up via list_issues; we just stash them in the question
+      // history so the model knows to call list_issues with that number.
+      // No server-side pre-load to avoid burning GitHub anonymous rate
+      // limit on every single chat turn.
 
       let assembled = ''
       let inputTokens = 0

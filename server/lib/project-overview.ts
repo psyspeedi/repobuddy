@@ -77,6 +77,9 @@ export interface ProjectOverview {
   hotFiles: HotFile[]
   /** CONTRIBUTING / PR template / issue template / CoC content. */
   contribGuide: ContribGuideExcerpt[]
+  /** Mermaid `flowchart LR` of top-level folders + cross-folder imports.
+   * Empty when the repo is too flat for a meaningful diagram. */
+  architectureMermaid: string | null
   stats: {
     entitiesByType: Record<string, number>
     totalFiles: number
@@ -100,6 +103,7 @@ export async function getProjectOverview(
     goodFirstIssues,
     hotFiles,
     contribGuide,
+    architectureMermaid,
     stats,
   ] = await Promise.all([
     findEntrypoints(db, workspaceId),
@@ -107,9 +111,88 @@ export async function getProjectOverview(
     findGoodFirstIssues(db, workspaceId),
     findHotFiles(db, workspaceId),
     findContribGuide(db, workspaceId),
+    buildArchitectureMermaid(db, workspaceId),
     computeStats(db, workspaceId),
   ])
-  return { entrypoints, coreAbstractions, goodFirstIssues, hotFiles, contribGuide, stats }
+  return { entrypoints, coreAbstractions, goodFirstIssues, hotFiles, contribGuide, architectureMermaid, stats }
+}
+
+/**
+ * Auto-generated `flowchart LR` mermaid diagram of top-level folder
+ * dependencies. Picks top-N folders by entity count (depth ≤ 2 from
+ * root), counts inbound/outbound import edges between them. Output is
+ * pure text — caller (Tour UI or answer prompt) decides how to render.
+ */
+async function buildArchitectureMermaid(
+  db: Database,
+  workspaceId: string,
+): Promise<string | null> {
+  // 1. Top folders by entity count.
+  const folders = await db.execute<{ folder: string; n: number }>(sql`
+    SELECT
+      coalesce(
+        nullif(substring(file_path from '^([^/]+/[^/]+)(/|$)'), ''),
+        nullif(substring(file_path from '^([^/]+)(/|$)'), ''),
+        '(root)'
+      ) AS folder,
+      count(*)::int AS n
+    FROM ${entities}
+    WHERE workspace_id = ${workspaceId} AND file_path IS NOT NULL
+    GROUP BY folder
+    HAVING count(*) >= 3
+    ORDER BY n DESC
+    LIMIT 12
+  `)
+  if (folders.length < 2) return null
+
+  // 2. Folder-folder import edges. Group `imports` relations by the
+  // folder of their from-entity and to-entity. Self-folder edges
+  // dropped (noise).
+  const edges = await db.execute<{ from_folder: string; to_folder: string; n: number }>(sql`
+    SELECT
+      coalesce(
+        nullif(substring(fe.file_path from '^([^/]+/[^/]+)(/|$)'), ''),
+        nullif(substring(fe.file_path from '^([^/]+)(/|$)'), ''),
+        '(root)'
+      ) AS from_folder,
+      coalesce(
+        nullif(substring(te.file_path from '^([^/]+/[^/]+)(/|$)'), ''),
+        nullif(substring(te.file_path from '^([^/]+)(/|$)'), ''),
+        '(root)'
+      ) AS to_folder,
+      count(*)::int AS n
+    FROM ${relations} r
+    INNER JOIN ${entities} fe ON fe.id = r.from_entity_id
+    INNER JOIN ${entities} te ON te.id = r.to_entity_id
+    WHERE r.workspace_id = ${workspaceId}
+      AND r.type = 'imports'
+      AND fe.file_path IS NOT NULL
+      AND te.file_path IS NOT NULL
+    GROUP BY from_folder, to_folder
+    HAVING count(*) >= 2
+    ORDER BY n DESC
+    LIMIT 40
+  `)
+
+  const folderSet = new Set(folders.map((f) => f.folder))
+  const sanitise = (s: string): string => s.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 32) || 'node'
+  const lines: string[] = ['flowchart LR']
+  for (const f of folders) {
+    const id = sanitise(f.folder)
+    lines.push(`    ${id}["${f.folder}<br/>${f.n}"]`)
+  }
+  let edgesAdded = 0
+  for (const e of edges) {
+    if (e.from_folder === e.to_folder) continue
+    if (!folderSet.has(e.from_folder) || !folderSet.has(e.to_folder)) continue
+    const from = sanitise(e.from_folder)
+    const to = sanitise(e.to_folder)
+    lines.push(`    ${from} -->|${e.n}| ${to}`)
+    edgesAdded += 1
+    if (edgesAdded >= 25) break
+  }
+  if (edgesAdded === 0) return null
+  return lines.join('\n')
 }
 
 const CONTRIB_PATTERNS: { re: RegExp; kind: ContribGuideExcerpt['kind'] }[] = [

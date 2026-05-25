@@ -221,6 +221,13 @@ function renderUserMessage(params: AnswerParams): string {
         lines.push(`- \`${z.filePath}\` [entity:${z.id}] — ${z.reasons.join(', ')}`)
       }
     }
+    if (ov.architectureMermaid) {
+      lines.push('### Architecture (auto-generated)')
+      lines.push('Folder-level imports between the top folders. Sized by entity count, edges labelled with import counts. Include this block VERBATIM in your answer when the user asks "what does this project look like" / "explain the architecture":')
+      lines.push('```mermaid')
+      lines.push(ov.architectureMermaid)
+      lines.push('```')
+    }
     if (ov.contribGuide && ov.contribGuide.length > 0) {
       lines.push('### Contribution conventions')
       lines.push('Surface these rules to the user when they ask about contributing — every OSS project has specific norms (signing, conventional commits, test policy, etc.).')
