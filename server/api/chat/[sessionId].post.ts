@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { getDb } from '../../db/client'
 import {
@@ -157,6 +157,21 @@ export default defineEventHandler(async (event) => {
       // the answer ends with ↗ → source viewer, not ◆ → graph.
       const pinnedChunks = citedIds.length > 0 ? await loadPinnedChunks(db, body.workspaceId, citedIds) : []
 
+      // If the user pasted a unified diff, pre-load the touched files'
+      // chunks so the answer can analyse the change in context (callers,
+      // tests, neighbouring entities). The answer-prompt instruction
+      // tells the model to treat these as "the change set to evaluate"
+      // rather than just background context.
+      const diffPaths = extractDiffFilePaths(body.question)
+      const userPastedDiff = diffPaths.length > 0 || questionContainsDiff(body.question)
+      if (diffPaths.length > 0) {
+        const diffChunks = await loadChunksByFilePaths(db, body.workspaceId, diffPaths)
+        for (const c of diffChunks) {
+          if (pinnedChunks.find((p) => p.id === c.id)) continue
+          pinnedChunks.push(c)
+        }
+      }
+
       let assembled = ''
       let inputTokens = 0
       let outputTokens = 0
@@ -183,6 +198,7 @@ export default defineEventHandler(async (event) => {
           pinnedEntities,
           pinnedChunks,
           responseLocale: body.locale ?? 'en',
+          userPastedDiff,
         }
         const toolSteps: unknown[] = []
         savedPlan = { mode: 'agentic' }
@@ -227,6 +243,7 @@ export default defineEventHandler(async (event) => {
           pinnedEntities,
           pinnedChunks,
           responseLocale: body.locale ?? 'en',
+          userPastedDiff,
         })
         savedTrace = result.trace
 
@@ -340,6 +357,140 @@ function extractEntityIdsFromQuestion(question: string): string[] {
     if (m[1]) ids.add(m[1].toLowerCase())
   }
   return [...ids]
+}
+
+/**
+ * Recognise a unified diff embedded in the user's question. Triggers
+ * pre-loading the touched files' chunks as pinnedChunks so the answer
+ * can reason about the change in context.
+ *
+ * Supports:
+ *   `diff --git a/path/x b/path/x`
+ *   `--- a/path/x` / `+++ b/path/x`
+ *   `diff -u path/x path/x`
+ * Stops at 12 paths to keep prompt budget under control.
+ */
+const DIFF_GIT_RE = /^diff --git a\/(.+?) b\/(.+?)\s*$/gm
+const DIFF_MINUS_RE = /^---\s+(?:a\/)?(.+?)\s*$/gm
+const DIFF_PLUS_RE = /^\+\+\+\s+(?:b\/)?(.+?)\s*$/gm
+function extractDiffFilePaths(question: string): string[] {
+  if (!/^diff --git|^---\s|^\+\+\+\s/m.test(question)) return []
+  const paths = new Set<string>()
+  for (const m of question.matchAll(DIFF_GIT_RE)) {
+    if (m[2] && m[2] !== '/dev/null') paths.add(m[2])
+  }
+  for (const m of question.matchAll(DIFF_PLUS_RE)) {
+    if (m[1] && m[1] !== '/dev/null' && !m[1].startsWith('+')) paths.add(m[1])
+  }
+  for (const m of question.matchAll(DIFF_MINUS_RE)) {
+    if (m[1] && m[1] !== '/dev/null' && !m[1].startsWith('-')) paths.add(m[1])
+  }
+  return [...paths].slice(0, 12)
+}
+
+function questionContainsDiff(question: string): boolean {
+  return /^diff --git|^---\s+(?:a\/)?[\w./-]+\s*\n\+\+\+|^\+\+\+\s+(?:b\/)?[\w./-]+\s*$/m.test(question)
+}
+
+async function loadChunksByFilePaths(
+  db: ReturnType<typeof getDb>,
+  workspaceId: string,
+  paths: string[],
+): Promise<
+  {
+    id: string
+    text: string
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    sourceType: string
+    metadata: Record<string, unknown> | null
+  }[]
+> {
+  if (paths.length === 0) return []
+  // Match each path by exact OR suffix. Cap 3 chunks per file so
+  // a chunky file doesn't crowd out the rest of the change set.
+  const out: {
+    id: string
+    text: string
+    filePath: string | null
+    startLine: number | null
+    endLine: number | null
+    sourceType: string
+    metadata: Record<string, unknown> | null
+  }[] = []
+  for (const p of paths) {
+    const normalized = p.replace(/^\.?\//, '')
+    const rows = await db
+      .select({
+        id: chunksTable.id,
+        text: chunksTable.text,
+        filePath: chunksTable.filePath,
+        startLine: chunksTable.startLine,
+        endLine: chunksTable.endLine,
+        sourceType: chunksTable.sourceType,
+        metadata: chunksTable.metadata,
+      })
+      .from(chunksTable)
+      .where(
+        and(
+          eq(chunksTable.workspaceId, workspaceId),
+          inArray(
+            chunksTable.filePath,
+            // Match either the literal path the diff carries OR the
+            // normalised form; SQL OR-of-LIKE is awkward via Drizzle
+            // builder, so we widen with inArray on the common forms.
+            [p, normalized, '/' + normalized],
+          ),
+        ),
+      )
+      .limit(3)
+    if (rows.length > 0) {
+      for (const r of rows) {
+        out.push({
+          id: r.id,
+          text: r.text,
+          filePath: r.filePath,
+          startLine: r.startLine,
+          endLine: r.endLine,
+          sourceType: r.sourceType,
+          metadata: r.metadata as Record<string, unknown> | null,
+        })
+      }
+      continue
+    }
+    // Suffix fallback for deeper paths.
+    const suffix = await db
+      .select({
+        id: chunksTable.id,
+        text: chunksTable.text,
+        filePath: chunksTable.filePath,
+        startLine: chunksTable.startLine,
+        endLine: chunksTable.endLine,
+        sourceType: chunksTable.sourceType,
+        metadata: chunksTable.metadata,
+      })
+      .from(chunksTable)
+      .where(
+        and(
+          eq(chunksTable.workspaceId, workspaceId),
+          sql`${chunksTable.filePath} LIKE ${'%/' + normalized}`,
+        ),
+      )
+      .limit(3)
+    for (const r of suffix) {
+      out.push({
+        id: r.id,
+        text: r.text,
+        filePath: r.filePath,
+        startLine: r.startLine,
+        endLine: r.endLine,
+        sourceType: r.sourceType,
+        metadata: r.metadata as Record<string, unknown> | null,
+      })
+    }
+  }
+  return out
 }
 
 async function loadPinnedEntities(

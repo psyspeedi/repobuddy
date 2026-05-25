@@ -70,6 +70,12 @@ export interface OperatorContext {
   }[]
   /** UI locale — the answer operator instructs the model to reply in this language. */
   responseLocale?: 'en' | 'ru'
+  /**
+   * The user's question carries an embedded unified diff. Tells the
+   * answer / agentic prompt to treat the question as a change-set
+   * evaluation, not just a question about existing code.
+   */
+  userPastedDiff?: boolean
 }
 
 // ---------- Entity shape exposed to ops ----------
@@ -1283,6 +1289,7 @@ export async function* answerOp(
     mermaidDiagrams: mermaidBlocks,
     issues: issueResults,
     overview,
+    userPastedDiff: ctx.userPastedDiff,
   })) {
     yield evt
   }

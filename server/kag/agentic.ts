@@ -75,7 +75,13 @@ How to think:
 6. If retrieve_code_chunks comes back empty for an entity, FALLBACK to
    read_file with that entity's filePath — sometimes the entity_chunks
    join is sparse but the chunk exists.
-7. When you have enough context to answer, STOP calling tools and write
+7. If the user's question contains a unified diff (lines starting with
+   "diff --git", "---", "+++", "@@"), treat it as a change-set under
+   review. Read every touched file with read_file in parallel, then
+   tests_for on the changed entities to flag missing test coverage.
+   Final answer must list (a) what the diff does, (b) which callers /
+   tests are affected, (c) risks, (d) a concrete follow-up step.
+8. When you have enough context to answer, STOP calling tools and write
    the final answer.
 
 Citation rules in the final answer:
@@ -103,7 +109,13 @@ const SYSTEM_PROMPT_RU = `Ты — RepoBuddy, помощник для контр
 4. "issue #N" — ВСЕГДА сначала list_issues с issueNumber:N. Если
    relatedEntities непуст, разверни 2-3 верхних через walkthrough +
    get_callers + retrieve_code_chunks перед финальным ответом.
-5. Когда контекста достаточно — ОСТАНОВИСЬ и напиши финальный ответ.
+5. Если вопрос содержит unified diff (строки "diff --git", "---", "+++",
+   "@@"), это change-set на ревью. Прочитай каждый затронутый файл
+   через read_file параллельно, затем tests_for на изменённых сущностях
+   для проверки покрытия тестами. Финальный ответ ОБЯЗАН содержать:
+   (а) что делает diff, (б) каких callers / tests затронет, (в) риски,
+   (г) конкретный следующий шаг.
+6. Когда контекста достаточно — ОСТАНОВИСЬ и напиши финальный ответ.
 
 Правила цитирования в финальном ответе:
 - Утверждения о коде → [chunk:UUID] (UUID берётся из результатов tool).

@@ -66,6 +66,13 @@ export interface AnswerParams {
    * questions ("tell me about this project", "where do I start").
    */
   overview?: ProjectOverview | null
+  /**
+   * The user's question carries an embedded unified diff. Triggers an
+   * extra instruction in the user prompt asking the model to analyse
+   * the change set (callers / tests / breakage) rather than just
+   * answering generically.
+   */
+  userPastedDiff?: boolean
   issues?: {
     number: number
     title: string
@@ -148,6 +155,24 @@ function renderUserMessage(params: AnswerParams): string {
   const lines: string[] = []
   lines.push(`Question: ${params.question}`)
   lines.push('')
+
+  if (params.userPastedDiff) {
+    lines.push('## Diff analysis mode')
+    lines.push(
+      'The user pasted a unified diff inside their question. Treat that diff as'
+      + ' the change-set under review. The touched files are pre-loaded in the'
+      + ' Source chunks section below (look for their paths in the diff +/-+++'
+      + ' headers). Your answer MUST:'
+      + '\n  1. Summarise what the diff does in one sentence.'
+      + '\n  2. List which existing callers / tests / sibling entities are affected'
+      + ' (use the chunks + entities below for evidence; cite [chunk:UUID]).'
+      + '\n  3. Flag risks: missing tests, missed callers that need updating,'
+      + ' API-shape changes that would break consumers.'
+      + '\n  4. Suggest a follow-up step (e.g. "run npm test packages/x", "update'
+      + ' README example block", "add a CHANGELOG entry").',
+    )
+    lines.push('')
+  }
 
   if (params.workspace) {
     const ws = params.workspace
