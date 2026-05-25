@@ -76,6 +76,12 @@ export interface OperatorContext {
    * evaluation, not just a question about existing code.
    */
   userPastedDiff?: boolean
+  /**
+   * Prior conversation turns so multi-turn flows keep their context
+   * (e.g. "issue #191" → "and the callers?" resolves to 191's callers).
+   * Passed through to answer() and runAgenticAnswer.
+   */
+  history?: { role: 'user' | 'assistant' | 'system' | 'tool'; content: string }[]
 }
 
 // ---------- Entity shape exposed to ops ----------
@@ -1526,6 +1532,7 @@ export async function* answerOp(
     issues: issueResults,
     overview,
     userPastedDiff: ctx.userPastedDiff,
+    history: ctx.history,
   })) {
     yield evt
   }

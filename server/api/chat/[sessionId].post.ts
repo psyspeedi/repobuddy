@@ -106,6 +106,11 @@ export default defineEventHandler(async (event) => {
   // can show the history. For guests we skip persistence entirely — keeps
   // anonymous traffic out of the chat history list and limits abuse surface.
   let sessionRowId: string | null = null
+  // Conversation history fed to the LLM so multi-turn flows keep their
+  // thread ("issue #191" → "and the callers?" should resolve to issue
+  // 191's callers, not generic ones). Loaded BEFORE we insert the new
+  // user message so the current question isn't double-counted.
+  let priorHistory: { role: 'user' | 'assistant' | 'system' | 'tool'; content: string }[] = []
   if (!isGuest) {
     const ownerId = (viewer as { userId: string }).userId
     let [session] = await db
@@ -126,6 +131,23 @@ export default defineEventHandler(async (event) => {
     }
     if (!session) throw createError({ statusCode: 500, statusMessage: 'session insert failed' })
     sessionRowId = session.id
+
+    // Pull the last 16 messages (= ~8 user/assistant pairs) ordered
+    // chronologically. Cap each message at 3000 chars so a verbose
+    // model reply doesn't bloat the prompt for the next turn. Assistant
+    // turns are stored AFTER stream-completion (later in this handler),
+    // so by the time the next turn lands they're available.
+    const prior = await db
+      .select({ role: chatMessages.role, content: chatMessages.content })
+      .from(chatMessages)
+      .where(eq(chatMessages.sessionId, session.id))
+      .orderBy(chatMessages.createdAt)
+      .limit(16)
+    priorHistory = prior.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content.length > 3000 ? m.content.slice(0, 3000) + '… [truncated]' : m.content,
+    }))
+
     await db.insert(chatMessages).values({
       sessionId: session.id,
       role: 'user',
@@ -243,11 +265,13 @@ export default defineEventHandler(async (event) => {
           pinnedChunks,
           responseLocale: body.locale ?? 'en',
           userPastedDiff,
+          history: priorHistory,
         }
         const toolSteps: unknown[] = []
         savedPlan = { mode: 'agentic' }
         for await (const evt of runAgenticAnswer(llm, ctx, body.question, {
           responseLocale: body.locale ?? 'en',
+          history: priorHistory,
         })) {
           if (evt.type === 'text' && evt.text) {
             assembled += evt.text
@@ -288,6 +312,7 @@ export default defineEventHandler(async (event) => {
           pinnedChunks,
           responseLocale: body.locale ?? 'en',
           userPastedDiff,
+          history: priorHistory,
         })
         savedTrace = result.trace
 
