@@ -135,15 +135,19 @@ const LANGUAGE_INSTRUCTION_RU = 'Always respond in Russian (русский).'
 
 // Subset of operators exposed as tools. `answer` is excluded — the LLM
 // generates the final answer inline when it stops calling tools.
-const TOOL_DEFS: ToolDefinition[] = [
-  {
-    name: 'get_project_overview',
+//
+// Typed as a Record keyed by ToolOperatorName so adding an operator
+// (touching OPERATOR_NAMES in shared/schemas/plan.ts) becomes a
+// compile-error here until a tool def is added. Single source of
+// truth: the OPERATOR_NAMES tuple drives everything downstream.
+type ToolOperatorName = Exclude<OperatorName, 'answer'>
+const TOOL_DEFS_MAP: Record<ToolOperatorName, Omit<ToolDefinition, 'name'>> = {
+  get_project_overview: {
     description: 'Snapshot of the workspace: entrypoints, top-fanout classes/functions, hot files, safe-first-PR zones, and entity-type stats. Call at the start of broad orientation questions.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
   },
-  {
-    name: 'find_symbol',
-    description: 'Locate entities by name. Use the bare identifier (e.g. "OrderService", not "the OrderService class"). Set `fuzzy: true` if the name might be a substring. Omit `name` and pass only `type` to enumerate entities of a kind.',
+  find_symbol: {
+    description: 'Locate entities by name. Use the bare identifier (e.g. "OrderService", not "the OrderService class"). Set fuzzy: true if the name might be a substring. Omit name and pass only type to enumerate entities of a kind.',
     parameters: {
       type: 'object',
       properties: {
@@ -155,8 +159,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'find_file',
+  find_file: {
     description: 'Find file entities by path glob/substring (e.g. "src/auth/login.ts").',
     parameters: {
       type: 'object',
@@ -168,9 +171,8 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'get_callers',
-    description: 'Entities that call a target. Set `transitive: true` and `maxDepth` to walk multiple hops. Pass either a single entity or an array.',
+  get_callers: {
+    description: 'Entities that call a target. Set transitive: true and maxDepth to walk multiple hops. Pass either a single entity or an array.',
     parameters: {
       type: 'object',
       properties: {
@@ -183,8 +185,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'get_callees',
+  get_callees: {
     description: 'Entities called from a source.',
     parameters: {
       type: 'object',
@@ -198,8 +199,43 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'walkthrough',
+  get_dependencies: {
+    description: 'Modules / files that the source imports or depends on.',
+    parameters: {
+      type: 'object',
+      properties: {
+        source: { description: 'Entity or array' },
+        transitive: { type: 'boolean' },
+        maxDepth: { type: 'integer', minimum: 1, maximum: 6 },
+      },
+      additionalProperties: false,
+    },
+  },
+  get_dependents: {
+    description: 'Reverse of get_dependencies — modules / files that depend on the target.',
+    parameters: {
+      type: 'object',
+      properties: {
+        target: { description: 'Entity or array' },
+        transitive: { type: 'boolean' },
+        maxDepth: { type: 'integer', minimum: 1, maximum: 6 },
+      },
+      additionalProperties: false,
+    },
+  },
+  find_implementations: {
+    description: 'Concrete classes implementing a given interface / abstract type.',
+    parameters: {
+      type: 'object',
+      properties: {
+        interfaceOrType: { description: 'Interface or type entity' },
+        limit: { type: 'integer', minimum: 1, maximum: 30 },
+      },
+      required: ['interfaceOrType'],
+      additionalProperties: false,
+    },
+  },
+  walkthrough: {
     description: 'Around a target entity: direct callees + tests covering it + enclosing parent. Use when the user asks "how does X work" or "walk me through X".',
     parameters: {
       type: 'object',
@@ -211,8 +247,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'retrieve_code_chunks',
+  retrieve_code_chunks: {
     description: 'Fetch the source-code chunks for a set of entities. Always call this before the final answer when you need to reason about implementation details.',
     parameters: {
       type: 'object',
@@ -224,8 +259,18 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'hybrid_search',
+  get_summary: {
+    description: 'LLM-generated short description of an entity (from the annotation step). Cheap; useful when you need a label for an unfamiliar symbol.',
+    parameters: {
+      type: 'object',
+      properties: {
+        entity: { description: 'Entity or array' },
+      },
+      required: ['entity'],
+      additionalProperties: false,
+    },
+  },
+  hybrid_search: {
     description: 'Semantic + full-text search across all chunks (code, docs, commit messages). Use for fuzzy "where is X handled" questions when no specific symbol name applies.',
     parameters: {
       type: 'object',
@@ -237,8 +282,19 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'search_docs',
+  vector_search_chunks: {
+    description: 'Pure-vector semantic search over chunks. Prefer hybrid_search unless you specifically want vector-only ranking (e.g. cross-language similarity).',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        limit: { type: 'integer', minimum: 1, maximum: 20 },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+  },
+  search_docs: {
     description: 'Full-text + semantic search restricted to markdown / doc chunks (READMEs, design notes). Use for broad architectural questions.',
     parameters: {
       type: 'object',
@@ -250,8 +306,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'find_by_concept',
+  find_by_concept: {
     description: 'Semantic similarity search over entity descriptions (LLM-annotated). Use for "where is discount logic" style fuzzy queries.',
     parameters: {
       type: 'object',
@@ -263,9 +318,8 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'list_issues',
-    description: 'Open GitHub issues from the workspace repo. Pass `issueNumber` to focus a single issue; otherwise lists open issues filtered by labels. The result includes relatedEntities + relatedChunks already linked to indexed code — you can expand those with walkthrough / get_callers if needed.',
+  list_issues: {
+    description: 'Open GitHub issues from the workspace repo. Pass issueNumber to focus a single issue; otherwise lists open issues filtered by labels. The result includes relatedEntities + relatedChunks already linked to indexed code — you can expand those with walkthrough / get_callers if needed.',
     parameters: {
       type: 'object',
       properties: {
@@ -277,8 +331,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'git_history',
+  git_history: {
     description: 'Recent commits touching a file or entity (author, date, message, file list).',
     parameters: {
       type: 'object',
@@ -291,8 +344,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'read_file',
+  read_file: {
     description: "Open a file VERBATIM by path. Pass the path as you know it ('tsconfig.json', 'src/index.ts', 'package.json') — the operator matches by exact path OR path-suffix. Use this when you know which file you need. Returns the file's chunks; cite chunks by [chunk:UUID] in the final answer.",
     parameters: {
       type: 'object',
@@ -304,9 +356,8 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'tests_for',
-    description: 'Test files / test entities that cover a given entity (function, class, file) via the `tested_by` relation. Use for impact analysis: "if I change X, which tests should I run", "что сломается если я поменяю Y".',
+  tests_for: {
+    description: 'Test files / test entities that cover a given entity (function, class, file) via the tested_by relation. Use for impact analysis: "if I change X, which tests should I run", "что сломается если я поменяю Y".',
     parameters: {
       type: 'object',
       properties: {
@@ -317,8 +368,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'list_concepts',
+  list_concepts: {
     description: "Project's domain glossary — concept / pattern / decision entities derived by the LLM annotation step (project-specific jargon, recurring patterns, design decisions). Use when the user is parsing project-specific language or asks 'what does <jargon> mean here'.",
     parameters: {
       type: 'object',
@@ -329,8 +379,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'list_prs',
+  list_prs: {
     description: 'GitHub pull requests from the workspace repo. Each PR includes referencedIssues parsed from "fixes #N" / "closes #N" in the body — use to find "how was a similar issue fixed" by scanning PR titles + linked issues. Pass prNumber for a single PR.',
     parameters: {
       type: 'object',
@@ -343,8 +392,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'find_similar_issues',
+  find_similar_issues: {
     description: 'Embedding-cosine search over recent issues. Pass issueNumber to find "issues like this one" before working on it (catches duplicates and precedents) — or pass a free-text query. Returns top-K with similarity scores.',
     parameters: {
       type: 'object',
@@ -356,8 +404,7 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-  {
-    name: 'find_prs_for_issue',
+  find_prs_for_issue: {
     description: 'Graph-indexed: merged PRs whose body referenced the given issue via "fixes #N" / "closes #N". Use when the user asks "how was this fixed", "is there already a PR for this", or to find a precedent before working on a similar issue.',
     parameters: {
       type: 'object',
@@ -369,12 +416,16 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
-]
+}
 
-/** Operators NOT exposed as tools (used only by the planner / executor). */
-const TOOL_NAMES = new Set<OperatorName>(
-  TOOL_DEFS.map((t) => t.name as OperatorName),
-)
+// Materialise the array form (with name) once for the OpenAI SDK.
+const TOOL_DEFS: ToolDefinition[] = Object.entries(TOOL_DEFS_MAP).map(([name, def]) => ({
+  name,
+  ...def,
+}))
+
+/** Operators NOT exposed as tools (only the planner / executor calls them). */
+const TOOL_NAMES = new Set<OperatorName>(Object.keys(TOOL_DEFS_MAP) as OperatorName[])
 
 export async function* runAgenticAnswer(
   llm: LLMProvider,

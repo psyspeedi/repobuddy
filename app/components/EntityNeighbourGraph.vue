@@ -11,17 +11,30 @@
  *   - the workspace explore page (treemap → click a file)
  *   - the call-hierarchy panel (focus → graph)
  */
-import { X, Sparkles, Network, List as ListIcon } from 'lucide-vue-next'
+import { X, Sparkles, Network, List as ListIcon, Pin, PinOff } from 'lucide-vue-next'
 
 interface Props {
   workspaceId: string
   entityId: string | null
+  /** Pinned entity IDs from useChat.focus — renders the toggle as on. */
+  pinnedEntities?: string[]
 }
 const props = defineProps<Props>()
-defineEmits<{
+const emit = defineEmits<{
   (e: 'close'): void
   (e: 'focus', id: string): void
+  (e: 'pin-entity', id: string): void
+  (e: 'unpin-entity', id: string): void
 }>()
+
+const isPinned = computed(() =>
+  props.entityId != null && (props.pinnedEntities ?? []).includes(props.entityId),
+)
+function togglePin(): void {
+  if (!props.entityId) return
+  if (isPinned.value) emit('unpin-entity', props.entityId)
+  else emit('pin-entity', props.entityId)
+}
 
 const { t } = useI18n()
 const colorMode = useColorMode()
@@ -272,6 +285,17 @@ onBeforeUnmount(() => {
           @click="depth = 2"
         >
           2{{ t('neighbours.hop') }}
+        </button>
+        <button
+          v-if="entityId"
+          type="button"
+          class="rounded-md p-1 hover:bg-accent"
+          :class="isPinned ? 'text-primary' : 'text-muted-foreground hover:text-foreground'"
+          :title="isPinned ? t('neighbours.unpin') : t('neighbours.pin')"
+          @click="togglePin"
+        >
+          <PinOff v-if="isPinned" class="h-4 w-4" />
+          <Pin v-else class="h-4 w-4" />
         </button>
         <button
           type="button"

@@ -682,8 +682,11 @@ useHead(() => {
           v-else-if="sidePanel === 'neighbours' && neighbourEntityId"
           :workspace-id="workspaceId"
           :entity-id="neighbourEntityId"
+          :pinned-entities="chat.focus.value.entityIds"
           @close="sidePanel = 'inspector'"
           @focus="openNeighbours"
+          @pin-entity="chat.pinEntity"
+          @unpin-entity="chat.unpinEntity"
         />
       </div>
     </section>

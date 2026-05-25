@@ -8,6 +8,7 @@
  */
 import { Octokit } from '@octokit/rest'
 import { and, eq, ilike, inArray, or, sql } from 'drizzle-orm'
+import type { OperatorName } from '#shared/schemas/plan'
 import type { Database } from '../../db/client'
 import { chunks, entities, relations } from '../../db/schema'
 import type { EmbeddingsProvider } from '../../providers/embeddings'
@@ -1680,31 +1681,13 @@ function entityProjection() {
 }
 
 // ---------- Operator registry ----------
-export type OperatorName =
-  | 'find_symbol'
-  | 'find_file'
-  | 'get_callers'
-  | 'get_callees'
-  | 'get_dependencies'
-  | 'get_dependents'
-  | 'find_implementations'
-  | 'git_history'
-  | 'find_by_concept'
-  | 'vector_search_chunks'
-  | 'hybrid_search'
-  | 'search_docs'
-  | 'retrieve_code_chunks'
-  | 'get_summary'
-  | 'walkthrough'
-  | 'list_issues'
-  | 'list_prs'
-  | 'find_similar_issues'
-  | 'find_prs_for_issue'
-  | 'get_project_overview'
-  | 'read_file'
-  | 'tests_for'
-  | 'list_concepts'
-  | 'answer'
+// OperatorName is the single source of truth from shared/schemas/plan.ts
+// (the Zod enum that validates LLM-emitted plans). Re-exported here so
+// callers only need one import. Adding an operator: name → OPERATOR_NAMES
+// → TS forces an entry in OPERATORS below + in agentic.ts TOOL_DEFS
+// (also a Record keyed by name). The catalogue prose in planner.ts is
+// the only place TS can't enforce — keep it in sync manually.
+export type { OperatorName } from '#shared/schemas/plan'
 
 export const OPERATORS: Record<
   OperatorName,

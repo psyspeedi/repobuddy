@@ -414,7 +414,9 @@
     "empty": "No neighbours to show. This entity stands alone in the graph.",
     "hint": "Click a node to re-centre the view on it.",
     "graphView": "Graph view",
-    "treeView": "Tree view"
+    "treeView": "Tree view",
+    "pin": "Pin to chat focus — the assistant will keep this in context across turns",
+    "unpin": "Unpin"
   },
   "callHierarchy": {
     "callers": "Callers",
