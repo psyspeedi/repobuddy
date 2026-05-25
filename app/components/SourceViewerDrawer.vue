@@ -114,10 +114,19 @@ async function renderChunk(
     })
   }
   const lang = chunk.metadata?.language ?? 'plaintext'
-  return codeToHtml(chunk.text, {
-    lang: shikiLang(lang),
-    theme: colorMode.value === 'dark' ? 'github-dark' : 'github-light',
-  })
+  try {
+    return await codeToHtml(chunk.text, {
+      lang: shikiLang(lang, chunk.filePath),
+      theme: colorMode.value === 'dark' ? 'github-dark' : 'github-light',
+    })
+  } catch {
+    // Unknown grammar (rare with the alias map) — fall back to plaintext
+    // so the panel still renders the file rather than 500-ing.
+    return await codeToHtml(chunk.text, {
+      lang: 'plaintext',
+      theme: colorMode.value === 'dark' ? 'github-dark' : 'github-light',
+    })
+  }
 }
 
 async function toggleMode(): Promise<void> {
@@ -151,9 +160,51 @@ async function toggleMode(): Promise<void> {
 watch(() => props.chunkId, () => void load(), { immediate: true })
 watch(() => colorMode.value, () => void load())
 
-function shikiLang(lang: string): string {
+// Map (chunk.metadata.language, chunk.filePath) → Shiki grammar.
+// `language` is set by the parser for AST-parseable files. For the
+// fallback whole-file chunks added in the manifest / generic-text
+// pipeline step, language is 'unknown' — infer from the file extension
+// or known config-filename so common files (tsconfig.json, Dockerfile,
+// yaml workflows, etc.) still get highlighted.
+const EXT_LANG: Record<string, string> = {
+  ts: 'typescript', tsx: 'tsx', mts: 'typescript', cts: 'typescript',
+  js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
+  vue: 'vue', svelte: 'svelte',
+  py: 'python', pyi: 'python', go: 'go',
+  rs: 'rust', java: 'java', kt: 'kotlin', rb: 'ruby',
+  sh: 'bash', bash: 'bash',
+  json: 'json', jsonc: 'json',
+  yaml: 'yaml', yml: 'yaml', toml: 'toml',
+  xml: 'xml', html: 'html', htm: 'html',
+  css: 'css', scss: 'scss', less: 'less',
+  sql: 'sql', md: 'markdown', mdx: 'mdx',
+  graphql: 'graphql', gql: 'graphql',
+  c: 'c', cpp: 'cpp', cc: 'cpp', h: 'c', hpp: 'cpp',
+  cs: 'csharp', php: 'php',
+  ini: 'ini', conf: 'ini',
+}
+const FILENAME_LANG: Record<string, string> = {
+  dockerfile: 'docker',
+  makefile: 'makefile',
+  '.gitignore': 'gitignore',
+  '.dockerignore': 'gitignore',
+  '.env': 'dotenv',
+  '.env.example': 'dotenv',
+}
+function shikiLang(lang: string, filePath: string | null | undefined): string {
+  // 1. Honour the parser's signal first (typescript / javascript / python / go).
   if (lang === 'typescript' || lang === 'javascript' || lang === 'python' || lang === 'go') {
     return lang
+  }
+  if (!filePath) return 'plaintext'
+  // 2. Filename overrides (Dockerfile, Makefile, dotenv, etc.).
+  const base = filePath.split('/').pop()?.toLowerCase() ?? ''
+  if (FILENAME_LANG[base]) return FILENAME_LANG[base] as string
+  // Extension chain (handle .config.js style by walking right-to-left).
+  const parts = base.split('.')
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const ext = parts[i]
+    if (ext && EXT_LANG[ext]) return EXT_LANG[ext] as string
   }
   return 'plaintext'
 }

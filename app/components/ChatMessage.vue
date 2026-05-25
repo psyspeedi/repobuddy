@@ -64,8 +64,81 @@ function escapeHtml(s: string): string {
 }
 
 const messageRoot = ref<HTMLDivElement | null>(null)
+const colorMode = useColorMode()
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null
 let mermaidCounter = 0
+
+// Languages we map from `language-X` markdown fences to a Shiki grammar.
+// Unrecognised fences fall back to plaintext rather than blowing up.
+// Aliases lump common variants onto canonical Shiki keys so the model
+// can write ```ts or ```typescript and we render the same thing.
+const SHIKI_LANG_ALIAS: Record<string, string> = {
+  ts: 'typescript', typescript: 'typescript', tsx: 'tsx',
+  js: 'javascript', javascript: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
+  py: 'python', python: 'python',
+  go: 'go', golang: 'go',
+  rs: 'rust', rust: 'rust',
+  java: 'java', kt: 'kotlin', kotlin: 'kotlin',
+  rb: 'ruby', ruby: 'ruby',
+  sh: 'bash', bash: 'bash', shell: 'bash', zsh: 'bash',
+  json: 'json', jsonc: 'json',
+  yaml: 'yaml', yml: 'yaml',
+  toml: 'toml',
+  xml: 'xml', html: 'html', vue: 'vue', svelte: 'svelte',
+  css: 'css', scss: 'scss', less: 'less',
+  sql: 'sql',
+  md: 'markdown', markdown: 'markdown', mdx: 'mdx',
+  dockerfile: 'docker', docker: 'docker',
+  diff: 'diff', patch: 'diff',
+  c: 'c', 'c++': 'cpp', cpp: 'cpp', cs: 'csharp', csharp: 'csharp',
+  php: 'php',
+  graphql: 'graphql', gql: 'graphql',
+  ini: 'ini', conf: 'ini',
+  // Common edge cases that we still want highlighted reasonably.
+  nginx: 'nginx',
+  makefile: 'makefile', make: 'makefile',
+}
+
+async function highlightCodeBlocks(): Promise<void> {
+  const root = messageRoot.value
+  if (!root) return
+  const blocks = root.querySelectorAll<HTMLElement>('pre > code[class*="language-"]')
+  if (blocks.length === 0) return
+  // Lazy-import shiki on first use. Subsequent calls reuse the
+  // module-level cache.
+  const { codeToHtml } = await import('shiki')
+  const theme = colorMode.value === 'dark' ? 'github-dark' : 'github-light'
+  for (const codeEl of Array.from(blocks)) {
+    const pre = codeEl.closest('pre')
+    if (!pre) continue
+    if (pre.dataset.shikiHighlighted === '1') continue
+    if (pre.dataset.mermaidRendered === '1') continue
+    // Mermaid blocks are handled separately by renderMermaidBlocks.
+    if (codeEl.classList.contains('language-mermaid')) continue
+    const langClass = [...codeEl.classList].find((c) => c.startsWith('language-'))
+    const rawLang = (langClass?.slice(9) ?? '').toLowerCase()
+    const lang = SHIKI_LANG_ALIAS[rawLang] ?? 'plaintext'
+    const source = codeEl.textContent ?? ''
+    try {
+      const rendered = await codeToHtml(source, { lang, theme })
+      const cleaned = DOMPurify.sanitize(rendered, {
+        // Shiki emits inline styles for tokens; allow them through.
+        ADD_TAGS: ['span'],
+        ADD_ATTR: ['style', 'class'],
+      }) as unknown as string
+      const wrapper = document.createElement('div')
+      wrapper.innerHTML = cleaned
+      const newPre = wrapper.querySelector('pre')
+      if (!newPre) continue
+      newPre.classList.add('cg-shiki')
+      newPre.dataset.shikiHighlighted = '1'
+      pre.replaceWith(newPre)
+    } catch {
+      // Unknown grammar or any other shiki hiccup — keep plain text.
+      pre.dataset.shikiHighlighted = 'error'
+    }
+  }
+}
 
 async function loadMermaid(): Promise<typeof import('mermaid').default> {
   if (!mermaidPromise) {
@@ -121,9 +194,22 @@ async function renderMermaidBlocks(): Promise<void> {
 
 watch(
   () => [props.content, props.pending] as const,
-  () => void nextTick(() => renderMermaidBlocks()),
+  () => void nextTick(() => {
+    void highlightCodeBlocks()
+    void renderMermaidBlocks()
+  }),
   { immediate: true },
 )
+// Re-highlight when theme flips — Shiki output is theme-baked.
+watch(() => colorMode.value, () => {
+  const root = messageRoot.value
+  if (!root) return
+  // Reset the highlight flag so the next pass rebuilds with the new theme.
+  for (const pre of root.querySelectorAll<HTMLElement>('pre.cg-shiki')) {
+    pre.dataset.shikiHighlighted = ''
+  }
+  void nextTick(() => highlightCodeBlocks())
+})
 
 // Copy raw markdown — useful when the user wants to paste a finding
 // into an issue / PR. Citation markers stay as-is; downstream renderer
@@ -255,6 +341,21 @@ function onClick(e: MouseEvent): void {
   background: hsl(var(--background));
   border: 1px solid hsl(var(--border));
   border-radius: 0.5rem;
+}
+/* Shiki paints its own background + token colours via inline styles.
+   We override the .cg-prose default just enough that the highlighted
+   <pre> renders with the Shiki theme palette intact. */
+.cg-prose pre.cg-shiki {
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  margin: 0.5rem 0;
+}
+.cg-prose pre.cg-shiki code {
+  background: transparent !important;
+  padding: 0;
+  font-size: inherit;
 }
 .cg-mermaid svg {
   max-width: 100%;
