@@ -844,6 +844,69 @@ export async function listIssues(
   return { issues: finalIssues, relatedChunks }
 }
 
+// ---------- read_file ----------
+/**
+ * Return all chunks for a given file path. Matches by exact path OR
+ * by path-suffix when no exact hit (so the LLM can say "tsconfig.json"
+ * without the full prefix). Lets the agentic loop literally open a
+ * file when it knows what it wants, without going through entity
+ * lookup → entity_chunks resolution.
+ */
+export interface ReadFileParams {
+  path: string
+  /** Limit number of returned chunks. Default 6 (= ~6×~5KB sections). */
+  limit?: number
+}
+
+export async function readFileOp(
+  params: ReadFileParams,
+  ctx: OperatorContext,
+): Promise<{ filePath: string; chunks: { id: string; text: string; startLine: number | null; endLine: number | null }[] }[]> {
+  if (!params.path || typeof params.path !== 'string') return []
+  const limit = Math.min(Math.max(params.limit ?? 6, 1), 20)
+  const normalized = params.path.replace(/^\.?\//, '')
+  // Try exact match first, then suffix fall-back. Group results by
+  // file_path so the LLM sees coherent file content even when chunks
+  // got split.
+  const rows = await ctx.db
+    .select({
+      id: chunks.id,
+      filePath: chunks.filePath,
+      text: chunks.text,
+      startLine: chunks.startLine,
+      endLine: chunks.endLine,
+    })
+    .from(chunks)
+    .where(
+      and(
+        eq(chunks.workspaceId, ctx.workspaceId),
+        or(
+          eq(chunks.filePath, params.path),
+          eq(chunks.filePath, normalized),
+          sql`${chunks.filePath} LIKE ${'%/' + normalized}`,
+          sql`${chunks.filePath} LIKE ${'%' + normalized}`,
+        ),
+      ),
+    )
+    .orderBy(chunks.filePath, chunks.startLine)
+    .limit(limit * 4)
+  // Group by filePath and cap per file.
+  const grouped = new Map<string, { id: string; text: string; startLine: number | null; endLine: number | null }[]>()
+  for (const r of rows) {
+    if (!r.filePath) continue
+    const list = grouped.get(r.filePath) ?? []
+    if (list.length >= limit) continue
+    list.push({ id: r.id, text: r.text, startLine: r.startLine, endLine: r.endLine })
+    grouped.set(r.filePath, list)
+  }
+  // Prefer files whose path matches more closely (shorter = more
+  // likely to be the root-relative target the user named).
+  return [...grouped.entries()]
+    .sort((a, b) => a[0].length - b[0].length)
+    .slice(0, 5)
+    .map(([filePath, list]) => ({ filePath, chunks: list }))
+}
+
 // ---------- get_project_overview ----------
 /**
  * Returns a structured snapshot of the workspace — entrypoints, core
@@ -1166,6 +1229,7 @@ export type OperatorName =
   | 'walkthrough'
   | 'list_issues'
   | 'get_project_overview'
+  | 'read_file'
   | 'answer'
 
 export const OPERATORS: Record<
@@ -1189,5 +1253,6 @@ export const OPERATORS: Record<
   walkthrough: walkthrough as never,
   list_issues: listIssues as never,
   get_project_overview: getProjectOverviewOp as never,
+  read_file: readFileOp as never,
   answer: answerOp as never,
 }

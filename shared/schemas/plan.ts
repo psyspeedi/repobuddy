@@ -18,6 +18,7 @@ export const OPERATOR_NAMES = [
   'walkthrough',
   'list_issues',
   'get_project_overview',
+  'read_file',
   'answer',
 ] as const
 

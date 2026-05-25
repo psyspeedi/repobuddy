@@ -66,10 +66,16 @@ How to think:
 2. For "how does X work" first find_symbol the identifier, then walkthrough
    the entity to see callees / tests / parent.
 3. For "who calls X" use get_callers with transitive: true.
-4. For "issue #N" ALWAYS call list_issues with issueNumber:N first; if
-   relatedEntities is non-empty, expand the top 2-3 with walkthrough +
-   get_callers + retrieve_code_chunks before composing the answer.
-5. When you have enough context to answer, STOP calling tools and write
+4. For "issue #N" ALWAYS call list_issues with issueNumber:N first.
+5. If you know the file you need, call read_file({path}) DIRECTLY — don't
+   try to find_symbol first. read_file matches by suffix, so 'tsconfig.json'
+   or 'src/index.ts' both work. Use this aggressively: a typical issue
+   resolution needs to read 2-4 specific files (config + the file the
+   issue is about + a test file) — call read_file on each in parallel.
+6. If retrieve_code_chunks comes back empty for an entity, FALLBACK to
+   read_file with that entity's filePath — sometimes the entity_chunks
+   join is sparse but the chunk exists.
+7. When you have enough context to answer, STOP calling tools and write
    the final answer.
 
 Citation rules in the final answer:
@@ -79,7 +85,7 @@ Citation rules in the final answer:
   [entity:...] or [chunk:...].
 - If context is insufficient, say so plainly. Do not fabricate.
 
-Budget: max 8 tool calls per question. Plan accordingly.`
+Budget: max 12 tool calls per question. Plan accordingly.`
 
 const SYSTEM_PROMPT_RU = `Ты — RepoBuddy, помощник для контрибьюторов в OSS.
 
@@ -106,7 +112,11 @@ const SYSTEM_PROMPT_RU = `Ты — RepoBuddy, помощник для контр
   или [chunk:...] — там только UUID.
 - Если контекста не хватает — скажи прямо. Не выдумывай.
 
-Бюджет: максимум 8 вызовов tools на вопрос. Планируй соответственно.`
+Бюджет: максимум 12 вызовов tools на вопрос. Планируй соответственно.
+
+Полезно знать: read_file({path}) открывает файл буквально (suffix-match,
+'tsconfig.json' работает). Используй агрессивно — для разбора issue
+обычно нужно прочитать 2-4 конкретных файла (конфиг + основной + тест).`
 
 const LANGUAGE_INSTRUCTION_EN = 'Always respond in English.'
 const LANGUAGE_INSTRUCTION_RU = 'Always respond in Russian (русский).'
@@ -269,6 +279,19 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'read_file',
+    description: "Open a file VERBATIM by path. Pass the path as you know it ('tsconfig.json', 'src/index.ts', 'package.json') — the operator matches by exact path OR path-suffix. Use this when you know which file you need. Returns the file's chunks; cite chunks by [chunk:UUID] in the final answer.",
+    parameters: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        limit: { type: 'integer', minimum: 1, maximum: 20 },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+  },
 ]
 
 /** Operators NOT exposed as tools (used only by the planner / executor). */
@@ -282,7 +305,7 @@ export async function* runAgenticAnswer(
   question: string,
   opts: AgenticOptions = {},
 ): AsyncGenerator<AgenticEvent> {
-  const maxIterations = opts.maxIterations ?? 8
+  const maxIterations = opts.maxIterations ?? 12
   const langName = opts.responseLocale === 'ru' ? LANGUAGE_INSTRUCTION_RU : LANGUAGE_INSTRUCTION_EN
   const systemPrompt = opts.responseLocale === 'ru' ? SYSTEM_PROMPT_RU : SYSTEM_PROMPT_EN
 

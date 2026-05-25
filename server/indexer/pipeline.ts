@@ -221,6 +221,44 @@ export async function runIndexPipeline(
         }
       }
 
+      // 5b''. Fallback whole-file chunks for everything else that the
+      // parsers + markdown + manifests passes missed. Covers tsconfig
+      // /*.json/yaml/toml/sql/css/sh/files-without-extension/etc. —
+      // anything that's text-shaped and under the cap. Without this,
+      // hybrid_search and the new read_file operator have nothing to
+      // surface for a huge swath of the project.
+      const FALLBACK_MAX_BYTES = 128 * 1024
+      // Skip patterns: stuff we explicitly never want as fallback
+      // (already covered by other passes, or binary-shaped).
+      const FALLBACK_SKIP_RE = /\.(?:md|mdx|ts|tsx|js|jsx|mts|cts|mjs|cjs|vue|py|pyi|go|png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|otf|pdf|zip|tar|gz|bin)$/i
+      const seenChunkPaths = new Set<string>(allChunks.map((c) => c.filePath))
+      const fallbackFiles = walked.files.filter((f) => {
+        if (!f.relPath || f.sizeBytes === 0 || f.sizeBytes > FALLBACK_MAX_BYTES) return false
+        if (seenChunkPaths.has(f.relPath)) return false
+        if (FALLBACK_SKIP_RE.test(f.relPath)) return false
+        if (MANIFEST_RE.test(f.relPath)) return false
+        return true
+      })
+      for (const f of fallbackFiles) {
+        try {
+          const text = await readFile(f.absPath, 'utf-8')
+          // Belt-and-braces binary sniff: drop the file if the read
+          // returned mostly non-printable bytes.
+          if (looksBinary(text)) continue
+          const lineCount = text.split('\n').length
+          allChunks.push({
+            filePath: f.relPath,
+            startLine: 1,
+            endLine: lineCount,
+            text,
+            sourceType: 'code',
+            metadata: { language: f.language ?? 'unknown' },
+          })
+        } catch {
+          /* skip unreadable */
+        }
+      }
+
       // 5c. Derive `tested_by` relations: for every test-file entity, look at
       // its outgoing `imports` relations and emit a tested_by edge from each
       // top-level entity defined in the imported file back to the test
@@ -447,6 +485,27 @@ export async function runIndexPipeline(
  * and re-export tracing — but "the test imports module X" is enough
  * signal in practice. Mutates `allRelations` in place.
  */
+/**
+ * Cheap binary sniff: count printable / whitespace bytes in the first
+ * 4KB. If less than 90% are printable, treat the file as binary and
+ * skip it. Cheaper and more reliable than relying on file extensions
+ * alone (some binary files have ambiguous extensions, some text files
+ * have none).
+ */
+function looksBinary(text: string): boolean {
+  const sample = text.slice(0, 4096)
+  if (sample.length === 0) return true
+  let printable = 0
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i)
+    // Tab, LF, CR are whitespace; anything ≥ 32 except DEL (127) is printable.
+    if (code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127)) {
+      printable += 1
+    }
+  }
+  return printable / sample.length < 0.9
+}
+
 function deriveTestedByRelations(
   allEntities: ParsedEntity[],
   allRelations: ParsedRelation[],

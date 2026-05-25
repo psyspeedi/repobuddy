@@ -32,6 +32,7 @@ The JSON object MUST have this top-level shape:
 - walkthrough({ entity, limit? }) → { entity, callees, tests, parents }[]   (entity-centric tour: direct callees + tests covering it + enclosing parent)
 - list_issues({ labels?, state?, limit?, issueNumber? }) → { issues: { number, title, url, labels, bodyExcerpt, updatedAt, relatedEntities[] }[], relatedChunks: Chunk[] }   (open GitHub issues from the workspace's source repo, ALREADY LINKED to indexed code via relatedEntities + relatedChunks. Use issueNumber to focus a single issue; otherwise lists up to the configured limit of open issues)
 - get_project_overview({}) → { entrypoints, coreAbstractions, goodFirstIssues, hotFiles, stats }   (snapshot of the whole workspace — main entrypoints, classes/functions everything depends on, hot files, safe-first-PR zones, entity-type stats. Use for broad orientation questions or as a first step before diving deeper)
+- read_file({ path, limit? }) → { filePath, chunks: Chunk[] }[]   (verbatim file contents. Matches by exact path or path-suffix — pass "tsconfig.json" or "src/index.ts". Use when you know the file you need and just want its text without going through entity lookup)
 - answer({ question, context, style? }) → streaming response with inline citations
 
 ## Reference syntax
