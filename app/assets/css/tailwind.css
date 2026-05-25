@@ -96,6 +96,35 @@
   border-color: hsl(var(--border));
 }
 
+/* Tailwind v4 ships interactive elements with `cursor: default` — the
+ * browser-native pointer cursor on <button>, <a>, role=button, etc.
+ * gets reset. Restore the click-affordance hint globally so every
+ * clickable thing across the app feels live. Disabled elements get
+ * `not-allowed` instead. Inputs / textareas are deliberately excluded
+ * (their text-caret cursor is the right affordance). */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href]:not([href=""]),
+label[for],
+summary,
+select:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="file"]:not(:disabled),
+input[type="image"]:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"],
+select:disabled,
+input:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
 /* Bump the root font-size from the browser default 16px to ~19.2px.
  * Every Tailwind utility that's authored in rem (text-*, p-*, m-*,
  * gap-*, w-N when N≤96, h-N, etc.) scales with it, giving a global
