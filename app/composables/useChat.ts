@@ -14,6 +14,26 @@ export interface TraceEntry {
   error?: string
 }
 
+/**
+ * Agentic tool-use trace shape. Emitted by the server when the chat
+ * runs in agentic mode — there's no static plan, just a sequence of
+ * tool dispatches the LLM chose at runtime.
+ */
+export interface AgenticStep {
+  iteration: number
+  name: string
+  args: Record<string, unknown>
+  summary: string
+  durationMs: number
+  error?: string
+}
+export interface AgenticTrace {
+  mode: 'agentic'
+  steps: AgenticStep[]
+}
+
+export type AnyTrace = TraceEntry[] | AgenticTrace
+
 export interface ChatMessageData {
   role: 'user' | 'assistant'
   content: string
@@ -21,7 +41,7 @@ export interface ChatMessageData {
   invalid?: string[]
   pending?: boolean
   plan?: PlanData
-  trace?: TraceEntry[]
+  trace?: AnyTrace
   /** Tokens per second for the most recently completed assistant turn. */
   tokensPerSec?: number
   /** Filled with the abort signal when the message is still streaming so the UI can call cancel(). */
@@ -96,7 +116,7 @@ export function useChat(workspaceId: string) {
           role: m.role,
           content: m.content,
           plan: m.plan as PlanData | undefined,
-          trace: m.trace as TraceEntry[] | undefined,
+          trace: m.trace as AnyTrace | undefined,
         }))
       }
     } catch {
@@ -211,7 +231,20 @@ export function useChat(workspaceId: string) {
       } catch { /* malformed */ }
     } else if (event === 'trace') {
       try {
-        last.trace = JSON.parse(data) as TraceEntry[]
+        last.trace = JSON.parse(data) as AnyTrace
+      } catch { /* malformed */ }
+    } else if (event === 'tool_step') {
+      // Agentic mode streams tool_step events one at a time as the LLM
+      // dispatches them. We accumulate into a live AgenticTrace so the
+      // Reasoning Inspector can render the unfolding sequence in real
+      // time (the final 'trace' event will overwrite this with the
+      // canonical snapshot, but the live stream is the more useful UX).
+      try {
+        const step = JSON.parse(data) as AgenticStep
+        if (!last.trace || !('mode' in last.trace) || last.trace.mode !== 'agentic') {
+          last.trace = { mode: 'agentic', steps: [] }
+        }
+        ;(last.trace as AgenticTrace).steps.push(step)
       } catch { /* malformed */ }
     } else if (event === 'citations') {
       try {

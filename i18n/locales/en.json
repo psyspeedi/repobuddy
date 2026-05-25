@@ -432,11 +432,18 @@
     "title": "Reasoning",
     "noPlanYet": "No plan yet — ask a question.",
     "params": "params",
+    "args": "args",
     "result": "result",
     "error": "error",
     "viewFlow": "Flowchart view",
     "viewList": "List view",
-    "flowHint": "Click a step to inspect its params and result."
+    "flowHint": "Click a step to inspect its params and result.",
+    "agenticBadge": "Auto",
+    "agenticBadgeHint": "This answer was generated in Auto-explore mode — the assistant called graph operators reactively.",
+    "agenticSummary": "{calls} tool call(s) across {iterations} iteration(s).",
+    "agenticEmpty": "No tools were called — the model answered from prior context.",
+    "iteration": "Iter",
+    "parallelCalls": "{n} parallel calls"
   },
   "nodeDetail": {
     "askAi": "Ask AI",

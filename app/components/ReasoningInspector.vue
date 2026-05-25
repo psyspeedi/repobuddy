@@ -10,12 +10,12 @@
  * The flow view answers "how did the LLM solve this?" at a glance —
  * the list view is for digging into params + raw results.
  */
-import { LayoutGrid, List as ListIcon } from 'lucide-vue-next'
-import type { PlanData, TraceEntry } from '@/composables/useChat'
+import { LayoutGrid, List as ListIcon, Sparkles } from 'lucide-vue-next'
+import type { AgenticStep, AgenticTrace, AnyTrace, PlanData, TraceEntry } from '@/composables/useChat'
 
 interface Props {
   plan: PlanData | null | undefined
-  trace: TraceEntry[] | null | undefined
+  trace: AnyTrace | null | undefined
 }
 const props = defineProps<Props>()
 const { t } = useI18n()
@@ -23,6 +23,76 @@ const { t } = useI18n()
 const mode = ref<'flow' | 'list'>('flow')
 const expanded = ref<Record<string, boolean>>({})
 const selectedStepId = ref<string | null>(null)
+
+// Discriminator: agentic traces are objects with mode='agentic', planned
+// traces are arrays of TraceEntry. The chat endpoint emits one or the
+// other but never both per turn.
+const agenticTrace = computed<AgenticTrace | null>(() => {
+  const t = props.trace
+  if (t && !Array.isArray(t) && (t as AgenticTrace).mode === 'agentic') {
+    return t as AgenticTrace
+  }
+  return null
+})
+const plannedTrace = computed<TraceEntry[] | null>(() => {
+  const t = props.trace
+  return Array.isArray(t) ? t : null
+})
+
+const expandedAgentic = ref<Record<number, boolean>>({})
+function toggleAgentic(i: number): void {
+  expandedAgentic.value[i] = !expandedAgentic.value[i]
+}
+
+// Group agentic steps by iteration. The LLM can dispatch multiple
+// tool calls in a single round-trip (OpenAI parallel tools), so a
+// single iteration may carry 1-N steps.
+const agenticByIteration = computed<{ iteration: number; steps: AgenticStep[] }[]>(() => {
+  const trace = agenticTrace.value
+  if (!trace) return []
+  const byIter = new Map<number, AgenticStep[]>()
+  for (const s of trace.steps) {
+    const arr = byIter.get(s.iteration) ?? []
+    arr.push(s)
+    byIter.set(s.iteration, arr)
+  }
+  return [...byIter.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([iteration, steps]) => ({ iteration, steps }))
+})
+
+// Color hint per operator family — helps the eye spot what kind of
+// work happened (search vs traversal vs git vs answer-grounding).
+const OP_FAMILY: Record<string, string> = {
+  find_symbol: 'lookup',
+  find_file: 'lookup',
+  get_project_overview: 'lookup',
+  get_callers: 'traversal',
+  get_callees: 'traversal',
+  get_dependencies: 'traversal',
+  get_dependents: 'traversal',
+  find_implementations: 'traversal',
+  walkthrough: 'traversal',
+  hybrid_search: 'search',
+  vector_search_chunks: 'search',
+  search_docs: 'search',
+  find_by_concept: 'search',
+  retrieve_code_chunks: 'retrieve',
+  get_summary: 'retrieve',
+  list_issues: 'external',
+  git_history: 'external',
+}
+const FAMILY_TINT: Record<string, string> = {
+  lookup: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 ring-sky-500/30',
+  traversal: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 ring-violet-500/30',
+  search: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-amber-500/30',
+  retrieve: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-emerald-500/30',
+  external: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 ring-rose-500/30',
+  other: 'bg-muted text-muted-foreground ring-border',
+}
+function opTint(op: string): string {
+  return FAMILY_TINT[OP_FAMILY[op] ?? 'other'] ?? FAMILY_TINT.other!
+}
 
 function toggle(id: string): void {
   expanded.value[id] = !expanded.value[id]
@@ -35,9 +105,10 @@ interface IndexedStep {
 
 const indexedSteps = computed<IndexedStep[]>(() => {
   if (!props.plan) return []
+  const arr = plannedTrace.value ?? []
   return props.plan.steps.map((step) => ({
     step,
-    trace: props.trace?.find((t) => t.stepId === step.id) ?? null,
+    trace: arr.find((t) => t.stepId === step.id) ?? null,
   }))
 })
 
@@ -202,14 +273,28 @@ const selectedDetails = computed(() => {
   <aside class="flex h-full w-full flex-col gap-3 overflow-hidden rounded-lg border border-border bg-card p-3">
     <header class="flex items-center justify-between gap-2">
       <div class="min-w-0 flex-1 space-y-1">
-        <h2 class="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        <h2 class="flex items-center gap-1.5 text-sm font-medium uppercase tracking-wide text-muted-foreground">
           {{ t('reasoning.title') }}
+          <span
+            v-if="agenticTrace"
+            class="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-primary"
+            :title="t('reasoning.agenticBadgeHint')"
+          >
+            <Sparkles class="h-3 w-3" />
+            {{ t('reasoning.agenticBadge') }}
+          </span>
         </h2>
-        <p v-if="plan" class="line-clamp-2 text-xs text-muted-foreground">
+        <p v-if="plan && !agenticTrace" class="line-clamp-2 text-xs text-muted-foreground">
           {{ plan.reasoning }}
         </p>
+        <p v-else-if="agenticTrace" class="text-xs text-muted-foreground">
+          {{ t('reasoning.agenticSummary', {
+            calls: agenticTrace.steps.length,
+            iterations: agenticByIteration.length,
+          }) }}
+        </p>
       </div>
-      <div class="flex items-center gap-1">
+      <div v-if="!agenticTrace" class="flex items-center gap-1">
         <button
           type="button"
           class="rounded-md p-1.5 transition"
@@ -231,8 +316,78 @@ const selectedDetails = computed(() => {
       </div>
     </header>
 
-    <!-- Flow mode -->
-    <div v-if="plan && mode === 'flow'" class="flex flex-1 flex-col gap-3 overflow-hidden">
+    <!-- Agentic mode — flat timeline grouped by iteration -->
+    <div v-if="agenticTrace" class="flex-1 space-y-3 overflow-y-auto pr-1">
+      <div
+        v-if="agenticTrace.steps.length === 0"
+        class="rounded border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground"
+      >
+        {{ t('reasoning.agenticEmpty') }}
+      </div>
+      <div
+        v-for="group in agenticByIteration"
+        :key="group.iteration"
+        class="space-y-1.5"
+      >
+        <div class="flex items-center gap-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span class="rounded-full bg-muted px-1.5 py-0.5 font-semibold">
+            {{ t('reasoning.iteration') }} {{ group.iteration }}
+          </span>
+          <span v-if="group.steps.length > 1" class="opacity-60">
+            {{ t('reasoning.parallelCalls', { n: group.steps.length }) }}
+          </span>
+        </div>
+        <div
+          v-for="(step, i) in group.steps"
+          :key="`${group.iteration}-${i}`"
+          class="rounded-md border border-border"
+        >
+          <button
+            type="button"
+            class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent/40"
+            @click="toggleAgentic(group.iteration * 100 + i)"
+          >
+            <span class="flex min-w-0 items-center gap-2">
+              <span
+                class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
+                :class="step.error
+                  ? 'bg-destructive/15 text-destructive'
+                  : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'"
+              >{{ step.error ? '!' : '✓' }}</span>
+              <span
+                class="rounded px-1.5 py-0.5 text-[10px] font-mono ring-1"
+                :class="opTint(step.name)"
+              >{{ step.name }}</span>
+              <span class="truncate text-xs text-muted-foreground">{{ step.summary }}</span>
+            </span>
+            <span class="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+              {{ step.durationMs }}ms
+            </span>
+          </button>
+          <div
+            v-if="expandedAgentic[group.iteration * 100 + i]"
+            class="border-t border-border bg-muted/30 px-3 py-2 text-xs space-y-2"
+          >
+            <details>
+              <summary class="cursor-pointer select-none text-muted-foreground">
+                {{ t('reasoning.args') }}
+              </summary>
+              <pre class="mt-1 whitespace-pre-wrap break-all">{{ JSON.stringify(step.args, null, 2) }}</pre>
+            </details>
+            <p v-if="step.summary" class="text-muted-foreground">
+              <span class="font-medium">{{ t('reasoning.result') }}:</span>
+              <code class="ml-1">{{ step.summary }}</code>
+            </p>
+            <p v-if="step.error" class="text-destructive">
+              {{ t('reasoning.error') }}: {{ step.error }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Flow mode (planned only) -->
+    <div v-else-if="plan && mode === 'flow'" class="flex flex-1 flex-col gap-3 overflow-hidden">
       <div class="flex-1 overflow-auto rounded-md border border-border bg-background/40">
         <svg :width="flow.width" :height="flow.height" class="block">
           <g v-for="e in flow.edges" :key="`${e.from}->${e.to}`">
