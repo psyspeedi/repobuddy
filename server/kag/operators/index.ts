@@ -971,6 +971,23 @@ function normalisePr(p: Record<string, unknown>): PrResult {
 
 // ---------- find_similar_issues ----------
 /**
+ * In-memory TTL cache for issue embeddings. Keyed by workspace ID;
+ * value carries the issue snapshot (list + each issue's pre-computed
+ * embedding) and the timestamp it was built. TTL = 30 min — long
+ * enough to amortise repeated similar-issue queries within a single
+ * exploration session, short enough that closed issues / new issues
+ * eventually flow in. Survives a single Node process — workers and
+ * web are separate processes so each warms its own cache.
+ */
+interface IssueEmbeddingCacheEntry {
+  builtAt: number
+  issues: { number: number; title: string; body: string; url: string; state: 'open' | 'closed'; labels: string[] }[]
+  vectors: number[][]
+}
+const ISSUE_EMBED_CACHE = new Map<string, IssueEmbeddingCacheEntry>()
+const ISSUE_EMBED_TTL_MS = 30 * 60 * 1000
+
+/**
  * Given a target issue (by number) or free-text query, find the most
  * similar issues from the repo by embedding cosine similarity over
  * title + body excerpt.
@@ -1030,49 +1047,80 @@ export async function findSimilarIssues(
     return { similar: [], reason: 'no_target' }
   }
 
-  // 2. Fetch a pool of candidate issues. Open + closed, recent activity.
-  let pool: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>['data']
-  try {
-    const res = await octokit.rest.issues.listForRepo({
-      owner, repo, state: 'all', per_page: 60, sort: 'updated', direction: 'desc',
+  // 2. Resolve candidate pool + vectors. Cache by workspaceId so a
+  // multi-turn exploration session ("find similar to #191" then
+  // "similar to #205") re-uses the same embedded pool instead of
+  // burning ~$0.003 + 30s latency per call.
+  const cacheKey = ctx.workspaceId
+  const cached = ISSUE_EMBED_CACHE.get(cacheKey)
+  let pool: IssueEmbeddingCacheEntry['issues']
+  let candidateVecs: number[][]
+  if (cached && Date.now() - cached.builtAt < ISSUE_EMBED_TTL_MS) {
+    pool = cached.issues.filter((i) => i.number !== targetNumber)
+    // We may have dropped the target from the pool — keep vectors
+    // aligned by re-mapping indices.
+    candidateVecs = cached.issues
+      .map((i, idx) => (i.number !== targetNumber ? cached.vectors[idx] : null))
+      .filter((v): v is number[] => v != null)
+  } else {
+    let raw: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>['data']
+    try {
+      const res = await octokit.rest.issues.listForRepo({
+        owner, repo, state: 'all', per_page: 60, sort: 'updated', direction: 'desc',
+      })
+      raw = res.data.filter((i) => !('pull_request' in i && i.pull_request))
+    } catch (err) {
+      const status = (err as { status?: number }).status ?? 0
+      return { similar: [], reason: status === 403 ? 'rate_limited' : 'fetch_failed' }
+    }
+    if (raw.length === 0) return { similar: [] }
+    const snapshot: IssueEmbeddingCacheEntry['issues'] = raw.map((i) => ({
+      number: i.number,
+      title: i.title,
+      body: i.body ?? '',
+      url: i.html_url,
+      state: i.state as 'open' | 'closed',
+      labels: (i.labels ?? [])
+        .map((l) => (typeof l === 'string' ? l : (l.name ?? '')))
+        .filter(Boolean),
+    }))
+    const corpus = snapshot.map((i) => `${i.title}\n\n${i.body}`.slice(0, 4000))
+    const vectors = await ctx.embeddings.embedBatch(corpus)
+    ISSUE_EMBED_CACHE.set(cacheKey, {
+      builtAt: Date.now(),
+      issues: snapshot,
+      vectors,
     })
-    pool = res.data.filter((i) => !('pull_request' in i && i.pull_request))
-    if (targetNumber !== null) pool = pool.filter((i) => i.number !== targetNumber)
-  } catch (err) {
-    const status = (err as { status?: number }).status ?? 0
-    return { similar: [], reason: status === 403 ? 'rate_limited' : 'fetch_failed' }
+    pool = targetNumber !== null
+      ? snapshot.filter((i) => i.number !== targetNumber)
+      : snapshot
+    candidateVecs = snapshot
+      .map((i, idx) => (i.number !== targetNumber ? vectors[idx] : null))
+      .filter((v): v is number[] => v != null)
   }
   if (pool.length === 0) return { similar: [] }
 
-  // 3. Embed in one batch. Most providers accept arrays; ours does.
-  const texts = [targetText, ...pool.map((i) => `${i.title}\n\n${i.body ?? ''}`.slice(0, 4000))]
-  const embeddings = await ctx.embeddings.embedBatch(texts)
-  const targetVec = embeddings[0]
+  // 3. Embed the target ONLY (single-element batch). Cached pool
+  // embeddings persist — see ISSUE_EMBED_CACHE above.
+  const targetVecs = await ctx.embeddings.embedBatch([targetText.slice(0, 4000)])
+  const targetVec = targetVecs[0]
   if (!targetVec) return { similar: [] }
-  const candidateVecs = embeddings.slice(1)
 
-  // 4. Cosine similarity, top-K. We assume the provider returns
-  // already-normalised vectors; if not, dot-product still ranks
-  // consistently within one batch (norm cancels in ordering).
+  // 4. Cosine similarity, top-K.
   const scored = pool.map((i, idx) => {
     const v = candidateVecs[idx]
-    return {
-      issue: i,
-      score: v ? cosine(targetVec, v) : 0,
-    }
+    return { issue: i, score: v ? cosine(targetVec, v) : 0 }
   })
   scored.sort((a, b) => b.score - a.score)
   return {
     similar: scored.slice(0, limit).map(({ issue, score }) => ({
       number: issue.number,
       title: issue.title,
-      url: issue.html_url,
+      url: issue.url,
       similarity: Math.round(score * 1000) / 1000,
-      state: issue.state as 'open' | 'closed',
-      bodyExcerpt: excerptIssueBody(issue.body ?? ''),
-      labels: (issue.labels ?? [])
-        .map((l) => (typeof l === 'string' ? l : (l.name ?? '')))
-        .filter(Boolean),
+      state: issue.state,
+      bodyExcerpt: excerptIssueBody(issue.body),
+      labels: issue.labels,
     })),
   }
 }

@@ -67,6 +67,7 @@ const OP_FAMILY: Record<string, string> = {
   find_symbol: 'lookup',
   find_file: 'lookup',
   get_project_overview: 'lookup',
+  list_concepts: 'lookup',
   get_callers: 'traversal',
   get_callees: 'traversal',
   get_dependencies: 'traversal',
@@ -79,7 +80,11 @@ const OP_FAMILY: Record<string, string> = {
   find_by_concept: 'search',
   retrieve_code_chunks: 'retrieve',
   get_summary: 'retrieve',
+  read_file: 'retrieve',
+  tests_for: 'analysis',
   list_issues: 'external',
+  list_prs: 'external',
+  find_similar_issues: 'external',
   git_history: 'external',
 }
 const FAMILY_TINT: Record<string, string> = {
@@ -87,6 +92,7 @@ const FAMILY_TINT: Record<string, string> = {
   traversal: 'bg-violet-500/15 text-violet-700 dark:text-violet-300 ring-violet-500/30',
   search: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-amber-500/30',
   retrieve: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-emerald-500/30',
+  analysis: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 ring-cyan-500/30',
   external: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 ring-rose-500/30',
   other: 'bg-muted text-muted-foreground ring-border',
 }

@@ -380,6 +380,8 @@
     },
     "firstIssueAsk": "Explain what {path} does and what a first contributor could realistically improve there.",
     "issueAsk": "I'd like to work on issue #{number} — {title}. Where in the code should I start and what do I need to read first?",
+    "pin": "Pin to chat focus — the assistant will keep this in context across turns",
+    "unpin": "Unpin",
     "setup": {
       "title": "How to run it locally",
       "hint": "The fastest path from clone to running. Detected from package.json, Makefile, Dockerfile and the README.",
