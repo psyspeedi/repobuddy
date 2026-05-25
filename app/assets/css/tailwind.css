@@ -221,6 +221,27 @@ body {
   background: transparent;
 }
 
+/* Shiki dual-theme palette switch.
+ *
+ * codeToHtml({ themes: { light, dark }, defaultColor: false }) emits CSS
+ * variables on each span: --shiki-light / --shiki-light-bg / --shiki-dark
+ * / --shiki-dark-bg. With defaultColor:false there is NO inline fallback
+ * — we have to pick one set explicitly here.
+ *
+ * Default = light palette. Under .dark (set by @nuxtjs/color-mode on
+ * <html>), swap to the dark vars. This is purely CSS, so no re-render
+ * is needed when the user toggles the theme. */
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+}
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+}
+
 /* Shiki-rendered <pre> blocks paint the language background only behind
  * the rendered text. When the line is wider than the container and a
  * horizontal scrollbar appears, scrolling reveals the parent element

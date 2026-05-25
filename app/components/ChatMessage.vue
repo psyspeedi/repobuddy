@@ -64,7 +64,6 @@ function escapeHtml(s: string): string {
 }
 
 const messageRoot = ref<HTMLDivElement | null>(null)
-const colorMode = useColorMode()
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null
 let mermaidCounter = 0
 
@@ -104,25 +103,28 @@ async function highlightCodeBlocks(): Promise<void> {
   if (!root) return
   const blocks = root.querySelectorAll<HTMLElement>('pre > code[class*="language-"]')
   if (blocks.length === 0) return
-  // Lazy-import shiki on first use. Subsequent calls reuse the
-  // module-level cache.
   const { codeToHtml } = await import('shiki')
-  const theme = colorMode.value === 'dark' ? 'github-dark' : 'github-light'
   for (const codeEl of Array.from(blocks)) {
     const pre = codeEl.closest('pre')
     if (!pre) continue
     if (pre.dataset.shikiHighlighted === '1') continue
     if (pre.dataset.mermaidRendered === '1') continue
-    // Mermaid blocks are handled separately by renderMermaidBlocks.
     if (codeEl.classList.contains('language-mermaid')) continue
     const langClass = [...codeEl.classList].find((c) => c.startsWith('language-'))
     const rawLang = (langClass?.slice(9) ?? '').toLowerCase()
     const lang = SHIKI_LANG_ALIAS[rawLang] ?? 'plaintext'
     const source = codeEl.textContent ?? ''
     try {
-      const rendered = await codeToHtml(source, { lang, theme })
+      // Dual-theme: bakes light + dark token colours as CSS vars on
+      // every span. A global rule in tailwind.css flips between them
+      // based on the `.dark` class on <html>. No re-render needed on
+      // theme switch — pure CSS.
+      const rendered = await codeToHtml(source, {
+        lang,
+        themes: { light: 'github-light', dark: 'github-dark' },
+        defaultColor: false,
+      })
       const cleaned = DOMPurify.sanitize(rendered, {
-        // Shiki emits inline styles for tokens; allow them through.
         ADD_TAGS: ['span'],
         ADD_ATTR: ['style', 'class'],
       }) as unknown as string
@@ -134,7 +136,6 @@ async function highlightCodeBlocks(): Promise<void> {
       newPre.dataset.shikiHighlighted = '1'
       pre.replaceWith(newPre)
     } catch {
-      // Unknown grammar or any other shiki hiccup — keep plain text.
       pre.dataset.shikiHighlighted = 'error'
     }
   }
@@ -200,16 +201,9 @@ watch(
   }),
   { immediate: true },
 )
-// Re-highlight when theme flips — Shiki output is theme-baked.
-watch(() => colorMode.value, () => {
-  const root = messageRoot.value
-  if (!root) return
-  // Reset the highlight flag so the next pass rebuilds with the new theme.
-  for (const pre of root.querySelectorAll<HTMLElement>('pre.cg-shiki')) {
-    pre.dataset.shikiHighlighted = ''
-  }
-  void nextTick(() => highlightCodeBlocks())
-})
+// Theme switching: with dual-theme Shiki + CSS-var flip, no re-render
+// needed. Touching colorMode at this scope was the previous (single-
+// theme) approach — removed.
 
 // Copy raw markdown — useful when the user wants to paste a finding
 // into an issue / PR. Citation markers stay as-is; downstream renderer

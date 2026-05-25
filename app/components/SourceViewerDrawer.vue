@@ -11,7 +11,6 @@ const props = defineProps<Props>()
 defineEmits<{ (e: 'close'): void }>()
 
 const { t } = useI18n()
-const colorMode = useColorMode()
 
 interface ChunkResponse {
   chunk: {
@@ -107,25 +106,22 @@ async function renderChunk(
     const rendered = marked.parse(chunk.text, { async: false }) as string
     return DOMPurify.sanitize(rendered)
   }
+  // Dual-theme bakes both palettes into CSS vars; the global rule in
+  // tailwind.css flips them on .dark. No re-render on theme switch
+  // (which is why this used to flash the wrong palette after toggling).
+  const themes = { light: 'github-light', dark: 'github-dark' } as const
   if (forMode === 'diff') {
-    return codeToHtml(chunk.text, {
-      lang: 'diff',
-      theme: colorMode.value === 'dark' ? 'github-dark' : 'github-light',
-    })
+    return codeToHtml(chunk.text, { lang: 'diff', themes, defaultColor: false })
   }
   const lang = chunk.metadata?.language ?? 'plaintext'
   try {
     return await codeToHtml(chunk.text, {
       lang: shikiLang(lang, chunk.filePath),
-      theme: colorMode.value === 'dark' ? 'github-dark' : 'github-light',
+      themes,
+      defaultColor: false,
     })
   } catch {
-    // Unknown grammar (rare with the alias map) — fall back to plaintext
-    // so the panel still renders the file rather than 500-ing.
-    return await codeToHtml(chunk.text, {
-      lang: 'plaintext',
-      theme: colorMode.value === 'dark' ? 'github-dark' : 'github-light',
-    })
+    return await codeToHtml(chunk.text, { lang: 'plaintext', themes, defaultColor: false })
   }
 }
 
@@ -158,7 +154,6 @@ async function toggleMode(): Promise<void> {
 }
 
 watch(() => props.chunkId, () => void load(), { immediate: true })
-watch(() => colorMode.value, () => void load())
 
 // Map (chunk.metadata.language, chunk.filePath) → Shiki grammar.
 // `language` is set by the parser for AST-parseable files. For the
