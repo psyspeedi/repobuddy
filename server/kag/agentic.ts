@@ -292,6 +292,31 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'tests_for',
+    description: 'Test files / test entities that cover a given entity (function, class, file) via the `tested_by` relation. Use for impact analysis: "if I change X, which tests should I run", "что сломается если я поменяю Y".',
+    parameters: {
+      type: 'object',
+      properties: {
+        entity: { description: 'Entity or array of entities returned by find_symbol / walkthrough' },
+        limit: { type: 'integer', minimum: 1, maximum: 50 },
+      },
+      required: ['entity'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'list_concepts',
+    description: "Project's domain glossary — concept / pattern / decision entities derived by the LLM annotation step (project-specific jargon, recurring patterns, design decisions). Use when the user is parsing project-specific language or asks 'what does <jargon> mean here'.",
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Substring filter over name / description (optional)' },
+        limit: { type: 'integer', minimum: 1, maximum: 50 },
+      },
+      additionalProperties: false,
+    },
+  },
 ]
 
 /** Operators NOT exposed as tools (used only by the planner / executor). */

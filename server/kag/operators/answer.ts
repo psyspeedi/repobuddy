@@ -196,6 +196,14 @@ function renderUserMessage(params: AnswerParams): string {
         lines.push(`- \`${z.filePath}\` [entity:${z.id}] — ${z.reasons.join(', ')}`)
       }
     }
+    if (ov.contribGuide && ov.contribGuide.length > 0) {
+      lines.push('### Contribution conventions')
+      lines.push('Surface these rules to the user when they ask about contributing — every OSS project has specific norms (signing, conventional commits, test policy, etc.).')
+      for (const g of ov.contribGuide.slice(0, 4)) {
+        lines.push(`- (${g.kind}) \`${g.filePath}\`:`)
+        for (const line of g.excerpt.split('\n').slice(0, 12)) lines.push(`    ${line}`)
+      }
+    }
     const tot = ov.stats.totalEntities
     const byType = Object.entries(ov.stats.entitiesByType)
       .sort((a, b) => b[1] - a[1])

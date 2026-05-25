@@ -61,11 +61,22 @@ export interface HotFile {
   hotness: number
 }
 
+export interface ContribGuideExcerpt {
+  /** Relative path of the source file. */
+  filePath: string
+  /** Identifies which template family this is (so UI/LLM can label it). */
+  kind: 'contributing' | 'pr_template' | 'issue_template' | 'code_of_conduct' | 'security'
+  /** First ~1.5KB of text — enough to surface the rules without bloating prompts. */
+  excerpt: string
+}
+
 export interface ProjectOverview {
   entrypoints: EntrypointHit[]
   coreAbstractions: CoreAbstraction[]
   goodFirstIssues: FirstIssueZone[]
   hotFiles: HotFile[]
+  /** CONTRIBUTING / PR template / issue template / CoC content. */
+  contribGuide: ContribGuideExcerpt[]
   stats: {
     entitiesByType: Record<string, number>
     totalFiles: number
@@ -88,15 +99,72 @@ export async function getProjectOverview(
     coreAbstractions,
     goodFirstIssues,
     hotFiles,
+    contribGuide,
     stats,
   ] = await Promise.all([
     findEntrypoints(db, workspaceId),
     findCoreAbstractions(db, workspaceId),
     findGoodFirstIssues(db, workspaceId),
     findHotFiles(db, workspaceId),
+    findContribGuide(db, workspaceId),
     computeStats(db, workspaceId),
   ])
-  return { entrypoints, coreAbstractions, goodFirstIssues, hotFiles, stats }
+  return { entrypoints, coreAbstractions, goodFirstIssues, hotFiles, contribGuide, stats }
+}
+
+const CONTRIB_PATTERNS: { re: RegExp; kind: ContribGuideExcerpt['kind'] }[] = [
+  { re: /(^|\/)CONTRIBUTING(\.md|\.txt|\.rst)?$/i, kind: 'contributing' },
+  { re: /(^|\/)\.github\/CONTRIBUTING(\.md)?$/i, kind: 'contributing' },
+  { re: /(^|\/)\.github\/PULL_REQUEST_TEMPLATE(\.md)?$/i, kind: 'pr_template' },
+  { re: /(^|\/)\.github\/PULL_REQUEST_TEMPLATE\//i, kind: 'pr_template' },
+  { re: /(^|\/)\.github\/ISSUE_TEMPLATE\//i, kind: 'issue_template' },
+  { re: /(^|\/)CODE_OF_CONDUCT(\.md)?$/i, kind: 'code_of_conduct' },
+  { re: /(^|\/)SECURITY(\.md)?$/i, kind: 'security' },
+]
+
+async function findContribGuide(
+  db: Database,
+  workspaceId: string,
+): Promise<ContribGuideExcerpt[]> {
+  // One SQL grabs everything that LIKES the contrib-related paths.
+  // We then run each path through the regex list to assign a `kind`.
+  // 1500-char excerpts keep the prompt budget under control.
+  const rows = await db
+    .select({ filePath: chunks.filePath, text: chunks.text })
+    .from(chunks)
+    .where(
+      and(
+        eq(chunks.workspaceId, workspaceId),
+        sql`(
+          upper(${chunks.filePath}) LIKE '%CONTRIBUTING%'
+          OR upper(${chunks.filePath}) LIKE '%PULL_REQUEST_TEMPLATE%'
+          OR upper(${chunks.filePath}) LIKE '%ISSUE_TEMPLATE%'
+          OR upper(${chunks.filePath}) LIKE '%CODE_OF_CONDUCT%'
+          OR upper(${chunks.filePath}) LIKE '%/SECURITY.MD'
+          OR upper(${chunks.filePath}) = 'SECURITY.MD'
+        )`,
+      ),
+    )
+    .orderBy(sql`length(${chunks.filePath}) ASC`)
+    .limit(20)
+
+  const out: ContribGuideExcerpt[] = []
+  const seenKinds = new Map<ContribGuideExcerpt['kind'], number>()
+  for (const r of rows) {
+    if (!r.filePath || !r.text) continue
+    const match = CONTRIB_PATTERNS.find((p) => p.re.test(r.filePath as string))
+    if (!match) continue
+    // Cap each kind at 2 files (root CONTRIBUTING + .github fallback, etc).
+    const count = seenKinds.get(match.kind) ?? 0
+    if (count >= 2) continue
+    seenKinds.set(match.kind, count + 1)
+    out.push({
+      filePath: r.filePath,
+      kind: match.kind,
+      excerpt: r.text.slice(0, 1500),
+    })
+  }
+  return out
 }
 
 async function findEntrypoints(

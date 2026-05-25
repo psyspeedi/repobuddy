@@ -19,6 +19,8 @@ export const OPERATOR_NAMES = [
   'list_issues',
   'get_project_overview',
   'read_file',
+  'tests_for',
+  'list_concepts',
   'answer',
 ] as const
 

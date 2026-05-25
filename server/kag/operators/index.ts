@@ -844,6 +844,121 @@ export async function listIssues(
   return { issues: finalIssues, relatedChunks }
 }
 
+// ---------- tests_for ----------
+/**
+ * Given one or more entities (functions, classes, files), return the
+ * test entities that cover them via `tested_by` relations the indexer
+ * derives during phase 2. Answers "if I change X, which tests should
+ * I run?" — a daily question for contributors. Cheap (one SQL on an
+ * indexed column), no LLM cost.
+ */
+export interface TestsForParams {
+  /** Entity or array of entities returned by find_symbol / walkthrough. */
+  entity?: GraphEntity | GraphEntity[]
+  /** Alias for `entity` — some planners say `target`. */
+  target?: GraphEntity | GraphEntity[]
+  /** Max test entities to return. Default 20. */
+  limit?: number
+}
+
+export async function testsFor(
+  params: TestsForParams,
+  ctx: OperatorContext,
+): Promise<GraphEntity[]> {
+  const ids = idsFromParam(params.entity ?? params.target)
+  if (ids.length === 0) return []
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 50)
+  // `tested_by` is emitted by deriveTestedByRelations: from = test
+  // file entity, to = covered entity. So for a given covered entity
+  // we follow the inbound edge.
+  const idsArray = sql`ARRAY[${sql.join(ids.map((id) => sql`${id}`), sql`, `)}]::uuid[]`
+  const rows = await ctx.db.execute<{
+    id: string
+    type: string
+    name: string
+    qualified_name: string | null
+    file_path: string | null
+    start_line: number | null
+    end_line: number | null
+    language: string | null
+    description: string | null
+  }>(sql`
+    SELECT DISTINCT e.id, e.type, e.name, e.qualified_name, e.file_path,
+           e.start_line, e.end_line, e.language, e.description
+    FROM ${relations} r
+    INNER JOIN ${entities} e ON e.id = r.from_entity_id
+    WHERE r.workspace_id = ${ctx.workspaceId}
+      AND r.type = 'tested_by'
+      AND r.to_entity_id = ANY(${idsArray})
+    LIMIT ${limit}
+  `)
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    name: r.name,
+    qualifiedName: r.qualified_name,
+    filePath: r.file_path,
+    startLine: r.start_line,
+    endLine: r.end_line,
+    language: r.language,
+    description: r.description,
+  }))
+}
+
+// ---------- list_concepts ----------
+/**
+ * Surface the project's domain glossary — concept entities created
+ * by the LLM annotation step during indexing (e.g. "Realm", "Hub",
+ * "Workspace", project-specific jargon). Without these a newcomer
+ * can't parse issues. Ordered by how many other entities link to
+ * each concept (proxy for "how central is this term").
+ */
+export interface ListConceptsParams {
+  /** Optional substring filter applied to name / description. */
+  query?: string
+  /** Max concepts to return. Default 20. */
+  limit?: number
+}
+
+export async function listConcepts(
+  params: ListConceptsParams,
+  ctx: OperatorContext,
+): Promise<GraphEntity[]> {
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 50)
+  const filter = params.query?.trim() ?? ''
+  const filterExpr = filter
+    ? sql`AND (lower(e.name) LIKE ${'%' + filter.toLowerCase() + '%'} OR lower(coalesce(e.description, '')) LIKE ${'%' + filter.toLowerCase() + '%'})`
+    : sql``
+  const rows = await ctx.db.execute<{
+    id: string
+    type: string
+    name: string
+    qualified_name: string | null
+    description: string | null
+    in_degree: number
+  }>(sql`
+    SELECT e.id, e.type, e.name, e.qualified_name, e.description,
+           coalesce((SELECT count(*) FROM ${relations} r WHERE r.to_entity_id = e.id AND r.workspace_id = e.workspace_id), 0)::int AS in_degree
+    FROM ${entities} e
+    WHERE e.workspace_id = ${ctx.workspaceId}
+      AND e.type IN ('concept', 'pattern', 'decision')
+      ${filterExpr}
+    ORDER BY in_degree DESC, e.name ASC
+    LIMIT ${limit}
+  `)
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    name: r.name,
+    qualifiedName: r.qualified_name,
+    filePath: null,
+    startLine: null,
+    endLine: null,
+    language: null,
+    description: r.description,
+  }))
+}
+
 // ---------- read_file ----------
 /**
  * Return all chunks for a given file path. Matches by exact path OR
@@ -1230,6 +1345,8 @@ export type OperatorName =
   | 'list_issues'
   | 'get_project_overview'
   | 'read_file'
+  | 'tests_for'
+  | 'list_concepts'
   | 'answer'
 
 export const OPERATORS: Record<
@@ -1254,5 +1371,7 @@ export const OPERATORS: Record<
   list_issues: listIssues as never,
   get_project_overview: getProjectOverviewOp as never,
   read_file: readFileOp as never,
+  tests_for: testsFor as never,
+  list_concepts: listConcepts as never,
   answer: answerOp as never,
 }
