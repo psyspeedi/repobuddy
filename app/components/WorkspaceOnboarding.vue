@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sparkles, X, Compass, Layers, GitBranch, ArrowRight, Github, Terminal, ExternalLink, Copy, Check, Pin, PinOff } from 'lucide-vue-next'
+import { Sparkles, X, Compass, Layers, GitBranch, ArrowRight, Github, Terminal, ExternalLink, Copy, Check } from 'lucide-vue-next'
 
 interface Entrypoint {
   entityId: string | null
@@ -74,49 +74,13 @@ interface SetupGuidePayload {
   readmeQuickStart: string | null
 }
 
-const props = defineProps<{
-  workspaceId: string
-  /** Currently pinned entity IDs / file paths / issue numbers — passed
-   * by the parent so the pin button can render as toggled. */
-  pinnedEntities?: string[]
-  pinnedFiles?: string[]
-  pinnedIssues?: number[]
-}>()
+const props = defineProps<{ workspaceId: string }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'walkthrough', payload: { entityId: string; name: string }): void
   (e: 'open-entity', entityId: string): void
   (e: 'ask', question: string): void
-  (e: 'pin-entity', entityId: string): void
-  (e: 'unpin-entity', entityId: string): void
-  (e: 'pin-file', path: string): void
-  (e: 'unpin-file', path: string): void
-  (e: 'pin-issue', number: number): void
-  (e: 'unpin-issue', number: number): void
 }>()
-
-function isPinnedEntity(id: string | null): boolean {
-  return !!id && (props.pinnedEntities ?? []).includes(id)
-}
-function isPinnedFile(path: string): boolean {
-  return (props.pinnedFiles ?? []).includes(path)
-}
-function isPinnedIssue(n: number): boolean {
-  return (props.pinnedIssues ?? []).includes(n)
-}
-function toggleEntityPin(id: string | null): void {
-  if (!id) return
-  if (isPinnedEntity(id)) emit('unpin-entity', id)
-  else emit('pin-entity', id)
-}
-function toggleFilePin(path: string): void {
-  if (isPinnedFile(path)) emit('unpin-file', path)
-  else emit('pin-file', path)
-}
-function toggleIssuePin(n: number): void {
-  if (isPinnedIssue(n)) emit('unpin-issue', n)
-  else emit('pin-issue', n)
-}
 
 const { t } = useI18n()
 
@@ -286,28 +250,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   {{ ep.filePath }}
                 </div>
               </div>
-              <div class="flex shrink-0 items-center gap-1">
-                <button
-                  v-if="ep.entityId"
-                  type="button"
-                  class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :class="isPinnedEntity(ep.entityId) ? 'text-primary' : ''"
-                  :title="isPinnedEntity(ep.entityId) ? t('onboardingPanel.unpin') : t('onboardingPanel.pin')"
-                  @click.stop="toggleEntityPin(ep.entityId)"
-                >
-                  <PinOff v-if="isPinnedEntity(ep.entityId)" class="h-3.5 w-3.5" />
-                  <Pin v-else class="h-3.5 w-3.5" />
-                </button>
-                <Button
-                  v-if="ep.entityId"
-                  variant="outline"
-                  size="sm"
-                  @click="startWalkthrough(ep)"
-                >
-                  {{ t('onboardingPanel.entrypoints.walkthrough') }}
-                  <ArrowRight class="ml-1 h-3 w-3" />
-                </Button>
-              </div>
+              <Button
+                v-if="ep.entityId"
+                variant="outline"
+                size="sm"
+                @click="startWalkthrough(ep)"
+              >
+                {{ t('onboardingPanel.entrypoints.walkthrough') }}
+                <ArrowRight class="ml-1 h-3 w-3" />
+              </Button>
             </li>
           </ul>
         </section>
@@ -342,21 +293,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   {{ abs.qualifiedName ?? abs.filePath }}
                 </div>
               </div>
-              <div class="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  :class="isPinnedEntity(abs.entityId) ? 'text-primary' : ''"
-                  :title="isPinnedEntity(abs.entityId) ? t('onboardingPanel.unpin') : t('onboardingPanel.pin')"
-                  @click.stop="toggleEntityPin(abs.entityId)"
-                >
-                  <PinOff v-if="isPinnedEntity(abs.entityId)" class="h-3.5 w-3.5" />
-                  <Pin v-else class="h-3.5 w-3.5" />
-                </button>
-                <span class="text-[11px] tabular-nums text-muted-foreground">
-                  ← {{ abs.inDegree }}
-                </span>
-              </div>
+              <span class="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                ← {{ abs.inDegree }}
+              </span>
             </li>
           </ul>
         </section>
@@ -392,17 +331,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     </span>
                   </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                    :class="isPinnedFile(zone.filePath) ? 'text-primary' : ''"
-                    :title="isPinnedFile(zone.filePath) ? t('onboardingPanel.unpin') : t('onboardingPanel.pin')"
-                    @click.stop="toggleFilePin(zone.filePath)"
-                  >
-                    <PinOff v-if="isPinnedFile(zone.filePath)" class="h-3.5 w-3.5" />
-                    <Pin v-else class="h-3.5 w-3.5" />
-                  </button>
+                <div class="flex shrink-0 gap-2">
                   <Button variant="ghost" size="sm" @click="openInDrawer(zone.entityId)">
                     {{ t('onboardingPanel.firstIssue.open') }}
                   </Button>
@@ -532,21 +461,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     </button>
                   </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    class="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-                    :class="isPinnedIssue(issue.number) ? 'text-primary' : ''"
-                    :title="isPinnedIssue(issue.number) ? t('onboardingPanel.unpin') : t('onboardingPanel.pin')"
-                    @click.stop="toggleIssuePin(issue.number)"
-                  >
-                    <PinOff v-if="isPinnedIssue(issue.number)" class="h-3.5 w-3.5" />
-                    <Pin v-else class="h-3.5 w-3.5" />
-                  </button>
-                  <Button variant="outline" size="sm" @click="askAboutIssue(issue)">
-                    {{ t('onboardingPanel.issues.ask') }}
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" @click="askAboutIssue(issue)">
+                  {{ t('onboardingPanel.issues.ask') }}
+                </Button>
               </div>
             </li>
           </ul>

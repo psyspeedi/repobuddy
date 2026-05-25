@@ -446,19 +446,10 @@ useHead(() => {
     <WorkspaceOnboarding
       v-if="showOnboarding"
       :workspace-id="workspaceId"
-      :pinned-entities="chat.focus.value.entityIds"
-      :pinned-files="chat.focus.value.filePaths"
-      :pinned-issues="chat.focus.value.issueNumbers"
       @close="closeOnboarding"
       @walkthrough="onOnboardWalkthrough"
       @open-entity="openNeighbours"
       @ask="onOnboardAsk"
-      @pin-entity="chat.pinEntity"
-      @unpin-entity="chat.unpinEntity"
-      @pin-file="chat.pinFile"
-      @unpin-file="chat.unpinFile"
-      @pin-issue="chat.pinIssue"
-      @unpin-issue="chat.unpinIssue"
     />
 
     <!-- Delete confirmation modal -->
@@ -682,11 +673,8 @@ useHead(() => {
           v-else-if="sidePanel === 'neighbours' && neighbourEntityId"
           :workspace-id="workspaceId"
           :entity-id="neighbourEntityId"
-          :pinned-entities="chat.focus.value.entityIds"
           @close="sidePanel = 'inspector'"
           @focus="openNeighbours"
-          @pin-entity="chat.pinEntity"
-          @unpin-entity="chat.unpinEntity"
         />
       </div>
     </section>
