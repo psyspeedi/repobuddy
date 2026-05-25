@@ -19,6 +19,7 @@ export const OPERATOR_NAMES = [
   'list_issues',
   'list_prs',
   'find_similar_issues',
+  'find_prs_for_issue',
   'get_project_overview',
   'read_file',
   'tests_for',

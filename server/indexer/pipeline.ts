@@ -14,6 +14,7 @@ import type {
   IndexWorkspaceJobResult,
 } from '../queues'
 import { fetchGitHub, type FetchedSource } from './source/fetch'
+import { indexPullRequests } from './pr-history'
 import { walkRepo } from './source/walk'
 import { extractGitHistory } from './git/history'
 import { computeGitInsights } from './git/insights'
@@ -431,6 +432,16 @@ export async function runIndexPipeline(
         flaggedDuplicates: resolutionStats.flagged,
         tokensSpent: 0,
       })
+
+      // 11a'. Fetch + persist recent merged PRs as pull_request entities
+      // with metadata.referencedIssues parsed from "fixes #N" patterns.
+      // Powers find_prs_for_issue without hitting GitHub per question.
+      try {
+        const prResult = await indexPullRequests(db, workspaceId, ws.sourceUrl)
+        log.info({ workspaceId, ...prResult }, 'pr-history indexed')
+      } catch (err) {
+        log.warn({ err: err instanceof Error ? err.message : String(err) }, 'pr-history step failed; continuing')
+      }
 
       // 11b. Aggregate git insights and merge onto workspaces.stats so the
       // workspace page can render maintainer/activity/quality cards without

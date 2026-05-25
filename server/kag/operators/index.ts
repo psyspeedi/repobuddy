@@ -969,6 +969,62 @@ function normalisePr(p: Record<string, unknown>): PrResult {
   }
 }
 
+// ---------- find_prs_for_issue ----------
+/**
+ * Graph query: PRs whose metadata.referencedIssues contains the given
+ * issue number. Returns persisted pull_request entities so the answer
+ * can ground "how was this issue fixed" in concrete merged PRs.
+ *
+ * Cheap (one indexed jsonb @> query). Falls back to empty if PR-history
+ * indexing hasn't run yet or the issue isn't referenced anywhere.
+ */
+export interface FindPrsForIssueParams {
+  issueNumber: number
+  limit?: number
+}
+
+export interface PrSummary {
+  id: string
+  number: number
+  title: string
+  url: string | null
+  mergedAt: string | null
+  author: string | null
+  bodyExcerpt: string | null
+}
+
+export async function findPrsForIssue(
+  params: FindPrsForIssueParams,
+  ctx: OperatorContext,
+): Promise<PrSummary[]> {
+  if (!Number.isFinite(params.issueNumber) || params.issueNumber < 1) return []
+  const limit = Math.min(Math.max(params.limit ?? 10, 1), 30)
+  const rows = await ctx.db.execute<{
+    id: string
+    metadata: Record<string, unknown> | null
+  }>(sql`
+    SELECT id, metadata
+    FROM ${entities}
+    WHERE workspace_id = ${ctx.workspaceId}
+      AND type = 'pull_request'
+      AND metadata -> 'referencedIssues' @> ${JSON.stringify([params.issueNumber])}::jsonb
+    ORDER BY (metadata ->> 'mergedAt') DESC NULLS LAST
+    LIMIT ${limit}
+  `)
+  return rows.map((r) => {
+    const meta = (r.metadata ?? {}) as Record<string, unknown>
+    return {
+      id: r.id,
+      number: (meta.number as number | undefined) ?? 0,
+      title: (meta.title as string | undefined) ?? '',
+      url: (meta.url as string | null | undefined) ?? null,
+      mergedAt: (meta.mergedAt as string | null | undefined) ?? null,
+      author: (meta.author as string | null | undefined) ?? null,
+      bodyExcerpt: (meta.bodyExcerpt as string | null | undefined) ?? null,
+    }
+  })
+}
+
 // ---------- find_similar_issues ----------
 /**
  * In-memory TTL cache for issue embeddings. Keyed by workspace ID;
@@ -1643,6 +1699,7 @@ export type OperatorName =
   | 'list_issues'
   | 'list_prs'
   | 'find_similar_issues'
+  | 'find_prs_for_issue'
   | 'get_project_overview'
   | 'read_file'
   | 'tests_for'
@@ -1671,6 +1728,7 @@ export const OPERATORS: Record<
   list_issues: listIssues as never,
   list_prs: listPrs as never,
   find_similar_issues: findSimilarIssues as never,
+  find_prs_for_issue: findPrsForIssue as never,
   get_project_overview: getProjectOverviewOp as never,
   read_file: readFileOp as never,
   tests_for: testsFor as never,

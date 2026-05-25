@@ -356,6 +356,19 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'find_prs_for_issue',
+    description: 'Graph-indexed: merged PRs whose body referenced the given issue via "fixes #N" / "closes #N". Use when the user asks "how was this fixed", "is there already a PR for this", or to find a precedent before working on a similar issue.',
+    parameters: {
+      type: 'object',
+      properties: {
+        issueNumber: { type: 'integer', minimum: 1 },
+        limit: { type: 'integer', minimum: 1, maximum: 30 },
+      },
+      required: ['issueNumber'],
+      additionalProperties: false,
+    },
+  },
 ]
 
 /** Operators NOT exposed as tools (used only by the planner / executor). */

@@ -85,6 +85,7 @@ const OP_FAMILY: Record<string, string> = {
   list_issues: 'external',
   list_prs: 'external',
   find_similar_issues: 'external',
+  find_prs_for_issue: 'external',
   git_history: 'external',
 }
 const FAMILY_TINT: Record<string, string> = {
