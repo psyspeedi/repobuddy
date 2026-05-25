@@ -850,6 +850,242 @@ export async function listIssues(
   return { issues: finalIssues, relatedChunks }
 }
 
+// ---------- list_prs ----------
+/**
+ * Open / merged GitHub pull requests from the workspace repo. Same
+ * Octokit-anonymous budget as list_issues. Lives outside the graph
+ * (no schema for PR entities yet) — fetched on demand.
+ *
+ * Two modes:
+ *   - prNumber set: fetch single PR (with linked issue refs from body)
+ *   - otherwise: list PRs filtered by state / labels
+ *
+ * Use cases:
+ *   - "how was a similar issue fixed?" → list_prs({state:'closed'}) then
+ *     scan titles / linked issues for the same area
+ *   - "what's the recent work in module X?" → list_prs + filter client-
+ *     side by mentioned file paths
+ *   - "show me PR #42" → list_prs({prNumber:42})
+ */
+export interface ListPrsParams {
+  state?: 'open' | 'closed' | 'all'
+  labels?: string[]
+  limit?: number
+  prNumber?: number
+}
+
+export interface PrResult {
+  number: number
+  title: string
+  url: string
+  state: 'open' | 'closed'
+  merged: boolean
+  mergedAt: string | null
+  author: string | null
+  bodyExcerpt: string
+  labels: string[]
+  /** Issue numbers the PR body references via `fixes #N` / `closes #N`. */
+  referencedIssues: number[]
+  updatedAt: string
+}
+
+export interface PrsEnvelope {
+  prs: PrResult[]
+  reason?: 'no_source_url' | 'not_github' | 'rate_limited' | 'repo_not_found' | 'fetch_failed'
+}
+
+const FIX_REF_RE = /(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s+#(\d{1,7})/gi
+
+export async function listPrs(
+  params: ListPrsParams,
+  ctx: OperatorContext,
+): Promise<PrsEnvelope> {
+  const sourceUrl = ctx.workspace?.sourceUrl ?? null
+  if (!sourceUrl) return { prs: [], reason: 'no_source_url' }
+  const match = sourceUrl.match(KAG_GH_URL_RE)
+  if (!match) return { prs: [], reason: 'not_github' }
+  const owner = match[1] as string
+  const repo = match[2] as string
+  const limit = Math.min(Math.max(params.limit ?? 15, 1), 30)
+
+  const octokit = new Octokit()
+  try {
+    if (params.prNumber) {
+      const single = await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: params.prNumber,
+      })
+      return { prs: [normalisePr(single.data)] }
+    }
+    const res = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      state: params.state ?? 'all',
+      per_page: limit,
+      sort: 'updated',
+      direction: 'desc',
+    })
+    // Octokit's list endpoint returns leaner shape (no body for closed
+    // ones in some cases); still has the fields we need.
+    return { prs: res.data.map(normalisePr) }
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 0
+    return {
+      prs: [],
+      reason: status === 403 ? 'rate_limited' : status === 404 ? 'repo_not_found' : 'fetch_failed',
+    }
+  }
+}
+
+function normalisePr(p: Record<string, unknown>): PrResult {
+  const body = typeof p.body === 'string' ? p.body : ''
+  const refs = new Set<number>()
+  for (const m of body.matchAll(FIX_REF_RE)) {
+    const n = Number(m[1])
+    if (Number.isFinite(n)) refs.add(n)
+  }
+  const labels = Array.isArray(p.labels)
+    ? p.labels.map((l: unknown) => (typeof l === 'string' ? l : (l as { name?: string }).name ?? '')).filter(Boolean)
+    : []
+  return {
+    number: p.number as number,
+    title: p.title as string,
+    url: p.html_url as string,
+    state: p.state as 'open' | 'closed',
+    merged: Boolean(p.merged_at),
+    mergedAt: (p.merged_at as string | null) ?? null,
+    author: ((p.user as { login?: string } | null)?.login) ?? null,
+    bodyExcerpt: excerptIssueBody(body),
+    labels,
+    referencedIssues: [...refs],
+    updatedAt: p.updated_at as string,
+  }
+}
+
+// ---------- find_similar_issues ----------
+/**
+ * Given a target issue (by number) or free-text query, find the most
+ * similar issues from the repo by embedding cosine similarity over
+ * title + body excerpt.
+ *
+ * On-the-fly: each call fetches up to 60 open+closed issues from
+ * GitHub, embeds them in one batch via the workspace's configured
+ * embeddings provider, picks top-K. Cost: ~$0.003 per call on
+ * text-embedding-3-small. No persistence yet — cache later if usage
+ * picks up.
+ */
+export interface FindSimilarIssuesParams {
+  issueNumber?: number
+  query?: string
+  /** Max results. Default 5, max 10. */
+  limit?: number
+}
+
+export interface SimilarIssueResult {
+  number: number
+  title: string
+  url: string
+  similarity: number
+  state: 'open' | 'closed'
+  bodyExcerpt: string
+  labels: string[]
+}
+
+export async function findSimilarIssues(
+  params: FindSimilarIssuesParams,
+  ctx: OperatorContext,
+): Promise<{ similar: SimilarIssueResult[]; reason?: string }> {
+  const sourceUrl = ctx.workspace?.sourceUrl ?? null
+  if (!sourceUrl) return { similar: [], reason: 'no_source_url' }
+  const match = sourceUrl.match(KAG_GH_URL_RE)
+  if (!match) return { similar: [], reason: 'not_github' }
+  const owner = match[1] as string
+  const repo = match[2] as string
+  const limit = Math.min(Math.max(params.limit ?? 5, 1), 10)
+  const octokit = new Octokit()
+
+  // 1. Resolve target text.
+  let targetText: string
+  let targetNumber: number | null = null
+  if (params.issueNumber) {
+    try {
+      const single = await octokit.rest.issues.get({
+        owner, repo, issue_number: params.issueNumber,
+      })
+      targetText = `${single.data.title}\n\n${single.data.body ?? ''}`
+      targetNumber = params.issueNumber
+    } catch {
+      return { similar: [], reason: 'fetch_failed' }
+    }
+  } else if (params.query && params.query.trim().length > 0) {
+    targetText = params.query.trim()
+  } else {
+    return { similar: [], reason: 'no_target' }
+  }
+
+  // 2. Fetch a pool of candidate issues. Open + closed, recent activity.
+  let pool: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>['data']
+  try {
+    const res = await octokit.rest.issues.listForRepo({
+      owner, repo, state: 'all', per_page: 60, sort: 'updated', direction: 'desc',
+    })
+    pool = res.data.filter((i) => !('pull_request' in i && i.pull_request))
+    if (targetNumber !== null) pool = pool.filter((i) => i.number !== targetNumber)
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 0
+    return { similar: [], reason: status === 403 ? 'rate_limited' : 'fetch_failed' }
+  }
+  if (pool.length === 0) return { similar: [] }
+
+  // 3. Embed in one batch. Most providers accept arrays; ours does.
+  const texts = [targetText, ...pool.map((i) => `${i.title}\n\n${i.body ?? ''}`.slice(0, 4000))]
+  const embeddings = await ctx.embeddings.embedBatch(texts)
+  const targetVec = embeddings[0]
+  if (!targetVec) return { similar: [] }
+  const candidateVecs = embeddings.slice(1)
+
+  // 4. Cosine similarity, top-K. We assume the provider returns
+  // already-normalised vectors; if not, dot-product still ranks
+  // consistently within one batch (norm cancels in ordering).
+  const scored = pool.map((i, idx) => {
+    const v = candidateVecs[idx]
+    return {
+      issue: i,
+      score: v ? cosine(targetVec, v) : 0,
+    }
+  })
+  scored.sort((a, b) => b.score - a.score)
+  return {
+    similar: scored.slice(0, limit).map(({ issue, score }) => ({
+      number: issue.number,
+      title: issue.title,
+      url: issue.html_url,
+      similarity: Math.round(score * 1000) / 1000,
+      state: issue.state as 'open' | 'closed',
+      bodyExcerpt: excerptIssueBody(issue.body ?? ''),
+      labels: (issue.labels ?? [])
+        .map((l) => (typeof l === 'string' ? l : (l.name ?? '')))
+        .filter(Boolean),
+    })),
+  }
+}
+
+function cosine(a: number[], b: number[]): number {
+  let dot = 0
+  let na = 0
+  let nb = 0
+  for (let i = 0; i < a.length; i++) {
+    const av = a[i] ?? 0
+    const bv = b[i] ?? 0
+    dot += av * bv
+    na += av * av
+    nb += bv * bv
+  }
+  if (na === 0 || nb === 0) return 0
+  return dot / (Math.sqrt(na) * Math.sqrt(nb))
+}
+
 // ---------- tests_for ----------
 /**
  * Given one or more entities (functions, classes, files), return the
@@ -1350,6 +1586,8 @@ export type OperatorName =
   | 'get_summary'
   | 'walkthrough'
   | 'list_issues'
+  | 'list_prs'
+  | 'find_similar_issues'
   | 'get_project_overview'
   | 'read_file'
   | 'tests_for'
@@ -1376,6 +1614,8 @@ export const OPERATORS: Record<
   get_summary: getSummary as never,
   walkthrough: walkthrough as never,
   list_issues: listIssues as never,
+  list_prs: listPrs as never,
+  find_similar_issues: findSimilarIssues as never,
   get_project_overview: getProjectOverviewOp as never,
   read_file: readFileOp as never,
   tests_for: testsFor as never,

@@ -329,6 +329,33 @@ const TOOL_DEFS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'list_prs',
+    description: 'GitHub pull requests from the workspace repo. Each PR includes referencedIssues parsed from "fixes #N" / "closes #N" in the body — use to find "how was a similar issue fixed" by scanning PR titles + linked issues. Pass prNumber for a single PR.',
+    parameters: {
+      type: 'object',
+      properties: {
+        state: { type: 'string', enum: ['open', 'closed', 'all'] },
+        labels: { type: 'array', items: { type: 'string' } },
+        limit: { type: 'integer', minimum: 1, maximum: 30 },
+        prNumber: { type: 'integer', minimum: 1 },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'find_similar_issues',
+    description: 'Embedding-cosine search over recent issues. Pass issueNumber to find "issues like this one" before working on it (catches duplicates and precedents) — or pass a free-text query. Returns top-K with similarity scores.',
+    parameters: {
+      type: 'object',
+      properties: {
+        issueNumber: { type: 'integer', minimum: 1 },
+        query: { type: 'string' },
+        limit: { type: 'integer', minimum: 1, maximum: 10 },
+      },
+      additionalProperties: false,
+    },
+  },
 ]
 
 /** Operators NOT exposed as tools (used only by the planner / executor). */
