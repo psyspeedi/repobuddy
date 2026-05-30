@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs on the same ref so a rapid push burst doesn't
+# queue up minutes of duplicate work.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -----------------------------------------------------------------
+  # Fast lane: typecheck + unit tests on every push. These don't need
+  # external services, so they run on a vanilla runner and gate the
+  # heavier integration job below.
+  # -----------------------------------------------------------------
+  typecheck-unit:
+    name: typecheck + unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Nuxt prepare (generates .nuxt for typecheck)
+        run: pnpm exec nuxt prepare
+
+      - run: pnpm typecheck
+
+      - name: Unit tests (no DB required)
+        run: pnpm vitest run tests/unit
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+  # -----------------------------------------------------------------
+  # Integration: brings up real Postgres (with pgvector) + Redis as
+  # service containers, runs the migrate script, then the integration
+  # suite. Sequential because integration tests share one DB instance.
+  # -----------------------------------------------------------------
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    needs: typecheck-unit
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: repobuddy
+          POSTGRES_PASSWORD: repobuddy
+          POSTGRES_DB: repobuddy_test
+        ports:
+          - 5532:5432
+        options: >-
+          --health-cmd "pg_isready -U repobuddy"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6479:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgres://repobuddy:repobuddy@localhost:5532/repobuddy_test
+      REDIS_URL: redis://localhost:6479
+      # Tests use mock providers so no real API key is needed; this
+      # env var just keeps the env validator happy.
+      OPENAI_API_KEY: sk-test-dummy
+      CODEGRAPH_MOCK_PROVIDERS: '1'
+      ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run pgvector + tsvector migrations
+        run: pnpm db:migrate
+
+      - name: Integration tests
+        run: pnpm vitest run tests/integration
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
