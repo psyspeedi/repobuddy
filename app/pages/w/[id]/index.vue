@@ -80,6 +80,7 @@ const isFailed = computed(() => phase.value === 'failed')
 
 // Chat
 const chat = useChat(workspaceId)
+const isMobile = useIsMobile()
 const chatSessions = useChatSessions(workspaceId)
 const inputText = ref('')
 const openChunkId = ref<string | null>(null)
@@ -624,59 +625,43 @@ useHead(() => {
         </form>
       </div>
 
+      <!-- Desktop (>= lg): side column. The same component renders inside
+           the mobile bottom sheet below; the breakpoint switch is purely
+           a layout concern. -->
       <div v-if="sidePanel" class="hidden w-[560px] shrink-0 flex-col gap-2 lg:flex">
-        <div class="flex gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            :class="sidePanel === 'inspector' ? 'bg-accent' : ''"
-            @click="sidePanel = 'inspector'"
-          >
-            {{ t('chat.panels.reasoning') }}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            :class="sidePanel === 'viewer' ? 'bg-accent' : ''"
-            @click="sidePanel = 'viewer'"
-          >
-            {{ t('chat.panels.source') }}
-          </Button>
-          <Button
-            v-if="neighbourEntityId"
-            variant="outline"
-            size="sm"
-            :class="sidePanel === 'neighbours' ? 'bg-accent' : ''"
-            @click="sidePanel = 'neighbours'"
-          >
-            {{ t('chat.panels.neighbours') }}
-          </Button>
-        </div>
-        <ReasoningInspector
-          v-if="sidePanel === 'inspector'"
+        <SidePanelStack
+          :side-panel="sidePanel"
+          :workspace-id="workspaceId"
+          :neighbour-entity-id="neighbourEntityId"
+          :open-chunk-id="openChunkId"
           :plan="lastAssistant?.plan ?? null"
           :trace="lastAssistant?.trace ?? null"
-        />
-        <SourceViewerDrawer
-          v-else-if="sidePanel === 'viewer' && openChunkId"
-          :workspace-id="workspaceId"
-          :chunk-id="openChunkId"
-          @close="sidePanel = 'inspector'"
-        />
-        <aside
-          v-else-if="sidePanel === 'viewer' && !openChunkId"
-          class="flex h-full w-full items-center justify-center rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground"
-        >
-          {{ t('chat.panels.sourcePlaceholder') }}
-        </aside>
-        <EntityNeighbourGraph
-          v-else-if="sidePanel === 'neighbours' && neighbourEntityId"
-          :workspace-id="workspaceId"
-          :entity-id="neighbourEntityId"
-          @close="sidePanel = 'inspector'"
-          @focus="openNeighbours"
+          @update:side-panel="(v) => (sidePanel = v)"
+          @focus-neighbour="openNeighbours"
         />
       </div>
     </section>
+
+    <!-- Mobile (< lg): the same panels render in a bottom sheet. Open
+         state is driven by sidePanel being set on viewports below the lg
+         breakpoint; closing the sheet clears sidePanel so the next chat
+         turn doesn't reopen it. -->
+    <BottomSheet
+      :open="isMobile && sidePanel !== null"
+      :title="sidePanel ? t('chat.panels.' + sidePanel) : ''"
+      @close="sidePanel = null"
+    >
+      <SidePanelStack
+        v-if="sidePanel"
+        :side-panel="sidePanel"
+        :workspace-id="workspaceId"
+        :neighbour-entity-id="neighbourEntityId"
+        :open-chunk-id="openChunkId"
+        :plan="lastAssistant?.plan ?? null"
+        :trace="lastAssistant?.trace ?? null"
+        @update:side-panel="(v) => (sidePanel = v)"
+        @focus-neighbour="openNeighbours"
+      />
+    </BottomSheet>
   </div>
 </template>
