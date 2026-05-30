@@ -1,4 +1,5 @@
 import { randomUUID } from 'uncrypto'
+import { parseSseEvent } from '#shared/lib/sse'
 
 export interface PlanData {
   reasoning: string
@@ -252,26 +253,7 @@ export function useChat(workspaceId: string) {
   }
 
   function handleSseChunk(raw: string): void {
-    let event = 'message'
-    // Per SSE spec, the data buffer accumulates each `data:` line joined by
-    // a single \n. h3's createEventStream serialises a value containing
-    // newlines as multiple `data:` lines, so dropping the separator
-    // collapses headers and lists into the next paragraph (we saw
-    // "### Heading:- item1- item2" before).
-    let data = ''
-    let hasData = false
-    for (const line of raw.split('\n')) {
-      if (line.startsWith('event:')) {
-        event = line.slice(6).trim()
-      } else if (line.startsWith('data:')) {
-        let value = line.slice(5)
-        // SSE spec: strip exactly one leading U+0020 SPACE (field separator).
-        if (value.startsWith(' ')) value = value.slice(1)
-        if (hasData) data += '\n'
-        data += value
-        hasData = true
-      }
-    }
+    const { event, data } = parseSseEvent(raw)
     const last = messages.value.at(-1)
     if (!last || last.role !== 'assistant') return
     if (event === 'text') {
