@@ -1,5 +1,6 @@
 import { randomUUID } from 'uncrypto'
 import { parseSseEvent } from '#shared/lib/sse'
+import type { ResolutionEnvelope } from '#shared/schemas/resolution'
 
 export interface PlanData {
   reasoning: string
@@ -27,6 +28,13 @@ export interface AgenticStep {
   summary: string
   durationMs: number
   error?: string
+  /**
+   * Structured envelope for the small set of operators whose UI
+   * renders the result directly (find_resolution → resolution banner).
+   * Most steps don't have this — the server only includes it for
+   * whitelisted ops.
+   */
+  result?: unknown
 }
 export interface AgenticTrace {
   mode: 'agentic'
@@ -34,6 +42,26 @@ export interface AgenticTrace {
 }
 
 export type AnyTrace = TraceEntry[] | AgenticTrace
+
+/**
+ * Pull the most recent find_resolution envelope out of an agentic
+ * trace. Returns null if the trace isn't agentic, has no resolution
+ * step, or the step's status is "none" (nothing to surface). Used by
+ * the chat page to feed ChatMessage's banner without each message
+ * having to know about trace shape.
+ */
+export function extractResolution(trace: AnyTrace | undefined): ResolutionEnvelope | null {
+  if (!trace || !('mode' in trace) || trace.mode !== 'agentic') return null
+  // Iterate newest-first so a second find_resolution call (rare but
+  // possible if the LLM checks two issues in one turn) takes priority.
+  for (let i = trace.steps.length - 1; i >= 0; i--) {
+    const step = trace.steps[i]
+    if (!step || step.name !== 'find_resolution' || !step.result) continue
+    const env = step.result as ResolutionEnvelope
+    if (env.status && env.status !== 'none') return env
+  }
+  return null
+}
 
 export interface ChatMessageData {
   role: 'user' | 'assistant'

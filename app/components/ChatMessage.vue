@@ -2,6 +2,7 @@
 import { marked } from 'marked'
 import DOMPurify from 'isomorphic-dompurify'
 import { Copy, Check } from 'lucide-vue-next'
+import type { ResolutionEnvelope } from '#shared/schemas/resolution'
 
 interface Citation {
   kind: 'chunk' | 'entity'
@@ -15,6 +16,14 @@ interface Props {
   citations?: Citation[]
   workspaceId?: string
   tokensPerSec?: number
+  /**
+   * If the assistant ran find_resolution and it returned a non-"none"
+   * status, the page extracts that envelope from the trace and passes
+   * it here. We render it as a banner above the message body — sets
+   * the framing ("this is already fixed, here's where") before the
+   * model's prose explains the details.
+   */
+  resolution?: ResolutionEnvelope | null
 }
 const props = defineProps<Props>()
 const emit = defineEmits<{
@@ -272,6 +281,7 @@ function onClick(e: MouseEvent): void {
         </button>
       </span>
     </div>
+    <ChatResolutionBanner v-if="role === 'assistant' && resolution" :resolution="resolution" />
     <div ref="messageRoot" class="cg-prose text-sm leading-relaxed" v-html="html" @click="onClick" />
   </div>
 </template>

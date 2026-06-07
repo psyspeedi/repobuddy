@@ -280,6 +280,25 @@
       "source": "Source",
       "neighbours": "Neighbours",
       "sourcePlaceholder": "Click a citation in the chat (the ↗ badge after a claim) to open the referenced code here."
+    },
+    "resolution": {
+      "issue": "Issue #{n}",
+      "mergedTitle": "Already fixed — pull latest main",
+      "mergedDetail": "Commit {sha} by {author} on {date}",
+      "openPrTitle": "Open PR is ready for review",
+      "openPrDetail": "PR #{n} by {author} — awaiting review. Comment / approve to help land it.",
+      "draftPrTitle": "Draft PR in progress — great contributor entry point",
+      "draftPrDetail": "PR #{n} by {author}, last activity {date}. Finishing tests / edge cases and undrafting often lands the fix.",
+      "stalePrTitle": "Stalled PR — could be revived",
+      "stalePrDetail": "PR #{n} by {author}, inactive since {date}. Fork + rebase could push it through.",
+      "duplicateClosedTitle": "Probably a duplicate",
+      "duplicateClosedDetail": "Closed issue #{n} — {pct}% similar. Check if its resolution applies.",
+      "relatedTitle": "Related discussion",
+      "relatedDetail": "Issue #{n} — {pct}% similar.",
+      "openOnGitHub": "Open on GitHub",
+      "viewPr": "View PR",
+      "viewIssue": "View issue",
+      "viewCommit": "View commit"
     }
   },
   "time": {

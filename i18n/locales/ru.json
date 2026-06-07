@@ -280,6 +280,25 @@
       "source": "Исходник",
       "neighbours": "Соседи",
       "sourcePlaceholder": "Кликни на цитату в чате (значок ↗ после утверждения), чтобы открыть исходник здесь."
+    },
+    "resolution": {
+      "issue": "Issue #{n}",
+      "mergedTitle": "Уже починено — обнови main",
+      "mergedDetail": "Коммит {sha} от {author}, {date}",
+      "openPrTitle": "Открытый PR ждёт ревью",
+      "openPrDetail": "PR #{n} от {author} — ждёт ревью. Прокомментируй или поставь approve, чтобы помочь смержить.",
+      "draftPrTitle": "Черновой PR в работе — отличная точка для контрибьютора",
+      "draftPrDetail": "PR #{n} от {author}, последняя активность {date}. Дописать тесты и снять draft часто доводит фикс до мержа.",
+      "stalePrTitle": "PR застрял — можно реанимировать",
+      "stalePrDetail": "PR #{n} от {author}, без активности с {date}. Fork + rebase может его дотащить.",
+      "duplicateClosedTitle": "Похоже на дубликат",
+      "duplicateClosedDetail": "Закрытый issue #{n} — похоже на {pct}%. Проверь, применима ли его резолюция.",
+      "relatedTitle": "Связанная дискуссия",
+      "relatedDetail": "Issue #{n} — похоже на {pct}%.",
+      "openOnGitHub": "Открыть на GitHub",
+      "viewPr": "Посмотреть PR",
+      "viewIssue": "Посмотреть issue",
+      "viewCommit": "Посмотреть коммит"
     }
   },
   "time": {

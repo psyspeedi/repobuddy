@@ -586,6 +586,7 @@ useHead(() => {
             :citations="msg.citations"
             :tokens-per-sec="msg.tokensPerSec"
             :workspace-id="workspaceId"
+            :resolution="extractResolution(msg.trace)"
             @open-chunk="onOpenChunk"
             @open-entity="openNeighbours"
           />
