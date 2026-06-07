@@ -9,6 +9,13 @@
 import { Octokit } from '@octokit/rest'
 import { and, eq, ilike, inArray, or, sql } from 'drizzle-orm'
 import type { OperatorName } from '#shared/schemas/plan'
+import type {
+  ResolutionCommit,
+  ResolutionDuplicate,
+  ResolutionEnvelope,
+  ResolutionPr,
+  ResolutionStatus,
+} from '#shared/schemas/resolution'
 import type { Database } from '../../db/client'
 import { chunks, entities, relations } from '../../db/schema'
 import type { EmbeddingsProvider } from '../../providers/embeddings'
@@ -22,6 +29,7 @@ import {
   type LinkedEntity,
 } from '../../lib/github-issue-linking'
 import { getProjectOverview, type ProjectOverview } from '../../lib/project-overview'
+import { webFetch, webSearch, type WebFetchResult, type WebSearchEnvelope } from '../../lib/web'
 import { hybridSearch } from './hybrid_search'
 import { answer, type AnswerStreamChunk } from './answer'
 
@@ -1197,6 +1205,288 @@ function cosine(a: number[], b: number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb))
 }
 
+// ---------- find_resolution ----------
+/**
+ * Detect whether an open issue is ALREADY solved (or being solved)
+ * elsewhere before the agent spends tokens investigating. Returns a
+ * structured envelope that classifies the resolution status into one
+ * of five buckets so the UI can show different banner colours and
+ * the agentic prompt can phrase the answer correctly ("already fixed
+ * in main, pull latest" vs "draft PR — finish the work").
+ *
+ * Five channels, ordered by signal strength:
+ *   1. Indexed-commit grep for `(fix(es|ed)?|close[sd]?|resolve[sd]?)
+ *      #N` in commit messages on main → merged-by-commit (strongest).
+ *   2. Live GitHub search for PRs (any state) referencing #N → linked
+ *      PRs, classified by state (merged / open / draft / stale).
+ *   3. Cosine-similarity over recent open+closed issues, closed ones
+ *      ranked higher → duplicate / related candidates.
+ *
+ * Channels 4 (CHANGELOG grep) and 5 (GraphQL timeline cross-reference
+ * events) deferred — the three above catch the typical cases and
+ * CHANGELOG is reachable via web_fetch anyway.
+ *
+ * Status classification (highest-signal wins):
+ *   merged          → channel 1 non-empty
+ *   open_pr         → channel 2 has open non-draft, non-stale PR
+ *   draft_pr        → channel 2 has draft PR (BEST contributor onramp)
+ *   stale_pr        → channel 2 has PR inactive >90d with changes-requested
+ *   duplicate_closed → channel 3 has closed issue ≥0.85 similarity
+ *   related         → channel 3 has anything 0.70–0.85
+ *   none            → nothing fired
+ */
+export interface FindResolutionParams {
+  issueNumber: number
+}
+
+// Resolution types live in shared/schemas/resolution.ts — both the
+// server operator and the chat UI banner depend on them. Re-export
+// here so callers can keep importing from operators/index if they
+// prefer.
+export type {
+  ResolutionCommit,
+  ResolutionDuplicate,
+  ResolutionEnvelope,
+  ResolutionPr,
+  ResolutionStatus,
+} from '#shared/schemas/resolution'
+
+export const FIX_REF_RE_FOR = (n: number): RegExp =>
+  new RegExp(`(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\\s+#${n}\\b`, 'i')
+
+const STALE_PR_MS = 90 * 24 * 60 * 60 * 1000
+
+export async function findResolution(
+  params: FindResolutionParams,
+  ctx: OperatorContext,
+): Promise<ResolutionEnvelope> {
+  const n = Number(params.issueNumber)
+  if (!Number.isFinite(n) || n < 1) {
+    return emptyResolution(n, 'no_issue')
+  }
+  const sourceUrl = ctx.workspace?.sourceUrl ?? null
+  if (!sourceUrl) return emptyResolution(n, 'no_source_url')
+  const m = sourceUrl.match(KAG_GH_URL_RE)
+  if (!m) return emptyResolution(n, 'not_github')
+  const owner = m[1] as string
+  const repo = m[2] as string
+
+  // Channel 1 — indexed commits with `fixes #N` in message body.
+  // Cheap: one ts_query-free LIKE on the commit metadata blob, scoped
+  // to the workspace's commit entities. We grep the metadata JSON as
+  // text because the message field lives under metadata->>'message'
+  // and a regex match on the raw JSON is simpler than constructing
+  // a regex over the extracted column.
+  const commitRe = `(fix(es|ed)?|close[sd]?|resolve[sd]?)[[:space:]]+#${n}([^0-9]|$)`
+  const commitRows = await ctx.db.execute<{
+    sha: string
+    message: string
+    author: string
+    date: string
+  }>(sql`
+    SELECT
+      c.metadata->>'sha'     AS sha,
+      c.metadata->>'message' AS message,
+      c.metadata->>'author'  AS author,
+      c.metadata->>'date'    AS date
+    FROM ${entities} c
+    WHERE c.workspace_id = ${ctx.workspaceId}
+      AND c.type = 'commit'
+      AND c.metadata->>'message' ~* ${commitRe}
+    ORDER BY (c.metadata->>'date')::timestamptz DESC
+    LIMIT 10
+  `)
+  const mergedByCommits: ResolutionCommit[] = [...commitRows]
+
+  // Channel 2 — live GitHub search for any PRs mentioning #N. We use
+  // search/issues with `repo:owner/repo type:pr "#N"` rather than
+  // listing every open PR and grepping bodies (cheaper, single API
+  // call, and the search index is fresh). Then strict-match the body
+  // with the FIX_REF regex so plain `related to #N` mentions don't
+  // count as resolutions. Anonymous Octokit rate limit (~10 req/min
+  // for search) is acceptable for occasional issue lookups.
+  const octokit = new Octokit()
+  const refRe = FIX_REF_RE_FOR(n)
+  const linkedPullRequests: ResolutionPr[] = []
+  try {
+    const search = await octokit.rest.search.issuesAndPullRequests({
+      q: `repo:${owner}/${repo} type:pr "#${n}"`,
+      per_page: 30,
+      sort: 'updated',
+      order: 'desc',
+    })
+    for (const item of search.data.items) {
+      const body = typeof item.body === 'string' ? item.body : ''
+      const titleAndBody = `${item.title}\n${body}`
+      if (!refRe.test(titleAndBody)) continue
+      // The search result is lean — fetch the PR for draft flag /
+      // updated_at / merged_at. Cap at first 5 hits so we don't blow
+      // through the search budget on noisy repos.
+      if (linkedPullRequests.length >= 5) break
+      let detail: Awaited<ReturnType<typeof octokit.rest.pulls.get>>['data'] | null = null
+      try {
+        const got = await octokit.rest.pulls.get({
+          owner,
+          repo,
+          pull_number: item.number,
+        })
+        detail = got.data
+      } catch {
+        // Skip PRs we can't fetch — usually rate-limit or private.
+        continue
+      }
+      const lastCommitAt = detail.updated_at ?? null
+      const stale = computeStale(detail)
+      linkedPullRequests.push({
+        number: detail.number,
+        title: detail.title,
+        url: detail.html_url,
+        state: detail.state as 'open' | 'closed',
+        draft: Boolean(detail.draft),
+        merged: Boolean(detail.merged_at),
+        mergedAt: detail.merged_at ?? null,
+        author: detail.user?.login ?? null,
+        lastCommitAt,
+        stale,
+        bodyExcerpt: excerptIssueBody(detail.body ?? ''),
+      })
+    }
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 0
+    if (status === 403) {
+      return {
+        ...emptyResolution(n),
+        mergedByCommits,
+        reason: 'rate_limited',
+      }
+    }
+    // Fall through with whatever channels we have.
+  }
+
+  // Channel 3 — cosine-similar issues. Delegate to findSimilarIssues
+  // (cached per workspace) so we don't burn an extra embedding pass.
+  // Bucket by state: closed-similar with score ≥0.85 are duplicate
+  // candidates; 0.70–0.85 are "related"; we keep all open ones below.
+  const sim = await findSimilarIssues({ issueNumber: n, limit: 8 }, ctx)
+  const duplicateCandidates: ResolutionDuplicate[] = sim.similar
+    .filter((s) => s.similarity >= 0.7 && s.number !== n)
+    .map((s) => ({
+      number: s.number,
+      title: s.title,
+      url: s.url,
+      state: s.state,
+      similarity: s.similarity,
+    }))
+
+  return classifyResolution(n, mergedByCommits, linkedPullRequests, duplicateCandidates)
+}
+
+export function classifyResolution(
+  issueNumber: number,
+  mergedByCommits: ResolutionCommit[],
+  linkedPullRequests: ResolutionPr[],
+  duplicateCandidates: ResolutionDuplicate[],
+): ResolutionEnvelope {
+  // Highest-signal-wins ladder. Merged commits ARE the resolution —
+  // even if a draft PR exists, the user just needs the latest main.
+  if (mergedByCommits.length > 0) {
+    return {
+      issueNumber,
+      status: 'merged',
+      confidence: 'high',
+      mergedByCommits,
+      linkedPullRequests,
+      duplicateCandidates,
+    }
+  }
+  const openReady = linkedPullRequests.find((p) => p.state === 'open' && !p.draft && !p.stale && !p.merged)
+  if (openReady) {
+    return {
+      issueNumber,
+      status: 'open_pr',
+      confidence: 'medium',
+      mergedByCommits,
+      linkedPullRequests,
+      duplicateCandidates,
+    }
+  }
+  const draft = linkedPullRequests.find((p) => p.state === 'open' && p.draft && !p.merged)
+  if (draft) {
+    return {
+      issueNumber,
+      status: 'draft_pr',
+      confidence: 'medium',
+      mergedByCommits,
+      linkedPullRequests,
+      duplicateCandidates,
+    }
+  }
+  const stale = linkedPullRequests.find((p) => p.state === 'open' && p.stale && !p.merged)
+  if (stale) {
+    return {
+      issueNumber,
+      status: 'stale_pr',
+      confidence: 'low',
+      mergedByCommits,
+      linkedPullRequests,
+      duplicateCandidates,
+    }
+  }
+  const dupeClosed = duplicateCandidates.find((d) => d.state === 'closed' && d.similarity >= 0.85)
+  if (dupeClosed) {
+    return {
+      issueNumber,
+      status: 'duplicate_closed',
+      confidence: 'medium',
+      mergedByCommits,
+      linkedPullRequests,
+      duplicateCandidates,
+    }
+  }
+  if (duplicateCandidates.length > 0) {
+    return {
+      issueNumber,
+      status: 'related',
+      confidence: 'low',
+      mergedByCommits,
+      linkedPullRequests,
+      duplicateCandidates,
+    }
+  }
+  return {
+    issueNumber,
+    status: 'none',
+    confidence: 'low',
+    mergedByCommits,
+    linkedPullRequests,
+    duplicateCandidates,
+  }
+}
+
+function computeStale(
+  pr: Awaited<ReturnType<Octokit['rest']['pulls']['get']>>['data'],
+): boolean {
+  if (pr.state !== 'open' || pr.merged_at) return false
+  const updated = pr.updated_at ? Date.parse(pr.updated_at) : 0
+  if (!updated) return false
+  return Date.now() - updated > STALE_PR_MS
+}
+
+function emptyResolution(
+  issueNumber: number,
+  reason?: ResolutionEnvelope['reason'],
+): ResolutionEnvelope {
+  return {
+    issueNumber,
+    status: 'none',
+    confidence: 'low',
+    mergedByCommits: [],
+    linkedPullRequests: [],
+    duplicateCandidates: [],
+    ...(reason ? { reason } : {}),
+  }
+}
+
 // ---------- tests_for ----------
 /**
  * Given one or more entities (functions, classes, files), return the
@@ -1396,6 +1686,167 @@ export async function getProjectOverviewOp(
   ctx: OperatorContext,
 ): Promise<ProjectOverview> {
   return getProjectOverview(ctx.db, ctx.workspaceId)
+}
+
+// ---------- web_search ----------
+/**
+ * Open-web search via DuckDuckGo's HTML endpoint. Use for library
+ * docs, framework behaviour, error messages, RFCs, blog posts,
+ * Stack Overflow — anything NOT inside the indexed repo. Returns
+ * up to `limit` { title, url, snippet } results.
+ *
+ * DDG occasionally rate-limits anonymous scrapers — degrades to
+ * `{ results: [], reason: 'rate_limited' }` instead of throwing.
+ */
+export interface WebSearchParams {
+  query: string
+  limit?: number
+}
+export async function webSearchOp(
+  params: WebSearchParams,
+  _ctx: OperatorContext,
+): Promise<WebSearchEnvelope> {
+  const limit = Math.min(Math.max(params.limit ?? 6, 1), 10)
+  return await webSearch(params.query, limit)
+}
+
+// ---------- web_fetch ----------
+/**
+ * Fetch a URL, strip chrome (script/style/nav/aside/footer/etc.),
+ * extract the main content region, convert to Markdown, truncate
+ * to ~12K chars. Use to expand on a search result the agent
+ * already picked, or to read a URL the user pasted.
+ */
+export interface WebFetchParams {
+  url: string
+}
+export async function webFetchOp(
+  params: WebFetchParams,
+  _ctx: OperatorContext,
+): Promise<WebFetchResult> {
+  return await webFetch(params.url)
+}
+
+// ---------- propose_edit ----------
+/**
+ * The model proposes a concrete edit to a file as a unified diff. The
+ * server does NOT apply anything — this is a read-only "here's the
+ * patch I'd send" capability. The chat UI renders the diff inline so
+ * the user can copy it or open the file at the right line.
+ *
+ * Validates the file exists in the workspace via path-suffix match
+ * against indexed file entities. Builds the diff hunk by including
+ * a few lines of context above and below the change.
+ */
+export interface ProposeEditParams {
+  filePath: string
+  /** Exact substring in the file to replace. */
+  search: string
+  /** Replacement text. */
+  replace: string
+  /** Short rationale shown alongside the diff. */
+  rationale?: string
+}
+
+export interface ProposeEditResult {
+  filePath: string
+  /** Resolved canonical path that matched the lookup. */
+  resolvedPath: string | null
+  rationale: string | null
+  /** Unified-diff hunk, or null when the search string isn't found. */
+  diff: string | null
+  reason?: 'file_not_found' | 'search_not_found' | 'no_change'
+}
+
+export async function proposeEditOp(
+  params: ProposeEditParams,
+  ctx: OperatorContext,
+): Promise<ProposeEditResult> {
+  const rationale = params.rationale?.trim() || null
+  // 1. Resolve the file by path-suffix against chunks (the fallback
+  // whole-file step puts every text file in chunks, so this is the
+  // most reliable source of "do we know about this path").
+  const normalized = params.filePath.replace(/^\.?\//, '')
+  const rows = await ctx.db
+    .select({ filePath: chunks.filePath, text: chunks.text, startLine: chunks.startLine })
+    .from(chunks)
+    .where(
+      and(
+        eq(chunks.workspaceId, ctx.workspaceId),
+        or(
+          eq(chunks.filePath, params.filePath),
+          eq(chunks.filePath, normalized),
+          sql`${chunks.filePath} LIKE ${'%/' + normalized}`,
+        ),
+      ),
+    )
+    .orderBy(chunks.filePath, chunks.startLine)
+  if (rows.length === 0) {
+    return { filePath: params.filePath, resolvedPath: null, rationale, diff: null, reason: 'file_not_found' }
+  }
+  // Prefer the shortest-path match (most likely root-relative).
+  const grouped = new Map<string, { startLine: number | null; text: string }[]>()
+  for (const r of rows) {
+    if (!r.filePath) continue
+    const list = grouped.get(r.filePath) ?? []
+    list.push({ startLine: r.startLine, text: r.text })
+    grouped.set(r.filePath, list)
+  }
+  const candidates = [...grouped.entries()].sort((a, b) => a[0].length - b[0].length)
+  const [resolvedPath, pieces] = candidates[0] as [string, { startLine: number | null; text: string }[]]
+  // Reconstruct the file text from chunks (whole-file chunks already
+  // are the file text; AST chunks may overlap, so we deduplicate by
+  // line and prefer chunks whose startLine is 1).
+  const whole = (pieces.find((p) => (p.startLine ?? 1) === 1) ?? pieces[0])?.text ?? ''
+  if (!whole.includes(params.search)) {
+    return { filePath: params.filePath, resolvedPath, rationale, diff: null, reason: 'search_not_found' }
+  }
+  if (params.search === params.replace) {
+    return { filePath: params.filePath, resolvedPath, rationale, diff: null, reason: 'no_change' }
+  }
+  const diff = buildUnifiedDiff(resolvedPath, whole, params.search, params.replace)
+  return { filePath: params.filePath, resolvedPath, rationale, diff }
+}
+
+/**
+ * Build a minimal unified-diff hunk for a single search/replace.
+ * Includes 3 lines of context above + below the change. This is not
+ * a fully-spec'd diff (no chunk offset arithmetic across multiple
+ * hunks) but it round-trips cleanly through `patch -p0` for single-
+ * occurrence edits, which is the realistic shape of an LLM-proposed
+ * fix.
+ */
+function buildUnifiedDiff(
+  path: string,
+  fullText: string,
+  search: string,
+  replace: string,
+): string {
+  const CONTEXT_LINES = 3
+  const idx = fullText.indexOf(search)
+  if (idx < 0) return ''
+  const before = fullText.slice(0, idx)
+  const after = fullText.slice(idx + search.length)
+  const startLine = before.split('\n').length // 1-indexed line where the change begins
+  const searchLines = search.split('\n')
+  const replaceLines = replace.split('\n')
+  const beforeLines = before.split('\n')
+  const afterLines = after.split('\n')
+  const contextBefore = beforeLines.slice(Math.max(0, beforeLines.length - CONTEXT_LINES - 1, 0), beforeLines.length - 1)
+  const contextAfter = afterLines.slice(0, CONTEXT_LINES)
+  const oldStart = Math.max(1, startLine - contextBefore.length)
+  const oldLen = contextBefore.length + searchLines.length + contextAfter.length
+  const newLen = contextBefore.length + replaceLines.length + contextAfter.length
+  const out: string[] = [
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    `@@ -${oldStart},${oldLen} +${oldStart},${newLen} @@`,
+    ...contextBefore.map((l) => ' ' + l),
+    ...searchLines.map((l) => '-' + l),
+    ...replaceLines.map((l) => '+' + l),
+    ...contextAfter.map((l) => ' ' + l),
+  ]
+  return out.join('\n')
 }
 
 // ---------- answer wrapper for plan executor ----------
@@ -1712,9 +2163,13 @@ export const OPERATORS: Record<
   list_prs: listPrs as never,
   find_similar_issues: findSimilarIssues as never,
   find_prs_for_issue: findPrsForIssue as never,
+  find_resolution: findResolution as never,
   get_project_overview: getProjectOverviewOp as never,
   read_file: readFileOp as never,
   tests_for: testsFor as never,
   list_concepts: listConcepts as never,
+  web_search: webSearchOp as never,
+  web_fetch: webFetchOp as never,
+  propose_edit: proposeEditOp as never,
   answer: answerOp as never,
 }

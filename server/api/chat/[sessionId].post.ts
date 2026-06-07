@@ -43,6 +43,12 @@ const BodySchema = z.object({
    */
   mode: z.enum(['planned', 'agentic']).optional().default('planned'),
   /**
+   * When true (agentic mode only) the agent runs one independent
+   * self-critique pass before exiting. Adds ~1 LLM call. Useful for
+   * hard / open-ended questions; skip for cheap factual ones.
+   */
+  selfCritique: z.boolean().optional().default(false),
+  /**
    * Session focus — entities / files / issues the user has pinned for
    * this chat. Auto-loaded into pinnedEntities / pinnedChunks for
    * every turn so the model retains context across the conversation.
@@ -272,6 +278,7 @@ export default defineEventHandler(async (event) => {
         for await (const evt of runAgenticAnswer(llm, ctx, body.question, {
           responseLocale: body.locale ?? 'en',
           history: priorHistory,
+          selfCritique: body.selfCritique,
         })) {
           if (evt.type === 'text' && evt.text) {
             assembled += evt.text

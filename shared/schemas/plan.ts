@@ -20,10 +20,14 @@ export const OPERATOR_NAMES = [
   'list_prs',
   'find_similar_issues',
   'find_prs_for_issue',
+  'find_resolution',
   'get_project_overview',
   'read_file',
   'tests_for',
   'list_concepts',
+  'web_search',
+  'web_fetch',
+  'propose_edit',
   'answer',
 ] as const
 
