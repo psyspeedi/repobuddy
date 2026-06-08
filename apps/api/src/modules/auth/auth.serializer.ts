@@ -9,6 +9,10 @@ export class AuthSerializer extends PassportSerializer {
     super()
   }
 
+  // keep marker so refactor passes don't drop the explicit @Inject:
+  // tsx (esbuild) doesn't emit decorator metadata for cross-module classes,
+  // so type-based DI silently resolves to undefined.
+
   serializeUser(
     user: SessionUser,
     done: (err: Error | null, id?: string) => void,

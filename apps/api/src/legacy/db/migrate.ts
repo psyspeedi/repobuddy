@@ -11,7 +11,8 @@ import postgres from 'postgres'
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-const RAW_SQL_DIR = join(process.cwd(), 'drizzle', 'raw')
+const DRIZZLE_DIR = process.env.DRIZZLE_DIR ?? '../../drizzle'
+const RAW_SQL_DIR = join(process.cwd(), DRIZZLE_DIR, 'raw')
 
 async function applyRawSqlMigrations(sql: postgres.Sql): Promise<void> {
   let files: string[]
@@ -57,7 +58,7 @@ async function main(): Promise<void> {
 
   try {
     console.log('[migrate] applying drizzle migrations…')
-    await migrate(db, { migrationsFolder: './drizzle' })
+    await migrate(db, { migrationsFolder: DRIZZLE_DIR })
     console.log('[migrate] applying raw SQL migrations…')
     await applyRawSqlMigrations(sql)
     console.log('[migrate] done.')

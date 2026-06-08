@@ -13,6 +13,7 @@ import { MetricsModule } from './modules/metrics/metrics.module'
 import { ProvidersModule } from './modules/providers/providers.module'
 import { QueuesModule } from './modules/queues/queues.module'
 import { RedisModule } from './modules/redis/redis.module'
+import { WorkspacesModule } from './modules/workspaces/workspaces.module'
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { RedisModule } from './modules/redis/redis.module'
     MetricsModule,
     HealthModule,
     AuthModule,
+    WorkspacesModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
 })
