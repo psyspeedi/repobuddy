@@ -6,6 +6,7 @@ import { AppConfigModule } from './modules/config/config.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { DrizzleModule } from './modules/drizzle/drizzle.module'
 import { HealthModule } from './modules/health/health.module'
+import { IndexerModule } from './modules/indexer/indexer.module'
 import { KagModule } from './modules/kag/kag.module'
 import { LoggerModule } from './modules/logger/logger.module'
 import { MetricsModule } from './modules/metrics/metrics.module'
@@ -21,6 +22,7 @@ import { RedisModule } from './modules/redis/redis.module'
     DrizzleModule,
     ProvidersModule,
     KagModule,
+    IndexerModule,
     MetricsModule,
     HealthModule,
     AuthModule,
