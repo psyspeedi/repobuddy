@@ -3,6 +3,7 @@ import { APP_FILTER } from '@nestjs/core'
 import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup'
 import { GuestCookieMiddleware } from './common/middleware/guest-cookie.middleware'
 import { AppConfigModule } from './modules/config/config.module'
+import { AdminModule } from './modules/admin/admin.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { ChatModule } from './modules/chat/chat.module'
 import { DrizzleModule } from './modules/drizzle/drizzle.module'
@@ -32,6 +33,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module'
     AuthModule,
     WorkspacesModule,
     ChatModule,
+    AdminModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
 })
