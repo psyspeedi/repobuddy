@@ -11,6 +11,7 @@ import { HealthModule } from './modules/health/health.module'
 import { IndexerModule } from './modules/indexer/indexer.module'
 import { KagModule } from './modules/kag/kag.module'
 import { LoggerModule } from './modules/logger/logger.module'
+import { MeModule } from './modules/me/me.module'
 import { MetricsModule } from './modules/metrics/metrics.module'
 import { ProvidersModule } from './modules/providers/providers.module'
 import { QueuesModule } from './modules/queues/queues.module'
@@ -34,6 +35,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module'
     WorkspacesModule,
     ChatModule,
     AdminModule,
+    MeModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
 })
