@@ -1,0 +1,88 @@
+/**
+ * Resolve LLM + embeddings providers for a given user. When the user has
+ * BYOK credentials saved (encryptedByokApiKey not null) and they decrypt
+ * cleanly, use those — both for chat and embeddings, since BYOK is a
+ * single-endpoint setup. Otherwise fall through to the server defaults
+ * configured via env.
+ *
+ * The boolean `usesByok` is returned so callers can skip token-quota
+ * enforcement on BYOK traffic (the user is paying their own bill).
+ */
+import type { Database } from '../../../db/client'
+import { users, type User } from '../../../db/schema'
+import { eq } from 'drizzle-orm'
+import { decrypt } from '../../../lib/crypto'
+import { loadEnv } from '../../../lib/env'
+import { createLLMProvider, type LLMProvider } from './llm'
+import { createEmbeddingsProvider, type EmbeddingsProvider } from './embeddings'
+import { getLogger } from '../../../lib/logger'
+
+const log = getLogger().child({ component: 'providers/resolve' })
+
+export interface ResolvedProviders {
+  llm: LLMProvider
+  embeddings: EmbeddingsProvider
+  usesByok: boolean
+}
+
+export async function resolveProvidersForUser(
+  db: Database,
+  user: Pick<User, 'id' | 'byokBaseUrl' | 'byokModel' | 'byokEmbeddingModel' | 'encryptedByokApiKey'> | null,
+  opts: { llmModel?: string } = {},
+): Promise<ResolvedProviders> {
+  const env = loadEnv()
+
+  // Try BYOK first when the user row says it has one.
+  if (user?.encryptedByokApiKey) {
+    try {
+      const apiKey = decrypt(user.encryptedByokApiKey, env.ENCRYPTION_KEY)
+      const llm = createLLMProvider({
+        apiKey,
+        baseURL: user.byokBaseUrl ?? undefined,
+        model: user.byokModel ?? opts.llmModel ?? env.LLM_MODEL_PLANNING ?? env.OPENAI_MODEL_PLANNING,
+      })
+      const embeddings = createEmbeddingsProvider({
+        apiKey,
+        baseURL: user.byokBaseUrl ?? undefined,
+        model: user.byokEmbeddingModel ?? env.EMBEDDING_MODEL ?? env.OPENAI_EMBEDDING_MODEL,
+      })
+      return { llm, embeddings, usesByok: true }
+    } catch (err) {
+      // BYOK record corrupted (key rotated etc) — surface a warning and
+      // fall back to server creds so the user isn't locked out.
+      log.warn(
+        { userId: user.id, err: err instanceof Error ? err.message : String(err) },
+        'BYOK decrypt failed; falling back to server defaults',
+      )
+    }
+  }
+
+  const llm = createLLMProvider({
+    model: opts.llmModel ?? env.LLM_MODEL_PLANNING ?? env.OPENAI_MODEL_PLANNING,
+  })
+  const embeddings = createEmbeddingsProvider({
+    model: env.EMBEDDING_MODEL ?? env.OPENAI_EMBEDDING_MODEL,
+  })
+  return { llm, embeddings, usesByok: false }
+}
+
+/** Convenience: look up the user by id and resolve in one call. */
+export async function resolveProvidersByUserId(
+  db: Database,
+  userId: string | null,
+  opts: { llmModel?: string } = {},
+): Promise<ResolvedProviders> {
+  if (!userId) return resolveProvidersForUser(db, null, opts)
+  const [row] = await db
+    .select({
+      id: users.id,
+      byokBaseUrl: users.byokBaseUrl,
+      byokModel: users.byokModel,
+      byokEmbeddingModel: users.byokEmbeddingModel,
+      encryptedByokApiKey: users.encryptedByokApiKey,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+  return resolveProvidersForUser(db, row ?? null, opts)
+}

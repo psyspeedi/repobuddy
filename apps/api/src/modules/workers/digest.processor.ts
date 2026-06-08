@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq'
 import { Inject, Logger, type OnApplicationBootstrap } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bullmq'
 import type { Job, Queue } from 'bullmq'
-import { runDailyDigest } from '#server/workers/digest'
+import { runDailyDigest } from './internals/digest'
 import { DIGEST_CRON_UTC, DIGEST_QUEUE } from '../queues/queue.constants'
 import { DRIZZLE_DB, type DrizzleDb } from '../drizzle/drizzle.tokens'
 

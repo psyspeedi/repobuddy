@@ -4,11 +4,11 @@ import { resolve } from 'node:path'
 import { OPERATOR_NAMES } from '#shared/schemas/plan'
 
 const PLANNER_SOURCE = readFileSync(
-  resolve(__dirname, '../../src/legacy/kag/planner.ts'),
+  resolve(__dirname, '../../src/modules/kag/internals/planner.ts'),
   'utf-8',
 )
 const AGENTIC_SOURCE = readFileSync(
-  resolve(__dirname, '../../src/legacy/kag/agentic.ts'),
+  resolve(__dirname, '../../src/modules/kag/internals/agentic.ts'),
   'utf-8',
 )
 

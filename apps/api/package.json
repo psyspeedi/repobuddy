@@ -5,7 +5,11 @@
   "type": "module",
   "imports": {
     "#shared/*": "../../packages/shared/src/*",
-    "#server/*": "./src/legacy/*"
+    "#server/db/*": "./src/db/*",
+    "#server/lib/*": "./src/lib/*",
+    "#server/kag/*": "./src/modules/kag/internals/*",
+    "#server/indexer/*": "./src/modules/indexer/internals/*",
+    "#server/providers/*": "./src/modules/providers/internals/*"
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",
@@ -20,12 +24,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/legacy/db/migrate.ts",
-    "db:migrate:test": "DATABASE_URL=postgres://repobuddy:repobuddy@localhost:5532/repobuddy_test tsx src/legacy/db/migrate.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:migrate:test": "DATABASE_URL=postgres://repobuddy:repobuddy@localhost:5532/repobuddy_test tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "backfill:insights": "tsx scripts/backfill-git-insights.ts",
-    "backfill:cost": "tsx scripts/backfill-cost-log.ts",
-    "build:worker": "tsx src/legacy/workers/build.ts"
+    "backfill:cost": "tsx scripts/backfill-cost-log.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",

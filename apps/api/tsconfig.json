@@ -12,7 +12,11 @@
     "types": ["node"],
     "paths": {
       "#shared/*": ["../../packages/shared/src/*"],
-      "#server/*": ["./src/legacy/*"]
+      "#server/db/*": ["./src/db/*"],
+      "#server/lib/*": ["./src/lib/*"],
+      "#server/kag/*": ["./src/modules/kag/internals/*"],
+      "#server/indexer/*": ["./src/modules/indexer/internals/*"],
+      "#server/providers/*": ["./src/modules/providers/internals/*"]
     },
     "allowImportingTsExtensions": false,
     "noEmit": true

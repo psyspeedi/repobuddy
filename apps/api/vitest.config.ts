@@ -31,9 +31,13 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '#shared': resolve(__dirname, '../../packages/shared/src'),
-      '#server': resolve(__dirname, './src/legacy'),
-    },
+    alias: [
+      { find: '#shared', replacement: resolve(__dirname, '../../packages/shared/src') },
+      { find: /^#server\/db\//, replacement: resolve(__dirname, './src/db') + '/' },
+      { find: /^#server\/lib\//, replacement: resolve(__dirname, './src/lib') + '/' },
+      { find: /^#server\/kag\//, replacement: resolve(__dirname, './src/modules/kag/internals') + '/' },
+      { find: /^#server\/indexer\//, replacement: resolve(__dirname, './src/modules/indexer/internals') + '/' },
+      { find: /^#server\/providers\//, replacement: resolve(__dirname, './src/modules/providers/internals') + '/' },
+    ],
   },
 })
