@@ -1,3 +1,4 @@
+import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
 /**
  * KAG operator library. Each operator is an async function over a typed
  * parameter object; the executor (kag/executor.ts) dispatches them by
@@ -25,7 +26,7 @@
  *   - answer.ts          finalising LLM stream
  *   - hybrid_search.ts   RRF helper used by both search and answer
  */
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import type { LinkedChunk } from '../../../../lib/github-issue-linking'
 import type { ProjectOverview } from '../../../../lib/project-overview'
 import { answer, type AnswerStreamChunk } from './answer'
@@ -159,6 +160,7 @@ export async function* answerOp(
     style?: 'concise' | 'detailed'
   },
   ctx: OperatorContext,
+  db: Database,
 ): AsyncGenerator<AnswerStreamChunk> {
   const chunks: { id: string; text: string; filePath?: string | null; startLine?: number | null; endLine?: number | null }[] = []
   const entitiesContext: {
@@ -360,7 +362,7 @@ export async function* answerOp(
   // no entities" case for broad questions.
   if (chunks.length === 0) {
     try {
-      const results = await hybridSearch(ctx.db, ctx.embeddings, {
+      const results = await hybridSearch(db, ctx.embeddings, {
         workspaceId: ctx.workspaceId,
         query: params.question,
         limit: 8,
@@ -412,61 +414,26 @@ function stripInlineDiff(
   return rest
 }
 
-// ---------- Operator registry ----------
-// OperatorName is the single source of truth from shared/schemas/plan.ts
+// `OperatorName` is the single source of truth from shared/schemas/plan.ts
 // (the Zod enum that validates LLM-emitted plans). Re-exported here so
 // callers only need one import. Adding an operator: name → OPERATOR_NAMES
-// → TS forces an entry in OPERATORS below + in agentic.ts TOOL_DEFS
-// (also a Record keyed by name). The catalogue prose in planner.ts is
-// the only place TS can't enforce — keep it in sync manually.
+// → TS forces an entry in KAG_OPERATOR_CLASSES below + in agentic.ts
+// TOOL_DEFS (also a Record keyed by name). The catalogue prose in
+// planner.ts is the only place TS can't enforce — keep it in sync
+// manually.
 export type { OperatorName } from '#shared/schemas/plan'
-
-import type { OperatorName } from '#shared/schemas/plan'
-
-export const OPERATORS: Record<
-  OperatorName,
-  (params: never, ctx: OperatorContext) => Promise<unknown> | AsyncGenerator<unknown>
-> = {
-  find_symbol: findSymbol as never,
-  find_file: findFile as never,
-  get_callers: getCallers as never,
-  get_callees: getCallees as never,
-  get_dependencies: getDependencies as never,
-  get_dependents: getDependents as never,
-  find_implementations: findImplementations as never,
-  git_history: gitHistory as never,
-  find_by_concept: findByConcept as never,
-  vector_search_chunks: vectorSearchChunks as never,
-  hybrid_search: hybridSearchOp as never,
-  search_docs: searchDocs as never,
-  retrieve_code_chunks: retrieveCodeChunks as never,
-  get_summary: getSummary as never,
-  walkthrough: walkthrough as never,
-  list_issues: listIssues as never,
-  list_prs: listPrs as never,
-  find_similar_issues: findSimilarIssues as never,
-  find_prs_for_issue: findPrsForIssue as never,
-  find_resolution: findResolution as never,
-  get_project_overview: getProjectOverviewOp as never,
-  read_file: readFileOp as never,
-  tests_for: testsFor as never,
-  list_concepts: listConcepts as never,
-  web_search: webSearchOp as never,
-  web_fetch: webFetchOp as never,
-  propose_edit: proposeEditOp as never,
-  answer: answerOp as never,
-}
 
 // ---------- AnswerOperator + provider list for KagModule ----------
 
 @Injectable()
 export class AnswerOperator implements KagOperator {
   readonly name = 'answer' as const
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
   execute(
     p: { question: string; context: unknown[]; style?: 'concise' | 'detailed' },
     c: OperatorContext,
   ): AsyncGenerator<AnswerStreamChunk> {
-    return answerOp(p, c)
+    return answerOp(p, c, this.db)
   }
 }
 

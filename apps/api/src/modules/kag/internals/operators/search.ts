@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
+import type { Database } from '../../../../db/client'
+import { Inject, Injectable } from '@nestjs/common'
 import { sql } from 'drizzle-orm'
 import { chunks } from '../../../../db/schema'
 import { hybridSearch } from './hybrid_search'
@@ -14,12 +16,13 @@ export interface FindByConceptParams {
 export async function findByConcept(
   params: FindByConceptParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<GraphEntity[]> {
   const limit = params.limit ?? 10
   const [vec] = await ctx.embeddings.embedBatch([params.query])
   if (!vec) return []
   const literal = `[${vec.join(',')}]`
-  return ctx.db.execute<GraphEntity>(sql`
+  return db.execute<GraphEntity>(sql`
     SELECT id, type, name, qualified_name AS "qualifiedName",
            file_path AS "filePath", start_line AS "startLine",
            end_line AS "endLine", language, description
@@ -40,12 +43,13 @@ export interface VectorSearchParams {
 export async function vectorSearchChunks(
   params: VectorSearchParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<{ id: string; text: string; filePath: string | null; startLine: number | null; endLine: number | null }[]> {
   const limit = params.limit ?? 10
   const [vec] = await ctx.embeddings.embedBatch([params.query])
   if (!vec) return []
   const literal = `[${vec.join(',')}]`
-  const rows = await ctx.db.execute<{
+  const rows = await db.execute<{
     id: string
     text: string
     file_path: string | null
@@ -71,8 +75,9 @@ export async function vectorSearchChunks(
 export async function hybridSearchOp(
   params: { query: string; limit?: number },
   ctx: OperatorContext,
+  db: Database,
 ) {
-  return hybridSearch(ctx.db, ctx.embeddings, {
+  return hybridSearch(db, ctx.embeddings, {
     workspaceId: ctx.workspaceId,
     query: params.query,
     limit: params.limit,
@@ -87,6 +92,7 @@ export async function hybridSearchOp(
 export async function searchDocs(
   params: { query: string; limit?: number },
   ctx: OperatorContext,
+  db: Database,
 ): Promise<
   {
     id: string
@@ -103,7 +109,7 @@ export async function searchDocs(
   if (!vec) return []
   const vecLiteral = `[${vec.join(',')}]`
 
-  const vectorRows = await ctx.db.execute<{
+  const vectorRows = await db.execute<{
     id: string
     text: string
     file_path: string | null
@@ -121,7 +127,7 @@ export async function searchDocs(
     LIMIT ${fetchLimit}
   `)
 
-  const textRows = await ctx.db.execute<{
+  const textRows = await db.execute<{
     id: string
     text: string
     file_path: string | null
@@ -186,12 +192,13 @@ export interface RetrieveCodeChunksParams {
 export async function retrieveCodeChunks(
   params: RetrieveCodeChunksParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<{ id: string; text: string; filePath: string | null; startLine: number | null; endLine: number | null }[]> {
   const list = Array.isArray(params.entities) ? params.entities : [params.entities]
   const ids = list.map((e) => e?.id).filter((id): id is string => Boolean(id))
   if (ids.length === 0) return []
   const limit = params.limit ?? 50
-  const rows = await ctx.db.execute<{
+  const rows = await db.execute<{
     id: string
     text: string
     file_path: string | null
@@ -219,29 +226,34 @@ export async function retrieveCodeChunks(
 @Injectable()
 export class FindByConceptOperator implements KagOperator<FindByConceptParams, GraphEntity[]> {
   readonly name = 'find_by_concept' as const
-  execute(p: FindByConceptParams, c: OperatorContext) { return findByConcept(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: FindByConceptParams, c: OperatorContext) { return findByConcept(p, c, this.db) }
 }
 
 @Injectable()
 export class VectorSearchChunksOperator implements KagOperator<VectorSearchParams> {
   readonly name = 'vector_search_chunks' as const
-  execute(p: VectorSearchParams, c: OperatorContext) { return vectorSearchChunks(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: VectorSearchParams, c: OperatorContext) { return vectorSearchChunks(p, c, this.db) }
 }
 
 @Injectable()
 export class HybridSearchOperator implements KagOperator {
   readonly name = 'hybrid_search' as const
-  execute(p: { query: string; limit?: number }, c: OperatorContext) { return hybridSearchOp(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: { query: string; limit?: number }, c: OperatorContext) { return hybridSearchOp(p, c, this.db) }
 }
 
 @Injectable()
 export class SearchDocsOperator implements KagOperator {
   readonly name = 'search_docs' as const
-  execute(p: { query: string; limit?: number }, c: OperatorContext) { return searchDocs(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: { query: string; limit?: number }, c: OperatorContext) { return searchDocs(p, c, this.db) }
 }
 
 @Injectable()
 export class RetrieveCodeChunksOperator implements KagOperator<RetrieveCodeChunksParams> {
   readonly name = 'retrieve_code_chunks' as const
-  execute(p: RetrieveCodeChunksParams, c: OperatorContext) { return retrieveCodeChunks(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: RetrieveCodeChunksParams, c: OperatorContext) { return retrieveCodeChunks(p, c, this.db) }
 }

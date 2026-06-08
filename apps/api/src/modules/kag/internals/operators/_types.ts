@@ -1,10 +1,8 @@
-import type { Database } from '../../../../db/client'
 import type { EmbeddingsProvider } from '../../../providers/internals/embeddings'
 import type { LLMProvider } from '../../../providers/internals/llm'
 
 export interface OperatorContext {
   workspaceId: string
-  db: Database
   embeddings: EmbeddingsProvider
   llm: LLMProvider
   /** Always-present workspace metadata passed to the answer operator. */

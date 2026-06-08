@@ -3,6 +3,7 @@ import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import * as schema from '#server/db/schema'
 import { executePlan } from '#server/kag/executor'
+import { buildOperatorsMapForTest } from '#server/kag/operators/_test-factory'
 import { MockEmbeddingsProvider } from '#server/providers/embeddings'
 import { MockLLMProvider } from '#server/providers/llm'
 import type { OperatorContext } from '#server/kag/operators'
@@ -79,7 +80,6 @@ async function seedFullGraph(): Promise<OperatorContext> {
   })
   return {
     workspaceId,
-    db,
     embeddings: new MockEmbeddingsProvider(),
     llm: new MockLLMProvider(),
   }
@@ -114,7 +114,7 @@ describe('executePlan (integration)', () => {
         },
       ],
     }
-    const out = await executePlan(plan, ctx)
+    const out = await executePlan(plan, ctx, buildOperatorsMapForTest(db))
     expect(out.trace).toHaveLength(3)
     expect(out.trace.every((t) => t.ok)).toBe(true)
 
@@ -154,7 +154,7 @@ describe('executePlan (integration)', () => {
         },
       ],
     }
-    const out = await executePlan(plan, ctx)
+    const out = await executePlan(plan, ctx, buildOperatorsMapForTest(db))
     const order = out.trace.map((t) => t.stepId)
     // s1 must run before s2 (s2 depends on s1), s2 before s3 (s3 depends on s2).
     expect(order.indexOf('s1')).toBeLessThan(order.indexOf('s2'))
@@ -170,6 +170,6 @@ describe('executePlan (integration)', () => {
         { id: 's2', op: 'find_symbol', params: { name: '$s1.name' } },
       ],
     }
-    await expect(executePlan(plan, ctx)).rejects.toThrow(/cycle/i)
+    await expect(executePlan(plan, ctx, buildOperatorsMapForTest(db))).rejects.toThrow(/cycle/i)
   })
 })

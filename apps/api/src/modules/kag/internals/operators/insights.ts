@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
+import type { Database } from '../../../../db/client'
+import { Inject, Injectable } from '@nestjs/common'
 import { and, eq, or, sql } from 'drizzle-orm'
 import { chunks, entities, relations } from '../../../../db/schema'
 import { getProjectOverview, type ProjectOverview } from '../../../../lib/project-overview'
@@ -26,12 +28,13 @@ export interface TestsForParams {
 export async function testsFor(
   params: TestsForParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<GraphEntity[]> {
   const ids = idsFromParam(params.entity ?? params.target)
   if (ids.length === 0) return []
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 50)
   const idsArray = sql`ARRAY[${sql.join(ids.map((id) => sql`${id}`), sql`, `)}]::uuid[]`
-  const rows = await ctx.db.execute<{
+  const rows = await db.execute<{
     id: string
     type: string
     name: string
@@ -82,13 +85,14 @@ export interface ListConceptsParams {
 export async function listConcepts(
   params: ListConceptsParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<GraphEntity[]> {
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 50)
   const filter = params.query?.trim() ?? ''
   const filterExpr = filter
     ? sql`AND (lower(e.name) LIKE ${'%' + filter.toLowerCase() + '%'} OR lower(coalesce(e.description, '')) LIKE ${'%' + filter.toLowerCase() + '%'})`
     : sql``
-  const rows = await ctx.db.execute<{
+  const rows = await db.execute<{
     id: string
     type: string
     name: string
@@ -135,11 +139,12 @@ export interface ReadFileParams {
 export async function readFileOp(
   params: ReadFileParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<{ filePath: string; chunks: { id: string; text: string; startLine: number | null; endLine: number | null }[] }[]> {
   if (!params.path || typeof params.path !== 'string') return []
   const limit = Math.min(Math.max(params.limit ?? 6, 1), 20)
   const normalized = params.path.replace(/^\.?\//, '')
-  const rows = await ctx.db
+  const rows = await db
     .select({
       id: chunks.id,
       filePath: chunks.filePath,
@@ -195,8 +200,9 @@ export interface ProjectOverviewParams {
 export async function getProjectOverviewOp(
   _params: ProjectOverviewParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<ProjectOverview> {
-  return getProjectOverview(ctx.db, ctx.workspaceId)
+  return getProjectOverview(db, ctx.workspaceId)
 }
 
 // ---------- @Injectable wrappers ----------
@@ -204,23 +210,27 @@ export async function getProjectOverviewOp(
 @Injectable()
 export class TestsForOperator implements KagOperator<TestsForParams, GraphEntity[]> {
   readonly name = 'tests_for' as const
-  execute(p: TestsForParams, c: OperatorContext) { return testsFor(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: TestsForParams, c: OperatorContext) { return testsFor(p, c, this.db) }
 }
 
 @Injectable()
 export class ListConceptsOperator implements KagOperator<ListConceptsParams, GraphEntity[]> {
   readonly name = 'list_concepts' as const
-  execute(p: ListConceptsParams, c: OperatorContext) { return listConcepts(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: ListConceptsParams, c: OperatorContext) { return listConcepts(p, c, this.db) }
 }
 
 @Injectable()
 export class ReadFileOperator implements KagOperator<ReadFileParams> {
   readonly name = 'read_file' as const
-  execute(p: ReadFileParams, c: OperatorContext) { return readFileOp(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: ReadFileParams, c: OperatorContext) { return readFileOp(p, c, this.db) }
 }
 
 @Injectable()
 export class GetProjectOverviewOperator implements KagOperator<ProjectOverviewParams, ProjectOverview> {
   readonly name = 'get_project_overview' as const
-  execute(p: ProjectOverviewParams, c: OperatorContext) { return getProjectOverviewOp(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: ProjectOverviewParams, c: OperatorContext) { return getProjectOverviewOp(p, c, this.db) }
 }

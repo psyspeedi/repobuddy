@@ -150,7 +150,6 @@ async function seedTinyGraph(): Promise<{
 
   const ctx: OperatorContext = {
     workspaceId,
-    db,
     embeddings: new MockEmbeddingsProvider(),
     llm: new MockLLMProvider(),
   }
@@ -170,20 +169,20 @@ async function seedTinyGraph(): Promise<{
 describe('operators', () => {
   it('find_symbol returns exact normalized match by default', async () => {
     const { ctx, ids } = await seedTinyGraph()
-    const result = await findSymbol({ name: 'OrderService' }, ctx)
+    const result = await findSymbol({ name: 'OrderService' }, ctx, db)
     expect(result).toHaveLength(1)
     expect(result[0]?.id).toBe(ids.orderClass)
   })
 
   it('find_symbol with fuzzy=true returns partial matches', async () => {
     const { ctx } = await seedTinyGraph()
-    const result = await findSymbol({ name: 'order', fuzzy: true }, ctx)
+    const result = await findSymbol({ name: 'order', fuzzy: true }, ctx, db)
     expect(result.length).toBeGreaterThanOrEqual(2) // orders.ts + OrderService
   })
 
   it('find_symbol with type filter narrows', async () => {
     const { ctx, ids } = await seedTinyGraph()
-    const result = await findSymbol({ name: 'processPayment', type: 'function' }, ctx)
+    const result = await findSymbol({ name: 'processPayment', type: 'function' }, ctx, db)
     expect(result).toHaveLength(1)
     expect(result[0]?.id).toBe(ids.processPayment)
   })
@@ -192,7 +191,7 @@ describe('operators', () => {
     const { ctx, ids } = await seedTinyGraph()
     // No entity is literally named "Order" — but OrderService, OrderRepository,
     // and orders.ts all contain it. Exact match would return [].
-    const result = await findSymbol({ name: 'Order' }, ctx)
+    const result = await findSymbol({ name: 'Order' }, ctx, db)
     const ids_returned = new Set(result.map((r) => r.id))
     expect(ids_returned.has(ids.orderClass!)).toBe(true)
     expect(result.length).toBeGreaterThan(1)
@@ -200,7 +199,7 @@ describe('operators', () => {
 
   it('find_file resolves glob-like patterns', async () => {
     const { ctx } = await seedTinyGraph()
-    const result = await findFile({ pathPattern: 'src/*.ts' }, ctx)
+    const result = await findFile({ pathPattern: 'src/*.ts' }, ctx, db)
     expect(result.map((f) => f.name).sort()).toEqual(['orders.ts', 'telemetry.ts'])
   })
 
@@ -224,7 +223,7 @@ describe('operators', () => {
         },
       ])
       .returning({ id: schema.chunks.id })
-    await embedChunks(ctx.db, ctx.workspaceId, inserted.map((r) => r.id), ctx.embeddings)
+    await embedChunks(db, ctx.workspaceId, inserted.map((r) => r.id), ctx.embeddings)
 
     const result = await searchDocs(
       { query: 'KAG knowledge graph overview', limit: 5 },
@@ -238,16 +237,16 @@ describe('operators', () => {
 
   it('get_callers returns immediate parents', async () => {
     const { ctx, ids } = await seedTinyGraph()
-    const logEvent = await findSymbol({ name: 'logEvent' }, ctx)
+    const logEvent = await findSymbol({ name: 'logEvent' }, ctx, db)
     expect(logEvent[0]?.id).toBe(ids.logEvent)
-    const callers = await getCallers({ target: logEvent[0]! }, ctx)
+    const callers = await getCallers({ target: logEvent[0]! }, ctx, db)
     expect(callers.map((c) => c.id)).toContain(ids.processPayment)
   })
 
   it('get_callees returns immediate children', async () => {
     const { ctx, ids } = await seedTinyGraph()
-    const pp = await findSymbol({ name: 'processPayment' }, ctx)
-    const callees = await getCallees({ source: pp[0]! }, ctx)
+    const pp = await findSymbol({ name: 'processPayment' }, ctx, db)
+    const callees = await getCallees({ source: pp[0]! }, ctx, db)
     expect(callees.map((c) => c.id)).toContain(ids.logEvent)
   })
 

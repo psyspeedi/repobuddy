@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
+import type { Database } from '../../../../db/client'
+import { Inject, Injectable } from '@nestjs/common'
 import { webFetch, webSearch, type WebFetchResult, type WebSearchEnvelope } from '../../../../lib/web'
 import type { KagOperator } from './_interface'
 import type { OperatorContext } from './_types'
@@ -21,6 +23,7 @@ export interface WebSearchParams {
 export async function webSearchOp(
   params: WebSearchParams,
   _ctx: OperatorContext,
+  _db: Database,
 ): Promise<WebSearchEnvelope> {
   const limit = Math.min(Math.max(params.limit ?? 6, 1), 10)
   return await webSearch(params.query, limit)
@@ -40,6 +43,7 @@ export interface WebFetchParams {
 export async function webFetchOp(
   params: WebFetchParams,
   _ctx: OperatorContext,
+  _db: Database,
 ): Promise<WebFetchResult> {
   return await webFetch(params.url)
 }
@@ -49,11 +53,13 @@ export async function webFetchOp(
 @Injectable()
 export class WebSearchOperator implements KagOperator<WebSearchParams, WebSearchEnvelope> {
   readonly name = 'web_search' as const
-  execute(p: WebSearchParams, c: OperatorContext) { return webSearchOp(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: WebSearchParams, c: OperatorContext) { return webSearchOp(p, c, this.db) }
 }
 
 @Injectable()
 export class WebFetchOperator implements KagOperator<WebFetchParams, WebFetchResult> {
   readonly name = 'web_fetch' as const
-  execute(p: WebFetchParams, c: OperatorContext) { return webFetchOp(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: WebFetchParams, c: OperatorContext) { return webFetchOp(p, c, this.db) }
 }

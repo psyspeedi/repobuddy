@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
+import type { Database } from '../../../../db/client'
+import { Inject, Injectable } from '@nestjs/common'
 import { and, eq, or, sql } from 'drizzle-orm'
 import { chunks } from '../../../../db/schema'
 import type { KagOperator } from './_interface'
@@ -38,13 +40,14 @@ export interface ProposeEditResult {
 export async function proposeEditOp(
   params: ProposeEditParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<ProposeEditResult> {
   const rationale = params.rationale?.trim() || null
   // 1. Resolve the file by path-suffix against chunks (the fallback
   // whole-file step puts every text file in chunks, so this is the
   // most reliable source of "do we know about this path").
   const normalized = params.filePath.replace(/^\.?\//, '')
-  const rows = await ctx.db
+  const rows = await db
     .select({ filePath: chunks.filePath, text: chunks.text, startLine: chunks.startLine })
     .from(chunks)
     .where(
@@ -131,5 +134,6 @@ function buildUnifiedDiff(
 @Injectable()
 export class ProposeEditOperator implements KagOperator<ProposeEditParams, ProposeEditResult> {
   readonly name = 'propose_edit' as const
-  execute(p: ProposeEditParams, c: OperatorContext) { return proposeEditOp(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: ProposeEditParams, c: OperatorContext) { return proposeEditOp(p, c, this.db) }
 }

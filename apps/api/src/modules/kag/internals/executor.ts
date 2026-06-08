@@ -1,4 +1,4 @@
-import { OPERATORS, type OperatorContext, type OperatorName } from './operators'
+import type { OperatorContext, OperatorName } from './operators'
 import type { Plan, PlanStep } from '#shared/schemas/plan'
 import { getLogger } from '../../../lib/logger'
 import { operatorLatency, operatorRuns } from '../../../lib/metrics'
@@ -50,8 +50,9 @@ type OperatorsMap = Record<
 export async function executePlan(
   plan: Plan,
   ctx: OperatorContext,
-  /** DI override — KagOperatorsRegistry.asLegacyMap() in production. */
-  operators: OperatorsMap = OPERATORS,
+  /** Required — KagOperatorsRegistry.asLegacyMap() in production;
+   *  buildOperatorsMapForTest(db) in integration tests. */
+  operators: OperatorsMap,
 ): Promise<ExecutorResult> {
   const sorted = topoSort(plan.steps)
   const results: Record<string, unknown> = {}

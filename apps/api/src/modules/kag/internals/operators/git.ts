@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
+import type { Database } from '../../../../db/client'
+import { Inject, Injectable } from '@nestjs/common'
 import { sql } from 'drizzle-orm'
 import { entities, relations } from '../../../../db/schema'
 import type { KagOperator } from './_interface'
@@ -14,6 +16,7 @@ export interface GitHistoryParams {
 export async function gitHistory(
   params: GitHistoryParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<{ sha: string; message: string; author: string; date: string }[]> {
   const fileId = params.entity?.id
   if (!fileId) return []
@@ -21,7 +24,7 @@ export async function gitHistory(
   const sinceClause = params.since
     ? sql`AND (c.metadata->>'date')::timestamptz >= ${params.since}::timestamptz`
     : sql``
-  const rows = await ctx.db.execute<{
+  const rows = await db.execute<{
     sha: string
     message: string
     author: string
@@ -49,5 +52,6 @@ export async function gitHistory(
 @Injectable()
 export class GitHistoryOperator implements KagOperator<GitHistoryParams> {
   readonly name = 'git_history' as const
-  execute(p: GitHistoryParams, c: OperatorContext) { return gitHistory(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: GitHistoryParams, c: OperatorContext) { return gitHistory(p, c, this.db) }
 }

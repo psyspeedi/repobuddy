@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common'
+import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
+import type { Database } from '../../../../db/client'
+import { Inject, Injectable } from '@nestjs/common'
 import { Octokit } from '@octokit/rest'
 import { sql } from 'drizzle-orm'
 import { entities } from '../../../../db/schema'
@@ -79,6 +81,7 @@ export interface IssuesEnvelope {
 export async function listIssues(
   params: ListIssuesParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<IssuesEnvelope> {
   const sourceUrl = ctx.workspace?.sourceUrl ?? null
   if (!sourceUrl) return { issues: [], relatedChunks: [], reason: 'no_source_url' }
@@ -148,7 +151,7 @@ export async function listIssues(
     for (const r of refs) allRefs.add(r)
   }
   const entityMatches = allRefs.size > 0
-    ? await lookupEntitiesByRefs(ctx.db, ctx.workspaceId, [...allRefs])
+    ? await lookupEntitiesByRefs(db, ctx.workspaceId, [...allRefs])
     : new Map<string, LinkedEntity[]>()
 
   // Build per-issue relatedEntities by walking that issue's refs.
@@ -176,7 +179,7 @@ export async function listIssues(
   })
 
   const relatedChunks = allRelatedEntityIds.size > 0
-    ? await fetchChunksForEntities(ctx.db, ctx.workspaceId, [...allRelatedEntityIds])
+    ? await fetchChunksForEntities(db, ctx.workspaceId, [...allRelatedEntityIds])
     : []
 
   return { issues: finalIssues, relatedChunks }
@@ -220,6 +223,7 @@ const FIX_REF_RE = /(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s+#(\d{1,7})/gi
 export async function listPrs(
   params: ListPrsParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<PrsEnvelope> {
   const sourceUrl = ctx.workspace?.sourceUrl ?? null
   if (!sourceUrl) return { prs: [], reason: 'no_source_url' }
@@ -306,10 +310,11 @@ export interface PrSummary {
 export async function findPrsForIssue(
   params: FindPrsForIssueParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<PrSummary[]> {
   if (!Number.isFinite(params.issueNumber) || params.issueNumber < 1) return []
   const limit = Math.min(Math.max(params.limit ?? 10, 1), 30)
-  const rows = await ctx.db.execute<{
+  const rows = await db.execute<{
     id: string
     metadata: Record<string, unknown> | null
   }>(sql`
@@ -373,6 +378,7 @@ export interface SimilarIssueResult {
 export async function findSimilarIssues(
   params: FindSimilarIssuesParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<{ similar: SimilarIssueResult[]; reason?: string }> {
   const sourceUrl = ctx.workspace?.sourceUrl ?? null
   if (!sourceUrl) return { similar: [], reason: 'no_source_url' }
@@ -522,6 +528,7 @@ const STALE_PR_MS = 90 * 24 * 60 * 60 * 1000
 export async function findResolution(
   params: FindResolutionParams,
   ctx: OperatorContext,
+  db: Database,
 ): Promise<ResolutionEnvelope> {
   const n = Number(params.issueNumber)
   if (!Number.isFinite(n) || n < 1) {
@@ -536,7 +543,7 @@ export async function findResolution(
 
   // Channel 1 — indexed commits with `fixes #N` in message body.
   const commitRe = `(fix(es|ed)?|close[sd]?|resolve[sd]?)[[:space:]]+#${n}([^0-9]|$)`
-  const commitRows = await ctx.db.execute<{
+  const commitRows = await db.execute<{
     sha: string
     message: string
     author: string
@@ -612,7 +619,7 @@ export async function findResolution(
 
   // Channel 3 — cosine-similar issues. Delegate to findSimilarIssues
   // (cached per workspace) so we don't burn an extra embedding pass.
-  const sim = await findSimilarIssues({ issueNumber: n, limit: 8 }, ctx)
+  const sim = await findSimilarIssues({ issueNumber: n, limit: 8 }, ctx, db)
   const duplicateCandidates: ResolutionDuplicate[] = sim.similar
     .filter((s) => s.similarity >= 0.7 && s.number !== n)
     .map((s) => ({
@@ -735,29 +742,34 @@ function emptyResolution(
 @Injectable()
 export class ListIssuesOperator implements KagOperator<ListIssuesParams, IssuesEnvelope> {
   readonly name = 'list_issues' as const
-  execute(p: ListIssuesParams, c: OperatorContext) { return listIssues(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: ListIssuesParams, c: OperatorContext) { return listIssues(p, c, this.db) }
 }
 
 @Injectable()
 export class ListPrsOperator implements KagOperator<ListPrsParams, PrsEnvelope> {
   readonly name = 'list_prs' as const
-  execute(p: ListPrsParams, c: OperatorContext) { return listPrs(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: ListPrsParams, c: OperatorContext) { return listPrs(p, c, this.db) }
 }
 
 @Injectable()
 export class FindPrsForIssueOperator implements KagOperator<FindPrsForIssueParams, PrSummary[]> {
   readonly name = 'find_prs_for_issue' as const
-  execute(p: FindPrsForIssueParams, c: OperatorContext) { return findPrsForIssue(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: FindPrsForIssueParams, c: OperatorContext) { return findPrsForIssue(p, c, this.db) }
 }
 
 @Injectable()
 export class FindSimilarIssuesOperator implements KagOperator<FindSimilarIssuesParams> {
   readonly name = 'find_similar_issues' as const
-  execute(p: FindSimilarIssuesParams, c: OperatorContext) { return findSimilarIssues(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: FindSimilarIssuesParams, c: OperatorContext) { return findSimilarIssues(p, c, this.db) }
 }
 
 @Injectable()
 export class FindResolutionOperator implements KagOperator<FindResolutionParams, ResolutionEnvelope> {
   readonly name = 'find_resolution' as const
-  execute(p: FindResolutionParams, c: OperatorContext) { return findResolution(p, c) }
+  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  execute(p: FindResolutionParams, c: OperatorContext) { return findResolution(p, c, this.db) }
 }

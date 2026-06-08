@@ -20,7 +20,7 @@
  * flow. We just dispatch tools and append results.
  */
 import type { OperatorContext } from './operators'
-import { OPERATORS, type OperatorName } from './operators'
+import type { OperatorName } from './operators'
 import type {
   ChatMessage,
   LLMProvider,
@@ -567,8 +567,9 @@ export async function* runAgenticAnswer(
   ctx: OperatorContext,
   question: string,
   opts: AgenticOptions = {},
-  /** DI override — KagOperatorsRegistry.asLegacyMap() in production. */
-  operators: OperatorsMap = OPERATORS,
+  /** Required — KagOperatorsRegistry.asLegacyMap() in production;
+   *  buildOperatorsMapForTest(db) in integration tests. */
+  operators: OperatorsMap,
 ): AsyncGenerator<AgenticEvent> {
   const maxIterations = opts.maxIterations ?? 12
   const langName = opts.responseLocale === 'ru' ? LANGUAGE_INSTRUCTION_RU : LANGUAGE_INSTRUCTION_EN
