@@ -29,9 +29,12 @@ FROM base AS runner-api
 ENV NODE_ENV=production
 WORKDIR /repo/apps/api
 EXPOSE 3001
-# Run via tsx so the ESM + decorator metadata pipeline matches dev.
-# A full tsc/swc precompile step lands when the project's own bundler
-# strategy is settled.
+# Run via tsx in production. nest build with swc is wired (apps/api/.swcrc,
+# nest-cli.json, "build" script), but emits `#shared/*` and `#server/*`
+# subpath aliases as relative paths against src/, which break after the
+# move to dist/. tsc-alias or migrating to fully-relative imports across
+# ~84 source files will unblock `node dist/src/main.js`. Until then tsx
+# is the stable runtime.
 CMD ["pnpm", "exec", "tsx", "src/main.ts"]
 
 # --- runner-worker ---

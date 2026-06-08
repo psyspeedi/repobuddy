@@ -126,6 +126,15 @@ pnpm test:watch
 
 Integration tests share a single Postgres instance — the suite runs sequentially (`fileParallelism: false`) to avoid TRUNCATE races. Unit tests cover the indexer parsers (TS/JS/Py/Go), the KAG executor, the planner schema, and key Vue composables.
 
+## Deployment notes
+
+Two breaking changes were introduced during the Nest migration and require operator action when shipping the first release:
+
+- **GitHub OAuth App callback URL changed.** Update the app's "Authorization callback URL" from `${APP_URL}/auth/github` to `${API_URL}/api/auth/github/callback` (e.g. `https://api.repobuddy.space/api/auth/github/callback`). The new strategy also enables OAuth `state` for CSRF protection.
+- **Existing user sessions invalidate.** The session cookie format moves from nuxt-auth-utils' sealed iron-webcrypto blob to `express-session` + `connect-redis`. Browsers carrying the old cookie will be logged out on first request after the deploy — communicate this to active users.
+
+Production runtime currently launches the NestJS API and worker via `tsx` (see `apps/api/Dockerfile`). A full `nest build --builder swc` pipeline is wired (`apps/api/.swcrc`, `nest-cli.json`, `build` script), but the swc emit rewrites `#shared/*` and `#server/*` subpath aliases as src-relative paths that break inside `dist/`. Switching the runtime to `node dist/src/main.js` requires either `tsc-alias` post-processing or migrating the ~84 import sites to fully relative paths — tracked as a follow-up.
+
 ## Status & limitations
 
 - AST coverage is intentionally incomplete — re-exports, generic resolution, dynamic imports are best-effort.
