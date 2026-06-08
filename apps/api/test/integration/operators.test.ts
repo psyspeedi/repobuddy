@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
-import * as schema from '../../server/db/schema'
+import * as schema from '#server/db/schema'
 import {
   findFile,
   findSymbol,
@@ -11,10 +11,10 @@ import {
   retrieveCodeChunks,
   searchDocs,
   type OperatorContext,
-} from '../../server/kag/operators'
-import { MockEmbeddingsProvider } from '../../server/providers/embeddings'
-import { MockLLMProvider } from '../../server/providers/llm'
-import { embedChunks } from '../../server/indexer/embed'
+} from '#server/kag/operators'
+import { MockEmbeddingsProvider } from '#server/providers/embeddings'
+import { MockLLMProvider } from '#server/providers/llm'
+import { embedChunks } from '#server/indexer/embed'
 
 import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 

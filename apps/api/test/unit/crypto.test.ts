@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decrypt, encrypt, generateEncryptionKey } from '../../server/lib/crypto'
+import { decrypt, encrypt, generateEncryptionKey } from '#server/lib/crypto'
 
 describe('crypto', () => {
   const key = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'

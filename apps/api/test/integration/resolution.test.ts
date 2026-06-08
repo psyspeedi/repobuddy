@@ -2,8 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { and, eq } from 'drizzle-orm'
-import * as schema from '../../server/db/schema'
-import { resolveEntities } from '../../server/indexer/resolution'
+import * as schema from '#server/db/schema'
+import { resolveEntities } from '#server/indexer/resolution'
 
 import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 

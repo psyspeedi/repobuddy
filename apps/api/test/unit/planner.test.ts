@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { planQuestion } from '../../server/kag/planner'
-import { MockLLMProvider } from '../../server/providers/llm'
+import { planQuestion } from '#server/kag/planner'
+import { MockLLMProvider } from '#server/providers/llm'
 
 describe('planQuestion', () => {
   it('returns the LLM-generated plan when valid', async () => {

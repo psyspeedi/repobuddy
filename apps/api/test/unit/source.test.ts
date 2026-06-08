@@ -4,8 +4,8 @@ import {
   detectLanguageFromPath,
   detectLanguagesFromManifest,
   summariseLanguages,
-} from '../../server/indexer/source/languages'
-import { walkRepo } from '../../server/indexer/source/walk'
+} from '#server/indexer/source/languages'
+import { walkRepo } from '#server/indexer/source/walk'
 
 const TS_FIXTURE = resolve(__dirname, '../fixtures/repos/ts-sample')
 const PY_FIXTURE = resolve(__dirname, '../fixtures/repos/py-sample')

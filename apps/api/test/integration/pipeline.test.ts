@@ -8,21 +8,21 @@ import { Queue, QueueEvents, Worker } from 'bullmq'
 import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { and, eq, inArray } from 'drizzle-orm'
-import * as schema from '../../server/db/schema'
+import * as schema from '#server/db/schema'
 import {
   getRedisConnection,
   INDEX_WORKSPACE_QUEUE,
-} from '../../server/queues'
+} from '#server/queues'
 import type {
   IndexWorkspaceJobData,
   IndexWorkspaceJobResult,
-} from '../../server/queues'
+} from '#server/queues'
 
 // Mock the source fetcher to return a local git repo we control.
-vi.mock('../../server/indexer/source/fetch', async () => {
+vi.mock('#server/indexer/source/fetch', async () => {
   const actual = await vi.importActual<
-    typeof import('../../server/indexer/source/fetch')
-  >('../../server/indexer/source/fetch')
+    typeof import('#server/indexer/source/fetch')
+  >('#server/indexer/source/fetch')
   return {
     ...actual,
     fetchGitHub: vi.fn(),
@@ -30,9 +30,9 @@ vi.mock('../../server/indexer/source/fetch', async () => {
 })
 
 // Imported AFTER the mock so the mocked module wins.
-const { runIndexPipeline } = await import('../../server/indexer/pipeline')
-const { fetchGitHub } = await import('../../server/indexer/source/fetch')
-const { MockEmbeddingsProvider } = await import('../../server/providers/embeddings')
+const { runIndexPipeline } = await import('#server/indexer/pipeline')
+const { fetchGitHub } = await import('#server/indexer/source/fetch')
+const { MockEmbeddingsProvider } = await import('#server/providers/embeddings')
 
 const mockEmbeddings = new MockEmbeddingsProvider()
 

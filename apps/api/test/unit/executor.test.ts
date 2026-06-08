@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveReferences } from '../../server/kag/executor'
+import { resolveReferences } from '#server/kag/executor'
 
 describe('resolveReferences', () => {
   it('returns plain string unchanged', () => {

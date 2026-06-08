@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentTrace, withTrace } from '../../server/lib/logger'
+import { currentTrace, withTrace } from '#server/lib/logger'
 
 describe('withTrace', () => {
   it('creates a fresh traceId when none provided', async () => {

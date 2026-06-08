@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
-import * as schema from '../../server/db/schema'
-import { executePlan } from '../../server/kag/executor'
-import { MockEmbeddingsProvider } from '../../server/providers/embeddings'
-import { MockLLMProvider } from '../../server/providers/llm'
-import type { OperatorContext } from '../../server/kag/operators'
-import type { Plan } from '../../shared/schemas/plan'
+import * as schema from '#server/db/schema'
+import { executePlan } from '#server/kag/executor'
+import { MockEmbeddingsProvider } from '#server/providers/embeddings'
+import { MockLLMProvider } from '#server/providers/llm'
+import type { OperatorContext } from '#server/kag/operators'
+import type { Plan } from '#shared/schemas/plan'
 
 import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 

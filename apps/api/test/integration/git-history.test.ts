@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { simpleGit } from 'simple-git'
-import { extractGitHistory } from '../../server/indexer/git/history'
+import { extractGitHistory } from '#server/indexer/git/history'
 
 let workdir: string
 

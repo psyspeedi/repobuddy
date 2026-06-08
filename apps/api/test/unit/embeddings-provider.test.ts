@@ -3,7 +3,7 @@ import {
   createEmbeddingsProvider,
   MockEmbeddingsProvider,
   EMBEDDING_DIMS,
-} from '../../server/providers/embeddings'
+} from '#server/providers/embeddings'
 
 describe('MockEmbeddingsProvider', () => {
   const provider = new MockEmbeddingsProvider()

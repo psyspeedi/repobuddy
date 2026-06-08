@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { OPERATOR_NAMES } from '../../shared/schemas/plan'
+import { OPERATOR_NAMES } from '#shared/schemas/plan'
 
 const PLANNER_SOURCE = readFileSync(
-  resolve(__dirname, '../../server/kag/planner.ts'),
+  resolve(__dirname, '../../src/legacy/kag/planner.ts'),
   'utf-8',
 )
 const AGENTIC_SOURCE = readFileSync(
-  resolve(__dirname, '../../server/kag/agentic.ts'),
+  resolve(__dirname, '../../src/legacy/kag/agentic.ts'),
   'utf-8',
 )
 

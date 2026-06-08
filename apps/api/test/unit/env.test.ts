@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { loadEnv, resetEnvCache } from '../../server/lib/env'
+import { loadEnv, resetEnvCache } from '#server/lib/env'
 
 const ORIGINAL_ENV = { ...process.env }
 

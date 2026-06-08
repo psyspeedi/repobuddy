@@ -5,7 +5,7 @@ import {
   type ResolutionCommit,
   type ResolutionDuplicate,
   type ResolutionPr,
-} from '../../server/kag/operators'
+} from '#server/kag/operators'
 
 const commit = (sha: string): ResolutionCommit => ({
   sha,

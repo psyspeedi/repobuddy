@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { getPythonParser } from '../../server/indexer/parsers/python'
+import { getPythonParser } from '#server/indexer/parsers/python'
 
 async function parseFixture(relPath: string) {
   const absPath = resolve(__dirname, '../fixtures/repos/py-sample', relPath)

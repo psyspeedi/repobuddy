@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { answer, extractCitations } from '../../server/kag/operators/answer'
-import { MockLLMProvider } from '../../server/providers/llm'
+import { answer, extractCitations } from '#server/kag/operators/answer'
+import { MockLLMProvider } from '#server/providers/llm'
 
 describe('extractCitations', () => {
   it('parses chunk and entity citations', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { chunkCode, chunkMarkdown } from '../../server/indexer/chunking/chunker'
-import { getTypeScriptParser } from '../../server/indexer/parsers/typescript'
+import { chunkCode, chunkMarkdown } from '#server/indexer/chunking/chunker'
+import { getTypeScriptParser } from '#server/indexer/parsers/typescript'
 
 const FIXTURE_DIR = resolve(__dirname, '../fixtures/repos/ts-sample')
 

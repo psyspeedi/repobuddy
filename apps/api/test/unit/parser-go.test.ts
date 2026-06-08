@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { getGoParser } from '../../server/indexer/parsers/go'
+import { getGoParser } from '#server/indexer/parsers/go'
 
 async function parseFixture(relPath: string) {
   const absPath = resolve(__dirname, '../fixtures/repos/go-sample', relPath)

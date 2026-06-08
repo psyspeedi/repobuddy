@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { unwrapDdgRedirect, webFetch } from '../../server/lib/web'
+import { unwrapDdgRedirect, webFetch } from '#server/lib/web'
 
 describe('unwrapDdgRedirect', () => {
   // DDG wraps every result URL in `/l/?uddg=<encoded-url>` so it can

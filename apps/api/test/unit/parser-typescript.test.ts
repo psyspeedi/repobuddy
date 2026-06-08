@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { getTypeScriptParser } from '../../server/indexer/parsers/typescript'
+import { getTypeScriptParser } from '#server/indexer/parsers/typescript'
 
 async function parseFixture(relPath: string) {
   const absPath = resolve(

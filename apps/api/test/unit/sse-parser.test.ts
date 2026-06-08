@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSseEvent } from '../../shared/lib/sse'
+import { parseSseEvent } from '#shared/lib/sse'
 
 describe('parseSseEvent', () => {
   it('defaults the event name to "message" when no event: line is present', () => {

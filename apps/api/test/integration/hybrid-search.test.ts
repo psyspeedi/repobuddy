@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
-import * as schema from '../../server/db/schema'
-import { hybridSearch } from '../../server/kag/operators/hybrid_search'
-import { MockEmbeddingsProvider } from '../../server/providers/embeddings'
-import { embedChunks } from '../../server/indexer/embed'
+import * as schema from '#server/db/schema'
+import { hybridSearch } from '#server/kag/operators/hybrid_search'
+import { MockEmbeddingsProvider } from '#server/providers/embeddings'
+import { embedChunks } from '#server/indexer/embed'
 
 import { TEST_DATABASE_URL as DATABASE_URL } from '../helpers/test-db'
 
