@@ -8,6 +8,7 @@ import { DrizzleModule } from './modules/drizzle/drizzle.module'
 import { HealthModule } from './modules/health/health.module'
 import { LoggerModule } from './modules/logger/logger.module'
 import { MetricsModule } from './modules/metrics/metrics.module'
+import { ProvidersModule } from './modules/providers/providers.module'
 import { RedisModule } from './modules/redis/redis.module'
 
 @Module({
@@ -17,6 +18,7 @@ import { RedisModule } from './modules/redis/redis.module'
     LoggerModule,
     RedisModule,
     DrizzleModule,
+    ProvidersModule,
     MetricsModule,
     HealthModule,
     AuthModule,
