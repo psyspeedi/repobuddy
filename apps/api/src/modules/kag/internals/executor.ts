@@ -42,9 +42,16 @@ export class PlanExecutionError extends Error {
  * unless the step's operator returns an AsyncGenerator (e.g. `answer`),
  * in which case the stream is exposed via `finalStream`.
  */
+type OperatorsMap = Record<
+  string,
+  (params: never, ctx: OperatorContext) => Promise<unknown> | AsyncGenerator<unknown>
+>
+
 export async function executePlan(
   plan: Plan,
   ctx: OperatorContext,
+  /** DI override — KagOperatorsRegistry.asLegacyMap() in production. */
+  operators: OperatorsMap = OPERATORS,
 ): Promise<ExecutorResult> {
   const sorted = topoSort(plan.steps)
   const results: Record<string, unknown> = {}
@@ -52,7 +59,7 @@ export async function executePlan(
   let finalStream: AsyncIterable<unknown> | undefined
 
   for (const step of sorted) {
-    const op = OPERATORS[step.op as OperatorName]
+    const op = operators[step.op as OperatorName]
     if (!op) throw new PlanExecutionError(step.id, step.op, `unknown operator: ${step.op}`)
     const params = resolveReferences(step.params, results)
     const start = Date.now()

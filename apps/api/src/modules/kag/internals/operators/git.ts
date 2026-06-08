@@ -1,5 +1,7 @@
+import { Injectable } from '@nestjs/common'
 import { sql } from 'drizzle-orm'
 import { entities, relations } from '../../../../db/schema'
+import type { KagOperator } from './_interface'
 import type { GraphEntity, OperatorContext } from './_types'
 
 // ---------- git_history ----------
@@ -42,4 +44,10 @@ export async function gitHistory(
     LIMIT ${limit}
   `)
   return [...rows]
+}
+
+@Injectable()
+export class GitHistoryOperator implements KagOperator<GitHistoryParams> {
+  readonly name = 'git_history' as const
+  execute(p: GitHistoryParams, c: OperatorContext) { return gitHistory(p, c) }
 }

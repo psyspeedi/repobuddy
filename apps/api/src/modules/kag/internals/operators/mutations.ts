@@ -1,5 +1,7 @@
+import { Injectable } from '@nestjs/common'
 import { and, eq, or, sql } from 'drizzle-orm'
 import { chunks } from '../../../../db/schema'
+import type { KagOperator } from './_interface'
 import type { OperatorContext } from './_types'
 
 // ---------- propose_edit ----------
@@ -122,4 +124,12 @@ function buildUnifiedDiff(
     ...contextAfter.map((l) => ' ' + l),
   ]
   return out.join('\n')
+}
+
+// ---------- @Injectable wrapper ----------
+
+@Injectable()
+export class ProposeEditOperator implements KagOperator<ProposeEditParams, ProposeEditResult> {
+  readonly name = 'propose_edit' as const
+  execute(p: ProposeEditParams, c: OperatorContext) { return proposeEditOp(p, c) }
 }

@@ -1,7 +1,9 @@
+import { Injectable } from '@nestjs/common'
 import { and, eq, or, sql } from 'drizzle-orm'
 import { chunks, entities, relations } from '../../../../db/schema'
 import { getProjectOverview, type ProjectOverview } from '../../../../lib/project-overview'
 import { idsFromParam } from './_helpers'
+import type { KagOperator } from './_interface'
 import type { GraphEntity, OperatorContext } from './_types'
 
 // ---------- tests_for ----------
@@ -195,4 +197,30 @@ export async function getProjectOverviewOp(
   ctx: OperatorContext,
 ): Promise<ProjectOverview> {
   return getProjectOverview(ctx.db, ctx.workspaceId)
+}
+
+// ---------- @Injectable wrappers ----------
+
+@Injectable()
+export class TestsForOperator implements KagOperator<TestsForParams, GraphEntity[]> {
+  readonly name = 'tests_for' as const
+  execute(p: TestsForParams, c: OperatorContext) { return testsFor(p, c) }
+}
+
+@Injectable()
+export class ListConceptsOperator implements KagOperator<ListConceptsParams, GraphEntity[]> {
+  readonly name = 'list_concepts' as const
+  execute(p: ListConceptsParams, c: OperatorContext) { return listConcepts(p, c) }
+}
+
+@Injectable()
+export class ReadFileOperator implements KagOperator<ReadFileParams> {
+  readonly name = 'read_file' as const
+  execute(p: ReadFileParams, c: OperatorContext) { return readFileOp(p, c) }
+}
+
+@Injectable()
+export class GetProjectOverviewOperator implements KagOperator<ProjectOverviewParams, ProjectOverview> {
+  readonly name = 'get_project_overview' as const
+  execute(p: ProjectOverviewParams, c: OperatorContext) { return getProjectOverviewOp(p, c) }
 }

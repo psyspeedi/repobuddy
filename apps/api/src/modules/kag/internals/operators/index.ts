@@ -25,6 +25,7 @@
  *   - answer.ts          finalising LLM stream
  *   - hybrid_search.ts   RRF helper used by both search and answer
  */
+import { Injectable } from '@nestjs/common'
 import type { LinkedChunk } from '../../../../lib/github-issue-linking'
 import type { ProjectOverview } from '../../../../lib/project-overview'
 import { answer, type AnswerStreamChunk } from './answer'
@@ -39,14 +40,28 @@ import {
   getDependents,
   getSummary,
   walkthrough,
+  FindFileOperator,
+  FindImplementationsOperator,
+  FindSymbolOperator,
+  GetCalleesOperator,
+  GetCallersOperator,
+  GetDependenciesOperator,
+  GetDependentsOperator,
+  GetSummaryOperator,
+  WalkthroughOperator,
 } from './traversal'
-import { gitHistory } from './git'
+import { gitHistory, GitHistoryOperator } from './git'
 import {
   findByConcept,
   hybridSearchOp,
   retrieveCodeChunks,
   searchDocs,
   vectorSearchChunks,
+  FindByConceptOperator,
+  HybridSearchOperator,
+  RetrieveCodeChunksOperator,
+  SearchDocsOperator,
+  VectorSearchChunksOperator,
 } from './search'
 import {
   findPrsForIssue,
@@ -55,16 +70,31 @@ import {
   listIssues,
   listPrs,
   type IssueResult,
+  FindPrsForIssueOperator,
+  FindResolutionOperator,
+  FindSimilarIssuesOperator,
+  ListIssuesOperator,
+  ListPrsOperator,
 } from './github'
 import {
   getProjectOverviewOp,
   listConcepts,
   readFileOp,
   testsFor,
+  GetProjectOverviewOperator,
+  ListConceptsOperator,
+  ReadFileOperator,
+  TestsForOperator,
 } from './insights'
-import { webFetchOp, webSearchOp } from './web'
-import { proposeEditOp } from './mutations'
+import { webFetchOp, webSearchOp, WebFetchOperator, WebSearchOperator } from './web'
+import { proposeEditOp, ProposeEditOperator } from './mutations'
+import type { KagOperator } from './_interface'
 import type { OperatorContext } from './_types'
+
+// Re-export the DI surface so `kag.module.ts` / services / future
+// callers can keep a single import path.
+export { KAG_OPERATOR, type KagOperator } from './_interface'
+export { KagOperatorsRegistry } from './_registry'
 
 // ---- Public surface — re-exports so call-sites can keep importing
 // from `operators/index` without knowing about the split. ----
@@ -426,3 +456,55 @@ export const OPERATORS: Record<
   propose_edit: proposeEditOp as never,
   answer: answerOp as never,
 }
+
+// ---------- AnswerOperator + provider list for KagModule ----------
+
+@Injectable()
+export class AnswerOperator implements KagOperator {
+  readonly name = 'answer' as const
+  execute(
+    p: { question: string; context: unknown[]; style?: 'concise' | 'detailed' },
+    c: OperatorContext,
+  ): AsyncGenerator<AnswerStreamChunk> {
+    return answerOp(p, c)
+  }
+}
+
+/**
+ * Every @Injectable operator class — KagModule registers each one as a
+ * provider AND as a `KAG_OPERATOR` multi-provider so the registry can
+ * collect them at startup.
+ *
+ * Order matters only for readability: registry construction throws on
+ * duplicate `name` values, so collisions surface as a clear boot error.
+ */
+export const KAG_OPERATOR_CLASSES = [
+  FindSymbolOperator,
+  FindFileOperator,
+  GetCallersOperator,
+  GetCalleesOperator,
+  GetDependenciesOperator,
+  GetDependentsOperator,
+  FindImplementationsOperator,
+  GitHistoryOperator,
+  FindByConceptOperator,
+  VectorSearchChunksOperator,
+  HybridSearchOperator,
+  SearchDocsOperator,
+  RetrieveCodeChunksOperator,
+  GetSummaryOperator,
+  WalkthroughOperator,
+  ListIssuesOperator,
+  ListPrsOperator,
+  FindSimilarIssuesOperator,
+  FindPrsForIssueOperator,
+  FindResolutionOperator,
+  GetProjectOverviewOperator,
+  ReadFileOperator,
+  TestsForOperator,
+  ListConceptsOperator,
+  WebSearchOperator,
+  WebFetchOperator,
+  ProposeEditOperator,
+  AnswerOperator,
+] as const

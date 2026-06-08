@@ -1,6 +1,8 @@
+import { Injectable } from '@nestjs/common'
 import { sql } from 'drizzle-orm'
 import { chunks } from '../../../../db/schema'
 import { hybridSearch } from './hybrid_search'
+import type { KagOperator } from './_interface'
 import type { GraphEntity, OperatorContext } from './_types'
 
 // ---------- find_by_concept ----------
@@ -210,4 +212,36 @@ export async function retrieveCodeChunks(
     startLine: r.start_line,
     endLine: r.end_line,
   }))
+}
+
+// ---------- @Injectable wrappers ----------
+
+@Injectable()
+export class FindByConceptOperator implements KagOperator<FindByConceptParams, GraphEntity[]> {
+  readonly name = 'find_by_concept' as const
+  execute(p: FindByConceptParams, c: OperatorContext) { return findByConcept(p, c) }
+}
+
+@Injectable()
+export class VectorSearchChunksOperator implements KagOperator<VectorSearchParams> {
+  readonly name = 'vector_search_chunks' as const
+  execute(p: VectorSearchParams, c: OperatorContext) { return vectorSearchChunks(p, c) }
+}
+
+@Injectable()
+export class HybridSearchOperator implements KagOperator {
+  readonly name = 'hybrid_search' as const
+  execute(p: { query: string; limit?: number }, c: OperatorContext) { return hybridSearchOp(p, c) }
+}
+
+@Injectable()
+export class SearchDocsOperator implements KagOperator {
+  readonly name = 'search_docs' as const
+  execute(p: { query: string; limit?: number }, c: OperatorContext) { return searchDocs(p, c) }
+}
+
+@Injectable()
+export class RetrieveCodeChunksOperator implements KagOperator<RetrieveCodeChunksParams> {
+  readonly name = 'retrieve_code_chunks' as const
+  execute(p: RetrieveCodeChunksParams, c: OperatorContext) { return retrieveCodeChunks(p, c) }
 }

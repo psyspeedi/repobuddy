@@ -1,6 +1,8 @@
+import { Injectable } from '@nestjs/common'
 import { and, eq, ilike, inArray, or } from 'drizzle-orm'
 import { entities, relations } from '../../../../db/schema'
 import { entityProjection, idsFromParam } from './_helpers'
+import type { KagOperator } from './_interface'
 import type { GraphEntity, OperatorContext } from './_types'
 
 // ---------- find_symbol ----------
@@ -351,4 +353,65 @@ export async function walkthrough(
     entities: entitiesOut,
     mermaid: buildMermaidSequence(primary, primaryCallees, primaryTests),
   }
+}
+
+// ---------- @Injectable wrappers ----------
+// Tiny adapters that satisfy KagOperator; the logic lives in the
+// existing top-level functions so legacy callers + tests that import
+// them directly keep working. Registered in KagModule under the
+// KAG_OPERATOR multi-provider token; the executor talks to them
+// through KagOperatorsRegistry.
+
+@Injectable()
+export class FindSymbolOperator implements KagOperator<FindSymbolParams, GraphEntity[]> {
+  readonly name = 'find_symbol' as const
+  execute(p: FindSymbolParams, c: OperatorContext) { return findSymbol(p, c) }
+}
+
+@Injectable()
+export class FindFileOperator implements KagOperator<FindFileParams, GraphEntity[]> {
+  readonly name = 'find_file' as const
+  execute(p: FindFileParams, c: OperatorContext) { return findFile(p, c) }
+}
+
+@Injectable()
+export class GetCallersOperator implements KagOperator {
+  readonly name = 'get_callers' as const
+  execute(p: never, c: OperatorContext) { return getCallers(p, c) }
+}
+
+@Injectable()
+export class GetCalleesOperator implements KagOperator {
+  readonly name = 'get_callees' as const
+  execute(p: never, c: OperatorContext) { return getCallees(p, c) }
+}
+
+@Injectable()
+export class GetDependenciesOperator implements KagOperator {
+  readonly name = 'get_dependencies' as const
+  execute(p: never, c: OperatorContext) { return getDependencies(p, c) }
+}
+
+@Injectable()
+export class GetDependentsOperator implements KagOperator {
+  readonly name = 'get_dependents' as const
+  execute(p: never, c: OperatorContext) { return getDependents(p, c) }
+}
+
+@Injectable()
+export class FindImplementationsOperator implements KagOperator<FindImplementationsParams, GraphEntity[]> {
+  readonly name = 'find_implementations' as const
+  execute(p: FindImplementationsParams, c: OperatorContext) { return findImplementations(p, c) }
+}
+
+@Injectable()
+export class GetSummaryOperator implements KagOperator {
+  readonly name = 'get_summary' as const
+  execute(p: GetSummaryParams, c: OperatorContext) { return getSummary(p, c) }
+}
+
+@Injectable()
+export class WalkthroughOperator implements KagOperator<WalkthroughParams, WalkthroughResult> {
+  readonly name = 'walkthrough' as const
+  execute(p: WalkthroughParams, c: OperatorContext) { return walkthrough(p, c) }
 }

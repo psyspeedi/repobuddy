@@ -1,4 +1,6 @@
+import { Injectable } from '@nestjs/common'
 import { webFetch, webSearch, type WebFetchResult, type WebSearchEnvelope } from '../../../../lib/web'
+import type { KagOperator } from './_interface'
 import type { OperatorContext } from './_types'
 
 // ---------- web_search ----------
@@ -40,4 +42,18 @@ export async function webFetchOp(
   _ctx: OperatorContext,
 ): Promise<WebFetchResult> {
   return await webFetch(params.url)
+}
+
+// ---------- @Injectable wrappers ----------
+
+@Injectable()
+export class WebSearchOperator implements KagOperator<WebSearchParams, WebSearchEnvelope> {
+  readonly name = 'web_search' as const
+  execute(p: WebSearchParams, c: OperatorContext) { return webSearchOp(p, c) }
+}
+
+@Injectable()
+export class WebFetchOperator implements KagOperator<WebFetchParams, WebFetchResult> {
+  readonly name = 'web_fetch' as const
+  execute(p: WebFetchParams, c: OperatorContext) { return webFetchOp(p, c) }
 }

@@ -557,11 +557,18 @@ const TOOL_DEFS: ToolDefinition[] = Object.entries(TOOL_DEFS_MAP).map(([name, de
 /** Operators NOT exposed as tools (only the planner / executor calls them). */
 const TOOL_NAMES = new Set<OperatorName>(Object.keys(TOOL_DEFS_MAP) as OperatorName[])
 
+type OperatorsMap = Record<
+  string,
+  (params: never, ctx: OperatorContext) => Promise<unknown> | AsyncGenerator<unknown>
+>
+
 export async function* runAgenticAnswer(
   llm: LLMProvider,
   ctx: OperatorContext,
   question: string,
   opts: AgenticOptions = {},
+  /** DI override — KagOperatorsRegistry.asLegacyMap() in production. */
+  operators: OperatorsMap = OPERATORS,
 ): AsyncGenerator<AgenticEvent> {
   const maxIterations = opts.maxIterations ?? 12
   const langName = opts.responseLocale === 'ru' ? LANGUAGE_INSTRUCTION_RU : LANGUAGE_INSTRUCTION_EN
@@ -661,7 +668,7 @@ export async function* runAgenticAnswer(
       }
 
       const opName = call.name as OperatorName
-      if (!TOOL_NAMES.has(opName) || !(opName in OPERATORS)) {
+      if (!TOOL_NAMES.has(opName) || !(opName in operators)) {
         const summary = `error: unknown tool ${call.name}`
         messages.push({
           role: 'tool',
@@ -676,7 +683,7 @@ export async function* runAgenticAnswer(
       }
 
       try {
-        const op = OPERATORS[opName] as (p: unknown, c: OperatorContext) => Promise<unknown>
+        const op = operators[opName] as (p: unknown, c: OperatorContext) => Promise<unknown>
         const result = await op(parsed, ctx)
         const trimmed = trimToolResult(result)
         messages.push({

@@ -1,6 +1,8 @@
+import { Injectable } from '@nestjs/common'
 import { Octokit } from '@octokit/rest'
 import { sql } from 'drizzle-orm'
 import { entities } from '../../../../db/schema'
+import type { KagOperator } from './_interface'
 import {
   excerptIssueBody,
   extractRefs,
@@ -726,4 +728,36 @@ function emptyResolution(
     duplicateCandidates: [],
     ...(reason ? { reason } : {}),
   }
+}
+
+// ---------- @Injectable wrappers ----------
+
+@Injectable()
+export class ListIssuesOperator implements KagOperator<ListIssuesParams, IssuesEnvelope> {
+  readonly name = 'list_issues' as const
+  execute(p: ListIssuesParams, c: OperatorContext) { return listIssues(p, c) }
+}
+
+@Injectable()
+export class ListPrsOperator implements KagOperator<ListPrsParams, PrsEnvelope> {
+  readonly name = 'list_prs' as const
+  execute(p: ListPrsParams, c: OperatorContext) { return listPrs(p, c) }
+}
+
+@Injectable()
+export class FindPrsForIssueOperator implements KagOperator<FindPrsForIssueParams, PrSummary[]> {
+  readonly name = 'find_prs_for_issue' as const
+  execute(p: FindPrsForIssueParams, c: OperatorContext) { return findPrsForIssue(p, c) }
+}
+
+@Injectable()
+export class FindSimilarIssuesOperator implements KagOperator<FindSimilarIssuesParams> {
+  readonly name = 'find_similar_issues' as const
+  execute(p: FindSimilarIssuesParams, c: OperatorContext) { return findSimilarIssues(p, c) }
+}
+
+@Injectable()
+export class FindResolutionOperator implements KagOperator<FindResolutionParams, ResolutionEnvelope> {
+  readonly name = 'find_resolution' as const
+  execute(p: FindResolutionParams, c: OperatorContext) { return findResolution(p, c) }
 }
