@@ -1,0 +1,23 @@
+{
+  "name": "@repobuddy/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*",
+    "./types/*": "./src/types/*",
+    "./schemas/*": "./src/schemas/*",
+    "./lib/*": "./src/lib/*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'shared: no lint configured'"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

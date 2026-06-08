@@ -16,13 +16,13 @@
  */
 import 'dotenv/config'
 import { and, eq, isNotNull, sql } from 'drizzle-orm'
-import { closeDb, getDb } from '../server/db/client'
+import { closeDb, getDb } from '#server/db/client'
 import {
   chunks as chunksTable,
   entities as entitiesTable,
   llmCostLog,
   workspaces,
-} from '../server/db/schema'
+} from '#server/db/schema'
 
 // Approximate retail pricing (cents per 1M tokens) for the OpenAI
 // model families our pipeline historically used. Non-OpenAI providers

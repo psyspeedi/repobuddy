@@ -15,11 +15,11 @@
  */
 import 'dotenv/config'
 import { sql } from 'drizzle-orm'
-import { closeDb, getDb } from '../server/db/client'
-import { workspaces } from '../server/db/schema'
-import { extractGitHistory } from '../server/indexer/git/history'
-import { computeGitInsights } from '../server/indexer/git/insights'
-import { fetchGitHub } from '../server/indexer/source/fetch'
+import { closeDb, getDb } from '#server/db/client'
+import { workspaces } from '#server/db/schema'
+import { extractGitHistory } from '#server/indexer/git/history'
+import { computeGitInsights } from '#server/indexer/git/insights'
+import { fetchGitHub } from '#server/indexer/source/fetch'
 
 interface CliArgs {
   force: boolean

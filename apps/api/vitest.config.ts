@@ -8,16 +8,15 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false,
-    include: ['tests/**/*.{test,spec}.ts'],
-    exclude: ['node_modules', '.nuxt', '.output', 'dist'],
+    include: ['test/**/*.{test,spec}.ts'],
+    exclude: ['node_modules', '.output', 'dist'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
       exclude: [
         'node_modules/',
-        '.nuxt/',
         '.output/',
-        'tests/',
+        'test/',
         '**/*.config.ts',
         '**/*.d.ts',
       ],
@@ -33,10 +32,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './app'),
-      '~': resolve(__dirname, './app'),
-      '#shared': resolve(__dirname, './shared'),
-      '#server': resolve(__dirname, './server'),
+      '#shared': resolve(__dirname, '../../packages/shared/src'),
+      '#server': resolve(__dirname, './src/legacy'),
     },
   },
 })

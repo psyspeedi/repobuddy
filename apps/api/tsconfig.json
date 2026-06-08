@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "baseUrl": "./",
+    "types": ["node"],
+    "paths": {
+      "#shared/*": ["../../packages/shared/src/*"],
+      "#server/*": ["./src/legacy/*"]
+    },
+    "allowImportingTsExtensions": false,
+    "noEmit": true
+  },
+  "include": ["src/**/*", "test/**/*", "scripts/**/*", "*.config.ts"]
+}
