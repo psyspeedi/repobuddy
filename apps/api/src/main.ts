@@ -59,8 +59,9 @@ async function bootstrap() {
   app.use(passport.session())
 
   app.setGlobalPrefix('api', {
-    // routes/{sitemap,robots,feed,indexnow} land in step 8 — listed here when added.
-    exclude: [],
+    // SEO routes live outside the /api prefix so crawlers find them at
+    // canonical paths.
+    exclude: ['robots.txt', 'sitemap.xml', 'feed.xml', 'indexnow/:filename'],
   })
 
   const port = Number(process.env.API_PORT ?? 3001)
