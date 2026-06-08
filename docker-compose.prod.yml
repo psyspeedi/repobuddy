@@ -26,12 +26,12 @@ services:
     volumes:
       - redis_data:/data
 
-  app:
+  api:
     build:
       context: .
-      dockerfile: docker/Dockerfile
-      target: runner
-    container_name: repobuddy-app
+      dockerfile: apps/api/Dockerfile
+      target: runner-api
+    container_name: repobuddy-api
     restart: always
     environment:
       PROCESS_ROLE: web
@@ -43,18 +43,22 @@ services:
       NUXT_SESSION_PASSWORD: ${NUXT_SESSION_PASSWORD:?required}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
       APP_URL: ${APP_URL:?required}
+      WEB_ORIGIN: ${WEB_ORIGIN:?required}
+      API_URL: ${API_URL:-}
+      API_PORT: 3001
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-    command: ["node", ".output/server/index.mjs"]
+    expose:
+      - "3001"
 
   worker:
     build:
       context: .
-      dockerfile: docker/Dockerfile
-      target: runner
+      dockerfile: apps/api/Dockerfile
+      target: runner-worker
     container_name: repobuddy-worker
     restart: always
     environment:
@@ -68,7 +72,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-    command: ["node", ".worker/index.mjs"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner-web
+    container_name: repobuddy-web
+    restart: always
+    environment:
+      NUXT_PUBLIC_APP_URL: ${APP_URL:?required}
+      NUXT_PUBLIC_API_BASE_URL: ${API_BASE_URL:?required}
+      NUXT_HOST: 0.0.0.0
+      NUXT_PORT: 3000
+    depends_on:
+      - api
+    expose:
+      - "3000"
 
   caddy:
     image: caddy:2-alpine
@@ -82,7 +102,8 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - app
+      - web
+      - api
 
 volumes:
   postgres_data:
