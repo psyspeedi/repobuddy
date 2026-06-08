@@ -1,11 +1,6 @@
-import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common'
-import { APP_FILTER } from '@nestjs/core'
-import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup'
-import { GuestCookieMiddleware } from './common/middleware/guest-cookie.middleware'
+import { Module } from '@nestjs/common'
 import { AppConfigModule } from './modules/config/config.module'
-import { AuthModule } from './modules/auth/auth.module'
 import { DrizzleModule } from './modules/drizzle/drizzle.module'
-import { HealthModule } from './modules/health/health.module'
 import { IndexerModule } from './modules/indexer/indexer.module'
 import { KagModule } from './modules/kag/kag.module'
 import { LoggerModule } from './modules/logger/logger.module'
@@ -13,10 +8,15 @@ import { MetricsModule } from './modules/metrics/metrics.module'
 import { ProvidersModule } from './modules/providers/providers.module'
 import { QueuesModule } from './modules/queues/queues.module'
 import { RedisModule } from './modules/redis/redis.module'
+import { WorkersModule } from './modules/workers/workers.module'
 
+/**
+ * Standalone root for the BullMQ worker process. No HTTP, no Auth /
+ * Health controllers — just everything needed to run indexer jobs and
+ * the daily digest.
+ */
 @Module({
   imports: [
-    SentryModule.forRoot(),
     AppConfigModule,
     LoggerModule,
     RedisModule,
@@ -24,15 +24,9 @@ import { RedisModule } from './modules/redis/redis.module'
     ProvidersModule,
     KagModule,
     IndexerModule,
-    QueuesModule,
     MetricsModule,
-    HealthModule,
-    AuthModule,
+    QueuesModule,
+    WorkersModule,
   ],
-  providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(GuestCookieMiddleware).forRoutes('*')
-  }
-}
+export class WorkerRootModule {}
