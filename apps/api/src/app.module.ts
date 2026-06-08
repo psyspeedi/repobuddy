@@ -4,8 +4,11 @@ import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup'
 import { GuestCookieMiddleware } from './common/middleware/guest-cookie.middleware'
 import { AppConfigModule } from './modules/config/config.module'
 import { AdminModule } from './modules/admin/admin.module'
+import { AuditModule } from './modules/audit/audit.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { ChatModule } from './modules/chat/chat.module'
+import { CostLogModule } from './modules/cost-log/cost-log.module'
+import { QuotasModule } from './modules/quotas/quotas.module'
 import { DrizzleModule } from './modules/drizzle/drizzle.module'
 import { HealthModule } from './modules/health/health.module'
 import { IndexerModule } from './modules/indexer/indexer.module'
@@ -26,6 +29,9 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module'
     LoggerModule,
     RedisModule,
     DrizzleModule,
+    QuotasModule,
+    AuditModule,
+    CostLogModule,
     ProvidersModule,
     KagModule,
     IndexerModule,
