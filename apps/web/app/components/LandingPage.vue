@@ -9,7 +9,7 @@ import {
 } from 'lucide-vue-next'
 
 const { t } = useI18n()
-const { loggedIn } = useUserSession()
+const { loggedIn } = useAuth()
 
 // Each feature gets a distinct tint so the cards read as a colourful
 // grid rather than six identical boxes. Colors come from Tailwind's
@@ -36,7 +36,7 @@ interface PublicWorkspace {
 
 // Fetch on-demand (guests don't have auth, so this endpoint is open).
 // useFetch is fine here — runs once, cached, SSR-friendly.
-const { data: publicList } = await useFetch<{ workspaces: PublicWorkspace[] }>(
+const { data: publicList } = await useApiFetch<{ workspaces: PublicWorkspace[] }>(
   '/api/workspaces/public',
   { default: () => ({ workspaces: [] }) },
 )

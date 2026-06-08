@@ -96,7 +96,7 @@ function filterChildren(
 }
 
 async function fetchNeighbours(id: string): Promise<NeighboursResponse> {
-  return $fetch<NeighboursResponse>(
+  return useApi()<NeighboursResponse>(
     `/api/workspaces/${props.workspaceId}/entity/${id}/neighbours`,
     { query: { depth: 1, limit: 80 } },
   )

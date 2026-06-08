@@ -10,7 +10,7 @@ interface ByokState {
   embeddingModel: string | null
 }
 
-const { data: byok, refresh } = await useFetch<ByokState>('/api/me/byok')
+const { data: byok, refresh } = await useApiFetch<ByokState>('/api/me/byok')
 
 const baseUrl = ref(byok.value?.baseUrl ?? '')
 const model = ref(byok.value?.model ?? '')
@@ -25,7 +25,7 @@ async function save(): Promise<void> {
   saving.value = true
   message.value = null
   try {
-    await $fetch('/api/me/byok', {
+    await useApi()('/api/me/byok', {
       method: 'PUT',
       body: {
         baseUrl: baseUrl.value.trim() || null,
@@ -60,7 +60,7 @@ async function clearByok(): Promise<void> {
   if (!ok) return
   saving.value = true
   try {
-    await $fetch('/api/me/byok', {
+    await useApi()('/api/me/byok', {
       method: 'PUT',
       body: { apiKey: null, baseUrl: null, model: null, embeddingModel: null },
     })

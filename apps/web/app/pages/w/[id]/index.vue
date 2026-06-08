@@ -6,7 +6,7 @@
 definePageMeta({ auth: false })
 
 const { t } = useI18n()
-const { loggedIn } = useUserSession()
+const { loggedIn } = useAuth()
 const route = useRoute()
 const workspaceId = String(route.params.id)
 
@@ -42,7 +42,7 @@ interface WorkspaceStats {
   }
 }
 
-const { data: wsData, refresh: refreshWs } = await useFetch<WorkspaceResponse>(
+const { data: wsData, refresh: refreshWs } = await useApiFetch<WorkspaceResponse>(
   `/api/workspaces/${workspaceId}`,
   { key: `workspace-${workspaceId}` },
 )
@@ -55,7 +55,7 @@ async function togglePublic(): Promise<void> {
   if (!wsData.value) return
   const next = !isPublic.value
   try {
-    await $fetch(`/api/workspaces/${workspaceId}/visibility`, {
+    await useApi()(`/api/workspaces/${workspaceId}/visibility`, {
       method: 'PUT',
       body: { isPublic: next },
     })
@@ -213,12 +213,7 @@ async function confirmDelete(): Promise<void> {
   if (deleting.value) return
   deleting.value = true
   try {
-    // Cast to any: Nuxt's typed-routes generator narrows method by route
-    // pattern and rejects DELETE here even though the endpoint exists.
-    await ($fetch as unknown as (url: string, init: RequestInit) => Promise<unknown>)(
-      `/api/workspaces/${workspaceId}`,
-      { method: 'DELETE' },
-    )
+    await useApi()(`/api/workspaces/${workspaceId}`, { method: 'DELETE' })
     await navigateTo('/')
   } catch (err) {
     useToast().error(err instanceof Error ? err.message : t('workspace.deleteFailed'))
@@ -268,7 +263,7 @@ async function reindex(): Promise<void> {
   if (!ok) return
   reindexing.value = true
   try {
-    await $fetch(`/api/workspaces/${workspaceId}/reindex`, { method: 'POST' })
+    await useApi()(`/api/workspaces/${workspaceId}/reindex`, { method: 'POST' })
     done.value = false
     state.value = { status: 'pending', progress: null, stats: null, error: null }
     progressApi.start()

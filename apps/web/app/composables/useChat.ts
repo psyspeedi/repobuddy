@@ -186,7 +186,8 @@ export function useChat(workspaceId: string) {
 
   async function loadHistory(): Promise<void> {
     try {
-      const res = await $fetch<{
+      const api = useApi()
+      const res = await api<{
         session: { id: string } | null
         messages: HistoryMessage[]
       }>(`/api/chat/${sessionId.value}`)
@@ -223,9 +224,11 @@ export function useChat(workspaceId: string) {
     activeController = new AbortController()
     startedAt = Date.now()
     try {
-      const response = await fetch(`/api/chat/${sessionId.value}`, {
+      const { public: { apiBaseUrl } } = useRuntimeConfig()
+      const response = await fetch(`${apiBaseUrl}/api/chat/${sessionId.value}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        credentials: 'include',
         signal: activeController.signal,
         body: JSON.stringify({
           workspaceId,

@@ -61,11 +61,11 @@ interface InterestRow {
 
 const tab = ref<'overview' | 'users' | 'workspaces' | 'audit' | 'interest'>('overview')
 
-const { data: overview, refresh: refreshOverview } = await useFetch<Overview>('/api/admin/overview')
-const { data: usersData } = await useFetch<{ users: UserRow[] }>('/api/admin/users')
-const { data: wsData, refresh: refreshWs } = await useFetch<{ workspaces: WorkspaceRow[] }>('/api/admin/workspaces')
-const { data: auditData } = await useFetch<{ events: AuditEvt[] }>('/api/admin/audit')
-const { data: interestData } = await useFetch<{ pings: InterestRow[]; total: number }>('/api/admin/interest')
+const { data: overview, refresh: refreshOverview } = await useApiFetch<Overview>('/api/admin/overview')
+const { data: usersData } = await useApiFetch<{ users: UserRow[] }>('/api/admin/users')
+const { data: wsData, refresh: refreshWs } = await useApiFetch<{ workspaces: WorkspaceRow[] }>('/api/admin/workspaces')
+const { data: auditData } = await useApiFetch<{ events: AuditEvt[] }>('/api/admin/audit')
+const { data: interestData } = await useApiFetch<{ pings: InterestRow[]; total: number }>('/api/admin/interest')
 
 const selected = ref<Set<string>>(new Set())
 function toggle(id: string): void {
@@ -85,7 +85,7 @@ async function bulkDelete(): Promise<void> {
   })
   if (!ok) return
   try {
-    await ($fetch as unknown as (url: string, init: RequestInit) => Promise<unknown>)(
+    await useApi()(
       '/api/admin/bulk-delete',
       {
         method: 'POST',

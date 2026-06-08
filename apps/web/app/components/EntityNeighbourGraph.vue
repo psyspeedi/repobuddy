@@ -99,7 +99,7 @@ async function load(): Promise<void> {
   loading.value = true
   errorMessage.value = null
   try {
-    data.value = await $fetch<NeighboursResponse>(
+    data.value = await useApi()<NeighboursResponse>(
       `/api/workspaces/${props.workspaceId}/entity/${props.entityId}/neighbours`,
       { query: { depth: depth.value } },
     )
@@ -185,7 +185,7 @@ async function rebuild(): Promise<void> {
     // listens for `focus` so it can sync any external state.
     if (node === props.entityId) return
     void (async () => {
-      const p = await $fetch<NeighboursResponse>(
+      const p = await useApi()<NeighboursResponse>(
         `/api/workspaces/${props.workspaceId}/entity/${node}/neighbours`,
         { query: { depth: depth.value } },
       )

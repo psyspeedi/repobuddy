@@ -4,8 +4,8 @@
  */
 export default defineNuxtRouteMiddleware(async (to) => {
   if (to.meta.auth === false) return
-
-  const { loggedIn } = useUserSession()
+  if (import.meta.server) return // auth state is hydrated on the client
+  const { loggedIn } = useAuth()
   if (!loggedIn.value) {
     return navigateTo(`/login${to.path === '/' ? '' : `?next=${encodeURIComponent(to.fullPath)}`}`)
   }

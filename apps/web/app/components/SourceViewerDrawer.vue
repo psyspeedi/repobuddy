@@ -42,7 +42,7 @@ async function load(): Promise<void> {
   error.value = null
   originalDiffChunkId.value = null
   try {
-    let resp = await $fetch<ChunkResponse>(
+    let resp = await useApi()<ChunkResponse>(
       `/api/workspaces/${props.workspaceId}/chunk/${props.chunkId}`,
     )
 
@@ -51,7 +51,7 @@ async function load(): Promise<void> {
     // Users complained that clicks-to-citations almost always landed
     // them on a diff when they wanted to read the file.
     if (resp.chunk.metadata?.kind === 'diff' && resp.chunk.filePath) {
-      const sourceResp = await $fetch<ChunkResponse>(
+      const sourceResp = await useApi()<ChunkResponse>(
         `/api/workspaces/${props.workspaceId}/chunk-by-path`,
         { query: { path: resp.chunk.filePath, excludeId: resp.chunk.id } },
       ).catch(() => ({ chunk: null }))
@@ -75,7 +75,7 @@ async function loadById(chunkId: string): Promise<void> {
   loading.value = true
   error.value = null
   try {
-    const resp = await $fetch<ChunkResponse>(
+    const resp = await useApi()<ChunkResponse>(
       `/api/workspaces/${props.workspaceId}/chunk/${chunkId}`,
     )
     data.value = resp

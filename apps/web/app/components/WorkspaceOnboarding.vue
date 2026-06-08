@@ -87,7 +87,7 @@ const { t } = useI18n()
 // Lazy SWR — only fetch when the overlay actually opens. The endpoint
 // is read-only and the result is deterministic per workspace until
 // re-index, so a fresh fetch per open is fine.
-const { data, pending, error } = useFetch<OnboardingPayload>(
+const { data, pending, error } = useApiFetch<OnboardingPayload>(
   `/api/workspaces/${props.workspaceId}/onboarding`,
   { key: `onboarding-${props.workspaceId}` },
 )
@@ -102,7 +102,7 @@ async function loadIssues(): Promise<void> {
   if (issuesLoaded.value || issuesPending.value) return
   issuesPending.value = true
   try {
-    issuesData.value = await $fetch<IssuesPayload>(
+    issuesData.value = await useApi()<IssuesPayload>(
       `/api/workspaces/${props.workspaceId}/github-issues`,
     )
   } catch {
@@ -120,7 +120,7 @@ async function loadSetup(): Promise<void> {
   if (setupLoaded.value || setupPending.value) return
   setupPending.value = true
   try {
-    setupData.value = await $fetch<SetupGuidePayload>(
+    setupData.value = await useApi()<SetupGuidePayload>(
       `/api/workspaces/${props.workspaceId}/setup-guide`,
     )
   } catch {

@@ -40,7 +40,7 @@ const { t } = useI18n()
 const wrapper = ref<HTMLDivElement | null>(null)
 const preset = ref<'loc' | 'hotness' | 'coverage'>('loc')
 
-const { data, pending } = await useFetch<{ root: RawNode; totalFiles: number }>(
+const { data, pending } = await useApiFetch<{ root: RawNode; totalFiles: number }>(
   `/api/workspaces/${props.workspaceId}/treemap`,
 )
 

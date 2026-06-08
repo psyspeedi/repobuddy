@@ -3,7 +3,7 @@
 definePageMeta({ auth: false })
 
 const { t } = useI18n()
-const { loggedIn } = useUserSession()
+const { loggedIn } = useAuth()
 
 interface Workspace {
   id: string
@@ -24,7 +24,7 @@ async function refresh(): Promise<void> {
     return
   }
   try {
-    data.value = await $fetch<{ workspaces: Workspace[] }>('/api/workspaces')
+    data.value = await useApi()<{ workspaces: Workspace[] }>('/api/workspaces')
   } catch {
     data.value = { workspaces: [] }
   } finally {
@@ -42,7 +42,7 @@ async function createFromGithub(): Promise<void> {
   error.value = null
   submitting.value = true
   try {
-    const res = await $fetch<{ workspace: Workspace }>('/api/workspaces', {
+    const res = await useApi()<{ workspace: Workspace }>('/api/workspaces', {
       method: 'POST',
       body: { source: { type: 'github', url: githubUrl.value } },
     })

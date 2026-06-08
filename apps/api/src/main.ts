@@ -32,6 +32,15 @@ async function bootstrap() {
   app.useLogger(app.get(PinoLogger))
   app.enableShutdownHooks()
 
+  // Frontend lives on a separate origin (Nuxt at :3000 in dev). CORS
+  // + credentials are required so the session cookie travels with
+  // every API call. WEB_ORIGIN can be a comma-separated list.
+  const origins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  app.enableCors({ origin: origins, credentials: true })
+
   // Share the singleton Redis from RedisModule for session storage.
   const redis = app.get<RedisClient>(REDIS_CLIENT)
   const sessionSecret = process.env.NUXT_SESSION_PASSWORD

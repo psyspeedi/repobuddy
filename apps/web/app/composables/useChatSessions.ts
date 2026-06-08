@@ -20,11 +20,12 @@ interface SessionsResponse {
 export function useChatSessions(workspaceId: string) {
   const sessions = ref<ChatSessionListItem[]>([])
   const loading = ref(false)
+  const api = useApi()
 
   async function refresh(): Promise<void> {
     loading.value = true
     try {
-      const res = await $fetch<SessionsResponse>('/api/chat/sessions', {
+      const res = await api<SessionsResponse>('/api/chat/sessions', {
         query: { workspaceId },
       })
       sessions.value = res.sessions
@@ -36,12 +37,7 @@ export function useChatSessions(workspaceId: string) {
   }
 
   async function remove(id: string): Promise<void> {
-    // $fetch's typed routes don't infer DELETE on dynamic-segment Nitro
-    // handlers. Cast through unknown rather than fight the inference.
-    await ($fetch as unknown as (
-      url: string,
-      opts: { method: string },
-    ) => Promise<unknown>)(`/api/chat/${id}`, { method: 'DELETE' })
+    await api(`/api/chat/${id}`, { method: 'DELETE' })
     sessions.value = sessions.value.filter((s) => s.id !== id)
   }
 

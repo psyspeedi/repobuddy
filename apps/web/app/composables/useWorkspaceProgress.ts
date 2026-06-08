@@ -36,12 +36,13 @@ export function useWorkspaceProgress(workspaceId: string) {
   const done = ref(false)
   let timer: ReturnType<typeof setInterval> | null = null
   let inflight = false
+  const api = useApi()
 
   async function poll(): Promise<void> {
     if (inflight) return
     inflight = true
     try {
-      const data = await $fetch<WorkspaceResponse>(
+      const data = await api<WorkspaceResponse>(
         `/api/workspaces/${workspaceId}`,
       )
       state.value = {

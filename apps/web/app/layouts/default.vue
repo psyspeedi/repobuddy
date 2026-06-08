@@ -2,7 +2,7 @@
 import { Sun, Moon, Globe, Settings } from 'lucide-vue-next'
 
 const colorMode = useColorMode()
-const { loggedIn, user, clear } = useUserSession()
+const { loggedIn, user, clear } = useAuth()
 const { t, locale, locales, setLocale } = useI18n()
 
 interface QuotaResponse {
@@ -14,7 +14,7 @@ interface QuotaResponse {
 
 const isAdmin = computed(() => quota.value?.viewerKind === 'admin')
 
-const { data: quota, refresh: refreshQuota } = useFetch<QuotaResponse>('/api/me/quota', {
+const { data: quota, refresh: refreshQuota } = useApiFetch<QuotaResponse>('/api/me/quota', {
   default: () => null as unknown as QuotaResponse,
 })
 
@@ -40,7 +40,7 @@ function toggleTheme(): void {
 }
 
 async function logout(): Promise<void> {
-  await $fetch('/api/auth/logout', { method: 'POST' })
+  await useApi()('/api/auth/logout', { method: 'POST' })
   await clear()
   await navigateTo('/login')
 }

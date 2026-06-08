@@ -69,7 +69,7 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = null
   try {
-    detail.value = await $fetch<DetailResponse>(
+    detail.value = await useApi()<DetailResponse>(
       `/api/workspaces/${props.workspaceId}/entity/${props.entityId}`,
     )
   } catch (err) {

@@ -16,12 +16,12 @@ interface Props {
 }
 const props = defineProps<Props>()
 const { t } = useI18n()
-const { loggedIn } = useUserSession()
+const { loggedIn } = useAuth()
 
 const show = computed(() => loggedIn.value && !props.bypass)
 
 interface InterestState { sent: boolean; sentAt: string | null }
-const { data: state, refresh } = useFetch<InterestState>('/api/me/interest', {
+const { data: state, refresh } = useApiFetch<InterestState>('/api/me/interest', {
   default: () => ({ sent: false, sentAt: null }),
   // Avoid SSR'ing this for guests — the endpoint 401's and noise floods the logs.
   immediate: false,
@@ -37,7 +37,7 @@ async function submit(): Promise<void> {
   if (submitting.value) return
   submitting.value = true
   try {
-    await $fetch('/api/me/interest', {
+    await useApi()('/api/me/interest', {
       method: 'POST',
       body: { kind: 'more_limits', message: message.value.trim() || undefined },
     })
