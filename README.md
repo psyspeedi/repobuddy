@@ -85,7 +85,7 @@ Detailed walkthrough: [`docs/kag-planning.md`](docs/kag-planning.md).
 
 **Frontend** — Nuxt 4, Vue 3 Composition API, Tailwind 4, shadcn-vue, `marked` + `isomorphic-dompurify` for chat-message rendering, `shiki` for syntax highlighting (lazy-loaded, dual-theme via CSS variables), `mermaid` for diagrams (lazy-loaded), `d3-hierarchy` for treemap, `sigma` + `graphology` for the neighbour graph, `@nuxtjs/i18n` (cookie-driven, no URL prefix), `@nuxtjs/color-mode`.
 
-**Backend** — Nitro routes, BullMQ workers, `drizzle-orm` (Postgres + pgvector via `customType`), `nuxt-auth-utils` (GitHub OAuth, AES-GCM encrypted refresh tokens), Pino structured logging, `prom-client` metrics, `@octokit/rest`.
+**Backend** — NestJS 10 (Express adapter) split into `apps/api` HTTP service + standalone NestJS worker context (`apps/api/src/main.worker.ts`), BullMQ via `@nestjs/bullmq`, `drizzle-orm` (Postgres + pgvector via `customType`), GitHub OAuth via `@nestjs/passport` + `passport-github2` + `express-session` backed by `connect-redis`, AES-GCM encrypted refresh tokens, Pino structured logging (`nestjs-pino`), `prom-client` metrics, `@octokit/rest`. Monorepo layout: `apps/api`, `apps/web`, `packages/shared`.
 
 **AI** — OpenAI `gpt-4o` (planning, annotation, answer) + `text-embedding-3-small` (1536-dim embeddings). Pluggable provider — BYOK supported (per-user encrypted API key + base URL). Hybrid search = vector cosine + Postgres `ts_rank` combined via reciprocal-rank-fusion.
 
@@ -105,9 +105,10 @@ cp .env.example .env   # then fill OPENAI_API_KEY + GITHUB_CLIENT_ID/SECRET
 pnpm db:up
 pnpm db:migrate
 
-# 3. Run web + worker (two terminals)
-pnpm dev:web
-pnpm dev:worker
+# 3. Run web + api + worker (three terminals)
+pnpm dev:web       # Nuxt on :3000
+pnpm dev:api       # NestJS on :3001
+pnpm dev:worker    # standalone NestJS worker (BullMQ)
 
 # 4. Open http://localhost:3000
 ```
@@ -117,8 +118,9 @@ Optional dashboards: `docker compose up -d grafana prometheus loki promtail` →
 ## Tests
 
 ```bash
-pnpm typecheck   # nuxt typecheck across server + app
-pnpm test        # vitest — unit + integration
+pnpm -r typecheck                                 # all workspaces
+pnpm --filter @repobuddy/api test test/unit       # unit tests
+pnpm --filter @repobuddy/api test test/integration  # integration (needs Postgres + Redis)
 pnpm test:watch
 ```
 

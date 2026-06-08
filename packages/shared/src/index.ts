@@ -1,4 +1,4 @@
-export * from './types/index.ts'
-export * from './types/workspace.ts'
-export * as Schemas from './schemas/index.ts'
-export * as Sse from './lib/sse.ts'
+export * from './types/index'
+export * from './types/workspace'
+export * as Schemas from './schemas/index'
+export * as Sse from './lib/sse'
