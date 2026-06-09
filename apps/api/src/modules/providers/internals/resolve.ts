@@ -8,14 +8,14 @@
  * The boolean `usesByok` is returned so callers can skip token-quota
  * enforcement on BYOK traffic (the user is paying their own bill).
  */
-import type { Database } from '../../../db/client'
-import { users, type User } from '../../../db/schema'
+import type { Database } from '#server/db/client'
+import { users, type User } from '#server/db/schema'
 import { eq } from 'drizzle-orm'
-import { decrypt } from '../../../lib/crypto'
-import { loadEnv } from '../../../lib/env'
+import { decrypt } from '#server/lib/crypto'
+import { loadEnv } from '#server/lib/env'
 import { createLLMProvider, type LLMProvider } from './llm'
 import { createEmbeddingsProvider, type EmbeddingsProvider } from './embeddings'
-import { getLogger } from '../../../lib/logger'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'providers/resolve' })
 

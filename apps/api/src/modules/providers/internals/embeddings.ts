@@ -5,7 +5,7 @@ import {
   encode,
   isWithinTokenLimit,
 } from 'gpt-tokenizer/model/text-embedding-3-small'
-import { getLogger } from '../../../lib/logger'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'providers/embeddings' })
 

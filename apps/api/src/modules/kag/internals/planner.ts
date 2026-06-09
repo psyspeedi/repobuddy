@@ -1,7 +1,7 @@
 import { PlanSchema, type Plan } from '#shared/schemas/plan'
-import type { LLMProvider } from '../../providers/internals/llm'
-import { getLogger } from '../../../lib/logger'
-import { plannerFailures } from '../../../lib/metrics'
+import type { LLMProvider } from '#server/providers/llm'
+import { getLogger } from '#server/lib/logger'
+import { plannerFailures } from '#server/lib/metrics'
 
 const log = getLogger().child({ component: 'kag/planner' })
 

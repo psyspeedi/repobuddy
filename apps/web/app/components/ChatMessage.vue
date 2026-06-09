@@ -27,8 +27,7 @@ interface Props {
 }
 const props = defineProps<Props>()
 const emit = defineEmits<{
-  (e: 'open-chunk', chunkId: string): void
-  (e: 'open-entity', entityId: string): void
+  (e: 'open-chunk' | 'open-entity', id: string): void
 }>()
 const { t } = useI18n()
 

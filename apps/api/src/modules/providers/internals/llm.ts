@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
-import { getLogger } from '../../../lib/logger'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'providers/llm' })
 

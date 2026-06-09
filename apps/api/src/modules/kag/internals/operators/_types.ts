@@ -1,5 +1,5 @@
-import type { EmbeddingsProvider } from '../../../providers/internals/embeddings'
-import type { LLMProvider } from '../../../providers/internals/llm'
+import type { EmbeddingsProvider } from '#server/providers/embeddings'
+import type { LLMProvider } from '#server/providers/llm'
 
 export interface OperatorContext {
   workspaceId: string

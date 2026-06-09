@@ -1,7 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import type { Database } from '../../../db/client'
-import { entities, relations } from '../../../db/schema'
-import { getLogger } from '../../../lib/logger'
+import type { Database } from '#server/db/client'
+import { entities, relations } from '#server/db/schema'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'indexer/resolution' })
 

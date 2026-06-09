@@ -1,18 +1,18 @@
 import type { Job } from 'bullmq'
 import { readFile } from 'node:fs/promises'
 import { eq, sql } from 'drizzle-orm'
-import type { Database } from '../../../db/client'
-import { entities as entitiesTable, workspaces } from '../../../db/schema'
-import { getLogger, withTrace } from '../../../lib/logger'
+import type { Database } from '#server/db/client'
+import { entities as entitiesTable, workspaces } from '#server/db/schema'
+import { getLogger, withTrace } from '#server/lib/logger'
 import {
   markWorkspaceFailed,
   markWorkspaceReady,
   setWorkspaceProgress,
-} from '../../workspaces/workspace-progress'
+} from '#modules/workspaces/workspace-progress'
 import type {
   IndexWorkspaceJobData,
   IndexWorkspaceJobResult,
-} from '../../queues/queue.constants'
+} from '#modules/queues/queue.constants'
 import { fetchGitHub, type FetchedSource } from './source/fetch'
 import { indexPullRequests } from './pr-history'
 import { walkRepo } from './source/walk'
@@ -22,10 +22,10 @@ import { embedAllPendingChunks, embedChunks } from './embed'
 import {
   createEmbeddingsProvider,
   type EmbeddingsProvider,
-} from '../../providers/internals/embeddings'
+} from '#server/providers/embeddings'
 import { annotateAndEmbed } from './annotate'
 import { resolveEntities } from './resolution'
-import { type LLMProvider } from '../../providers/internals/llm'
+import { type LLMProvider } from '#server/providers/llm'
 import { getTypeScriptParser } from './parsers/typescript'
 import { getPythonParser } from './parsers/python'
 import { getGoParser } from './parsers/go'
@@ -61,7 +61,7 @@ export async function runIndexPipeline(
   deps: PipelineDeps = {},
 ): Promise<IndexWorkspaceJobResult> {
   const { workspaceId, userId } = job.data
-  return withTrace({ workspaceId, userId, jobId: job.id }, async () => {
+  return withTrace({ workspaceId, userId: userId ?? undefined, jobId: job.id }, async () => {
     const start = Date.now()
     log.info('pipeline started')
 

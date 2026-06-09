@@ -6,22 +6,17 @@
  *   useApi()       — typed $fetch.create wrapper.
  *   useApiFetch()  — same defaults applied to Nuxt's useFetch.
  */
-import type { UseFetchOptions } from 'nuxt/app'
-
-const sharedDefaults = (apiBaseUrl: string) => ({
-  baseURL: apiBaseUrl,
-  credentials: 'include' as const,
-})
 
 export function useApi() {
   const { public: { apiBaseUrl } } = useRuntimeConfig()
-  return $fetch.create(sharedDefaults(apiBaseUrl as string))
+  return $fetch.create({
+    baseURL: apiBaseUrl as string,
+    credentials: 'include',
+  })
 }
 
-export function useApiFetch<T>(
-  request: string | (() => string),
-  opts: UseFetchOptions<T> = {},
-) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useApiFetch<T>(request: any, opts: any = {}) {
   const { public: { apiBaseUrl } } = useRuntimeConfig()
   return useFetch<T>(request, {
     baseURL: apiBaseUrl as string,

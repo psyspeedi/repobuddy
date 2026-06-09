@@ -5,7 +5,6 @@
  * Failures are swallowed (logged) — auditing must never block the user
  * operation that triggered it. Surface coverage > guaranteed coverage.
  */
-import type { H3Event } from 'h3'
 import type { Database } from '../db/client'
 import { auditEvents } from '../db/schema'
 import { getLogger } from './logger'
@@ -48,22 +47,4 @@ export async function recordAudit(db: Database, input: AuditInput): Promise<void
   }
 }
 
-/**
- * Best-effort IP extraction from an H3 event. Looks at standard
- * proxy headers first (Caddy / nginx set X-Forwarded-For), falls back
- * to socket address. Returns null when nothing usable found.
- */
-export function getClientIp(event: H3Event): string | null {
-  const xff = getRequestHeader(event, 'x-forwarded-for')
-  if (xff) {
-    const first = xff.split(',')[0]?.trim()
-    if (first) return first
-  }
-  const real = getRequestHeader(event, 'x-real-ip')
-  if (real) return real.trim()
-  const node = event.node?.req?.socket
-  if (node && 'remoteAddress' in node) {
-    return (node.remoteAddress as string | undefined) ?? null
-  }
-  return null
-}
+// getClientIp removed — NestJS controllers use Express `req.ip` directly.

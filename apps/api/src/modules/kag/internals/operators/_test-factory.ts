@@ -7,7 +7,7 @@
  * Production code should NOT import from here.
  */
 import type { OperatorName } from '#shared/schemas/plan'
-import type { Database } from '../../../../db/client'
+import type { Database } from '#server/db/client'
 import type { KagOperator } from './_interface'
 import { KagOperatorsRegistry } from './_registry'
 import type { OperatorContext } from './_types'

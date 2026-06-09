@@ -290,7 +290,6 @@ export class ChatService {
       if (body.mode === 'agentic') {
         const ctx = {
           workspaceId: body.workspaceId,
-          db: this.db,
           embeddings,
           workspace: {
             name: ws.name,
@@ -337,7 +336,6 @@ export class ChatService {
 
         const result = await this.executor.run(plan, {
           workspaceId: body.workspaceId,
-          db: this.db,
           embeddings,
           workspace: {
             name: ws.name,

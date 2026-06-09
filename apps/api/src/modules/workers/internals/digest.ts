@@ -6,9 +6,9 @@
  * numbers from /admin and the digest, and they'll agree.
  */
 import { sql } from 'drizzle-orm'
-import type { Database } from '../../../db/client'
-import { sendAlert } from '../../../lib/alerts'
-import { getLogger } from '../../../lib/logger'
+import type { Database } from '#server/db/client'
+import { sendAlert } from '#server/lib/alerts'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'worker/digest' })
 

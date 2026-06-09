@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import type { Database } from '../../db/client'
-import { workspaces } from '../../db/schema'
+import type { Database } from '#server/db/client'
+import { workspaces } from '#server/db/schema'
 import type {
   WorkspaceProgress,
   WorkspaceStatus,

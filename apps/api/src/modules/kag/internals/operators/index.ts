@@ -1,4 +1,4 @@
-import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
+import { DRIZZLE_DB, type DrizzleDb } from '#modules/drizzle/drizzle.tokens'
 /**
  * KAG operator library. Each operator is an async function over a typed
  * parameter object; the executor (kag/executor.ts) dispatches them by
@@ -27,8 +27,9 @@ import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
  *   - hybrid_search.ts   RRF helper used by both search and answer
  */
 import { Inject, Injectable } from '@nestjs/common'
-import type { LinkedChunk } from '../../../../lib/github-issue-linking'
-import type { ProjectOverview } from '../../../../lib/project-overview'
+import type { Database } from '#server/db/client'
+import type { LinkedChunk } from '#server/lib/github-issue-linking'
+import type { ProjectOverview } from '#server/lib/project-overview'
 import { answer, type AnswerStreamChunk } from './answer'
 import { hybridSearch } from './hybrid_search'
 import {

@@ -1,6 +1,13 @@
 import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath } from 'node:url'
+import { resolve, dirname } from 'node:path'
+
+const dir = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
+  alias: {
+    '#shared': resolve(dir, '../../packages/shared/src'),
+  },
   compatibilityDate: '2025-01-01',
   devtools: { enabled: true },
 
@@ -42,7 +49,10 @@ export default defineNuxtConfig({
   css: ['~/assets/css/tailwind.css'],
 
   vite: {
-    plugins: [tailwindcss()],
+    // @tailwindcss/vite ships its own bundled vite types; Nuxt 4
+    // bundles vite 5 — duplicate type identity, identical shape.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    plugins: [tailwindcss() as any],
     optimizeDeps: {
       include: [
         '@vue/devtools-core',

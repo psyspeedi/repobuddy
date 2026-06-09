@@ -228,6 +228,7 @@ describe('operators', () => {
     const result = await searchDocs(
       { query: 'KAG knowledge graph overview', limit: 5 },
       ctx,
+      db,
     )
     expect(result.length).toBeGreaterThan(0)
     // Every returned chunk must be from a doc-sourced row.
@@ -267,6 +268,7 @@ describe('operators', () => {
         },
       },
       ctx,
+      db,
     )
     expect(result).toHaveLength(1)
     expect(result[0]?.text).toContain('processPayment')
@@ -274,7 +276,7 @@ describe('operators', () => {
 
   it('get_summary returns name/type/description triples', async () => {
     const { ctx, ids } = await seedTinyGraph()
-    await sqlClient`UPDATE entities SET description = 'Handles payment.' WHERE id = ${ids.processPayment}`
+    await sqlClient`UPDATE entities SET description = 'Handles payment.' WHERE id = ${ids.processPayment as string}`
 
     const result = await getSummary(
       {
@@ -291,6 +293,7 @@ describe('operators', () => {
         },
       },
       ctx,
+      db,
     )
     expect(result[0]?.description).toContain('Handles payment')
   })

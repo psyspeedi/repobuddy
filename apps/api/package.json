@@ -9,7 +9,9 @@
     "#server/lib/*": "./src/lib/*",
     "#server/kag/*": "./src/modules/kag/internals/*",
     "#server/indexer/*": "./src/modules/indexer/internals/*",
-    "#server/providers/*": "./src/modules/providers/internals/*"
+    "#server/providers/*": "./src/modules/providers/internals/*",
+    "#modules/*": "./src/modules/*",
+    "#common/*": "./src/common/*"
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",

@@ -1,9 +1,9 @@
-import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
-import type { Database } from '../../../../db/client'
+import { DRIZZLE_DB, type DrizzleDb } from '#modules/drizzle/drizzle.tokens'
+import type { Database } from '#server/db/client'
 import { Inject, Injectable } from '@nestjs/common'
 import { Octokit } from '@octokit/rest'
 import { sql } from 'drizzle-orm'
-import { entities } from '../../../../db/schema'
+import { entities } from '#server/db/schema'
 import type { KagOperator } from './_interface'
 import {
   excerptIssueBody,
@@ -12,7 +12,7 @@ import {
   lookupEntitiesByRefs,
   type LinkedChunk,
   type LinkedEntity,
-} from '../../../../lib/github-issue-linking'
+} from '#server/lib/github-issue-linking'
 import type {
   ResolutionCommit,
   ResolutionDuplicate,

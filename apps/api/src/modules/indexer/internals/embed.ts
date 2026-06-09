@@ -1,9 +1,9 @@
 import { inArray, sql } from 'drizzle-orm'
-import type { Database } from '../../../db/client'
-import { chunks } from '../../../db/schema'
-import type { EmbeddingsProvider } from '../../providers/internals/embeddings'
-import { recordCost } from '../../../lib/cost-log'
-import { getLogger } from '../../../lib/logger'
+import type { Database } from '#server/db/client'
+import { chunks } from '#server/db/schema'
+import type { EmbeddingsProvider } from '#server/providers/embeddings'
+import { recordCost } from '#server/lib/cost-log'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'indexer/embed' })
 

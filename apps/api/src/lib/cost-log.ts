@@ -117,9 +117,6 @@ export async function assertWithinDailyBudget(
   if (env.COST_BUDGET_USD_PER_DAY <= 0) return
   const usd = await getTodaySpendUsd()
   if (usd >= env.COST_BUDGET_USD_PER_DAY) {
-    throw createError({
-      statusCode: 503,
-      statusMessage: `Service-wide daily LLM budget exhausted ($${usd.toFixed(2)} / $${env.COST_BUDGET_USD_PER_DAY}). Resets at UTC midnight.`,
-    })
+    throw Object.assign(new Error(`Service-wide daily LLM budget exhausted ($${usd.toFixed(2)} / $${env.COST_BUDGET_USD_PER_DAY}). Resets at UTC midnight.`), { statusCode: 503 })
   }
 }

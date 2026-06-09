@@ -1,7 +1,7 @@
 import type { OperatorContext, OperatorName } from './operators'
 import type { Plan, PlanStep } from '#shared/schemas/plan'
-import { getLogger } from '../../../lib/logger'
-import { operatorLatency, operatorRuns } from '../../../lib/metrics'
+import { getLogger } from '#server/lib/logger'
+import { operatorLatency, operatorRuns } from '#server/lib/metrics'
 
 const log = getLogger().child({ component: 'kag/executor' })
 

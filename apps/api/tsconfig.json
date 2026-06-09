@@ -7,7 +7,6 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "outDir": "./dist",
-    "rootDir": "./",
     "baseUrl": "./",
     "types": ["node"],
     "paths": {
@@ -16,7 +15,9 @@
       "#server/lib/*": ["./src/lib/*"],
       "#server/kag/*": ["./src/modules/kag/internals/*"],
       "#server/indexer/*": ["./src/modules/indexer/internals/*"],
-      "#server/providers/*": ["./src/modules/providers/internals/*"]
+      "#server/providers/*": ["./src/modules/providers/internals/*"],
+      "#modules/*": ["./src/modules/*"],
+      "#common/*": ["./src/common/*"]
     },
     "allowImportingTsExtensions": false,
     "noEmit": true

@@ -3,7 +3,7 @@ import {
   assertWithinDailyBudget,
   getTodaySpendUsd,
   recordCost,
-  type CostLogInput,
+  type CostInput,
 } from '#server/lib/cost-log'
 import { DRIZZLE_DB, type DrizzleDb } from '../drizzle/drizzle.tokens'
 
@@ -11,7 +11,7 @@ import { DRIZZLE_DB, type DrizzleDb } from '../drizzle/drizzle.tokens'
 export class CostLogService {
   constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
 
-  record(input: Omit<CostLogInput, never>): Promise<void> {
+  record(input: CostInput): Promise<void> {
     return recordCost(this.db, input)
   }
 

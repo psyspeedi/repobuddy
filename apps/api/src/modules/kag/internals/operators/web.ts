@@ -1,7 +1,7 @@
-import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
-import type { Database } from '../../../../db/client'
+import { DRIZZLE_DB, type DrizzleDb } from '#modules/drizzle/drizzle.tokens'
+import type { Database } from '#server/db/client'
 import { Inject, Injectable } from '@nestjs/common'
-import { webFetch, webSearch, type WebFetchResult, type WebSearchEnvelope } from '../../../../lib/web'
+import { webFetch, webSearch, type WebFetchResult, type WebSearchEnvelope } from '#server/lib/web'
 import type { KagOperator } from './_interface'
 import type { OperatorContext } from './_types'
 

@@ -13,9 +13,9 @@
  * No diff fetching (would be 200 extra calls) — body excerpt only.
  */
 import { Octokit } from '@octokit/rest'
-import type { Database } from '../../../db/client'
-import { entities } from '../../../db/schema'
-import { getLogger } from '../../../lib/logger'
+import type { Database } from '#server/db/client'
+import { entities } from '#server/db/schema'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'indexer/pr-history' })
 

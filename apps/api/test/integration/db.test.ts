@@ -131,7 +131,7 @@ describe('db integration', () => {
       })
       .returning()
 
-    const [{ tsv }] = await sqlClient<{ tsv: string }[]>`
+    const [{ tsv } = { tsv: '' }] = await sqlClient<{ tsv: string }[]>`
       SELECT text_tsv::text AS tsv FROM chunks WHERE id = ${chunk!.id}
     `
     expect(tsv).toContain('processpay')

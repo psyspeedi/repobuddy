@@ -29,7 +29,7 @@ interface Props {
   child: Child
   level: number
 }
-const props = defineProps<Props>()
+defineProps<Props>()
 const emit = defineEmits<{
   (e: 'expand', c: Child): void
   (e: 'focus', id: string): void

@@ -111,15 +111,12 @@ export async function getStatus(ctx: QuotaContext): Promise<QuotaStatus> {
 export async function assertCanCreateWorkspace(ctx: QuotaContext): Promise<void> {
   if (ctx.bypass) return
   if (ctx.kind === 'guest') {
-    throw createError({ statusCode: 401, statusMessage: 'guests cannot create workspaces' })
+    throw new Error( 'guests cannot create workspaces' .trim())
   }
   const { limits, used } = await getStatus(ctx)
   if (used.workspaces >= limits.workspacesPerDay) {
     quotaBlocks.inc({ kind: ctx.kind, metric: 'workspaces' })
-    throw createError({
-      statusCode: 429,
-      statusMessage: `Daily workspace quota exceeded (${used.workspaces}/${limits.workspacesPerDay}). Try again tomorrow.`,
-    })
+    throw Object.assign(new Error(`Daily workspace quota exceeded (${used.workspaces}/${limits.workspacesPerDay}). Try again tomorrow.`), { statusCode: 429 })
   }
 }
 
@@ -135,17 +132,11 @@ export async function assertCanSendMessage(ctx: QuotaContext): Promise<void> {
   const { limits, used } = await getStatus(ctx)
   if (used.messages >= limits.messagesPerDay) {
     quotaBlocks.inc({ kind: ctx.kind, metric: 'messages' })
-    throw createError({
-      statusCode: 429,
-      statusMessage: `Daily message quota exceeded (${used.messages}/${limits.messagesPerDay}).`,
-    })
+    throw Object.assign(new Error(`Daily message quota exceeded (${used.messages}/${limits.messagesPerDay}).`), { statusCode: 429 })
   }
   if (used.tokens >= limits.tokensPerDay) {
     quotaBlocks.inc({ kind: ctx.kind, metric: 'tokens' })
-    throw createError({
-      statusCode: 429,
-      statusMessage: `Daily token quota exceeded (${used.tokens}/${limits.tokensPerDay}).`,
-    })
+    throw Object.assign(new Error(`Daily token quota exceeded (${used.tokens}/${limits.tokensPerDay}).`), { statusCode: 429 })
   }
 }
 

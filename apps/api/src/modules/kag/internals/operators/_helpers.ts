@@ -1,4 +1,4 @@
-import { entities } from '../../../../db/schema'
+import { entities } from '#server/db/schema'
 import type { GraphEntity } from './_types'
 
 /** Pull ids out of a GraphEntity / array param, dropping anything without an id. */

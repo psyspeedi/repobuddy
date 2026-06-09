@@ -38,6 +38,8 @@ export default defineConfig({
       { find: /^#server\/kag\//, replacement: resolve(__dirname, './src/modules/kag/internals') + '/' },
       { find: /^#server\/indexer\//, replacement: resolve(__dirname, './src/modules/indexer/internals') + '/' },
       { find: /^#server\/providers\//, replacement: resolve(__dirname, './src/modules/providers/internals') + '/' },
+      { find: /^#modules\//, replacement: resolve(__dirname, './src/modules') + '/' },
+      { find: /^#common\//, replacement: resolve(__dirname, './src/common') + '/' },
     ],
   },
 })

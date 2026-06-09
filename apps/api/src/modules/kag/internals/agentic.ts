@@ -26,8 +26,8 @@ import type {
   LLMProvider,
   ToolCall,
   ToolDefinition,
-} from '../../providers/internals/llm'
-import { getLogger } from '../../../lib/logger'
+} from '#server/providers/llm'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'kag/agentic' })
 

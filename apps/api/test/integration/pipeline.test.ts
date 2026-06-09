@@ -12,11 +12,11 @@ import * as schema from '#server/db/schema'
 import {
   getRedisConnection,
   INDEX_WORKSPACE_QUEUE,
-} from '#server/queues'
+} from '#modules/queues/queue.constants'
 import type {
   IndexWorkspaceJobData,
   IndexWorkspaceJobResult,
-} from '#server/queues'
+} from '#modules/queues/queue.constants'
 
 // Mock the source fetcher to return a local git repo we control.
 vi.mock('#server/indexer/source/fetch', async () => {
@@ -198,13 +198,13 @@ describe.skip('full indexing pipeline', () => {
     // tsvector is auto-populated
     const sample = codeChunks[0]
     expect(sample).toBeDefined()
-    const [{ tsv }] = await sqlClient<{ tsv: string }[]>`
+    const [{ tsv } = { tsv: '' }] = await sqlClient<{ tsv: string }[]>`
       SELECT text_tsv::text AS tsv FROM chunks WHERE id = ${sample!.id}
     `
     expect(tsv.length).toBeGreaterThan(0)
 
     // Embeddings populated by MockEmbeddingsProvider
-    const [{ embedded_count }] = await sqlClient<{ embedded_count: number }[]>`
+    const [{ embedded_count } = { embedded_count: 0 }] = await sqlClient<{ embedded_count: number }[]>`
       SELECT COUNT(*)::int AS embedded_count
       FROM chunks WHERE workspace_id = ${workspaceId} AND embedding IS NOT NULL
     `

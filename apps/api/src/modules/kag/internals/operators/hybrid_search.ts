@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import type { Database } from '../../../../db/client'
-import type { EmbeddingsProvider } from '../../../providers/internals/embeddings'
+import type { Database } from '#server/db/client'
+import type { EmbeddingsProvider } from '#server/providers/embeddings'
 
 export interface HybridSearchResult {
   chunkId: string

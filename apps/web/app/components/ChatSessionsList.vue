@@ -8,8 +8,7 @@ interface Props {
 }
 const props = defineProps<Props>()
 const emit = defineEmits<{
-  (e: 'select', id: string): void
-  (e: 'delete', id: string): void
+  (e: 'select' | 'delete', id: string): void
   (e: 'new'): void
 }>()
 const { t } = useI18n()

@@ -13,17 +13,19 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
   ) {
     const env = config.all()
     const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+    // CSRF defence — passport-oauth2 generates a random `state`, parks
+    // it in req.session, and rejects callbacks whose state doesn't
+    // match. passport-github2 types declare `state` as string, but the
+    // underlying passport-oauth2 accepts boolean `true` for auto-gen.
+    // Casting to keep the runtime behaviour without fighting the type.
     super({
       clientID: env.GITHUB_CLIENT_ID,
       clientSecret: env.GITHUB_CLIENT_SECRET,
       callbackURL: `${apiUrl}/api/auth/github/callback`,
       scope: ['read:user', 'user:email', 'public_repo'],
-      // CSRF defence — passport-oauth2 generates a random `state`, parks
-      // it in req.session, and rejects callbacks whose state doesn't
-      // match. Requires express-session to be registered before
-      // passport.initialize() (see main.ts).
       state: true,
-    })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
   }
 
   async validate(

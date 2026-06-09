@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { simpleGit } from 'simple-git'
 import { Extract } from 'unzipper'
-import { getLogger } from '../../../../lib/logger'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'indexer/source/fetch' })
 

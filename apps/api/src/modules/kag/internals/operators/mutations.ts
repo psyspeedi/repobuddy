@@ -1,8 +1,8 @@
-import { DRIZZLE_DB, type DrizzleDb } from '../../../drizzle/drizzle.tokens'
-import type { Database } from '../../../../db/client'
+import { DRIZZLE_DB, type DrizzleDb } from '#modules/drizzle/drizzle.tokens'
+import type { Database } from '#server/db/client'
 import { Inject, Injectable } from '@nestjs/common'
 import { and, eq, or, sql } from 'drizzle-orm'
-import { chunks } from '../../../../db/schema'
+import { chunks } from '#server/db/schema'
 import type { KagOperator } from './_interface'
 import type { OperatorContext } from './_types'
 

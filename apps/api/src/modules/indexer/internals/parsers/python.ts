@@ -6,7 +6,7 @@ import type {
   ParserInput,
   SourceParser,
 } from './types'
-import { getLogger } from '../../../../lib/logger'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'parsers/python' })
 

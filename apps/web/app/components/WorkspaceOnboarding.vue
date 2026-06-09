@@ -78,8 +78,7 @@ const props = defineProps<{ workspaceId: string }>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'walkthrough', payload: { entityId: string; name: string }): void
-  (e: 'open-entity', entityId: string): void
-  (e: 'ask', question: string): void
+  (e: 'open-entity' | 'ask', payload: string): void
 }>()
 
 const { t } = useI18n()

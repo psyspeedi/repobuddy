@@ -1,5 +1,5 @@
-import type { LLMProvider, ChatMessage } from '../../../providers/internals/llm'
-import type { ProjectOverview } from '../../../../lib/project-overview'
+import type { LLMProvider, ChatMessage } from '#server/providers/llm'
+import type { ProjectOverview } from '#server/lib/project-overview'
 
 export interface AnswerContextChunk {
   id: string

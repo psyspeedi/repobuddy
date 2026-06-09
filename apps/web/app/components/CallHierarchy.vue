@@ -9,7 +9,7 @@
  * `calls`), callees (outbound `calls`), tests (`tested_by`),
  * contained_in (parent class/file).
  */
-import { ChevronRight, ChevronDown, GitFork, Bug, FileCode, Layers } from 'lucide-vue-next'
+import { GitFork, Bug, FileCode, Layers } from 'lucide-vue-next'
 
 interface NodeRow {
   id: string

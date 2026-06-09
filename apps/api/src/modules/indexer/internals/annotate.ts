@@ -1,14 +1,14 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import type { Database } from '../../../db/client'
-import { chunks, entities, relations } from '../../../db/schema'
-import type { LLMProvider } from '../../providers/internals/llm'
-import type { EmbeddingsProvider } from '../../providers/internals/embeddings'
+import type { Database } from '#server/db/client'
+import { chunks, entities, relations } from '#server/db/schema'
+import type { LLMProvider } from '#server/providers/llm'
+import type { EmbeddingsProvider } from '#server/providers/embeddings'
 import {
   SemanticAnnotationSchema,
   type SemanticAnnotation,
 } from '#shared/schemas/annotation'
-import { getLogger } from '../../../lib/logger'
-import { recordCost } from '../../../lib/cost-log'
+import { getLogger } from '#server/lib/logger'
+import { recordCost } from '#server/lib/cost-log'
 
 const log = getLogger().child({ component: 'indexer/annotate' })
 

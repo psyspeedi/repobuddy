@@ -1,10 +1,10 @@
 import { eq, sql, inArray } from 'drizzle-orm'
-import type { Database } from '../../../db/client'
-import { chunks, entities, entityChunks, relations } from '../../../db/schema'
+import type { Database } from '#server/db/client'
+import { chunks, entities, entityChunks, relations } from '#server/db/schema'
 import type { ParsedEntity, ParsedRelation } from './parsers/types'
 import type { CodeChunk } from './chunking/chunker'
 import type { GitHistory, GitCommit, GitAuthor } from './git/history'
-import { getLogger } from '../../../lib/logger'
+import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'indexer/persist' })
 
