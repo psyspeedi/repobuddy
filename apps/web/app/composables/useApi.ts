@@ -18,9 +18,15 @@ export function useApi() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useApiFetch<T>(request: any, opts: any = {}) {
   const { public: { apiBaseUrl } } = useRuntimeConfig()
+  // On SSR the request is made by the Nuxt server, not the browser,
+  // so the browser's session cookie isn't sent automatically. Forward
+  // the incoming Cookie header so the API sees the same session.
+  // useRequestHeaders is a no-op on the client.
+  const headers = useRequestHeaders(['cookie'])
   return useFetch<T>(request, {
     baseURL: apiBaseUrl as string,
     credentials: 'include',
     ...opts,
+    headers: { ...headers, ...(opts.headers ?? {}) },
   })
 }

@@ -21,7 +21,7 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
     super({
       clientID: env.GITHUB_CLIENT_ID,
       clientSecret: env.GITHUB_CLIENT_SECRET,
-      callbackURL: `${apiUrl}/api/auth/github/callback`,
+      callbackURL: `${apiUrl}/auth/github/callback`,
       scope: ['read:user', 'user:email', 'public_repo'],
       state: true,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

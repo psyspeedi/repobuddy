@@ -13,6 +13,8 @@ initSentry()
 // eslint-disable-next-line import/first
 import { NestFactory } from '@nestjs/core'
 // eslint-disable-next-line import/first
+import { RequestMethod } from '@nestjs/common'
+// eslint-disable-next-line import/first
 import { Logger as PinoLogger } from 'nestjs-pino'
 // eslint-disable-next-line import/first
 import cookieParser from 'cookie-parser'
@@ -21,11 +23,11 @@ import session from 'express-session'
 // eslint-disable-next-line import/first
 import { RedisStore } from 'connect-redis'
 // eslint-disable-next-line import/first
+import { createClient as createNodeRedisClient } from 'redis'
+// eslint-disable-next-line import/first
 import passport from 'passport'
 // eslint-disable-next-line import/first
 import { AppModule } from './app.module'
-// eslint-disable-next-line import/first
-import { REDIS_CLIENT, type RedisClient } from './modules/redis/redis.tokens'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true })
@@ -41,8 +43,16 @@ async function bootstrap() {
     .filter(Boolean)
   app.enableCors({ origin: origins, credentials: true })
 
-  // Share the singleton Redis from RedisModule for session storage.
-  const redis = app.get<RedisClient>(REDIS_CLIENT)
+  // connect-redis v9 only speaks the node-redis (`redis`) protocol.
+  // Our shared REDIS_CLIENT is ioredis (required by BullMQ), so we
+  // open a small dedicated node-redis connection just for sessions.
+  const sessionRedis = createNodeRedisClient({ url: process.env.REDIS_URL ?? 'redis://localhost:6379' })
+  sessionRedis.on('error', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[session-redis] error', err)
+  })
+  await sessionRedis.connect()
+
   const sessionSecret = process.env.NUXT_SESSION_PASSWORD
   if (!sessionSecret || sessionSecret.length < 32) {
     throw new Error('NUXT_SESSION_PASSWORD must be ≥32 chars (legacy name; renamed later).')
@@ -51,7 +61,7 @@ async function bootstrap() {
   app.use(cookieParser())
   app.use(
     session({
-      store: new RedisStore({ client: redis, prefix: 'repobuddy-session:' }),
+      store: new RedisStore({ client: sessionRedis, prefix: 'repobuddy-session:' }),
       secret: sessionSecret,
       name: 'repobuddy-session',
       resave: false,
@@ -69,8 +79,16 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api', {
     // SEO routes live outside the /api prefix so crawlers find them at
-    // canonical paths.
-    exclude: ['robots.txt', 'sitemap.xml', 'feed.xml', 'indexnow/:filename'],
+    // canonical paths. GitHub OAuth start + callback also stay outside
+    // /api so the GitHub App callback URL is a stable :3001/auth/github/callback.
+    exclude: [
+      'robots.txt',
+      'sitemap.xml',
+      'feed.xml',
+      'indexnow/:filename',
+      { path: 'auth/github', method: RequestMethod.GET },
+      { path: 'auth/github/callback', method: RequestMethod.GET },
+    ],
   })
 
   const port = Number(process.env.API_PORT ?? 3001)

@@ -7,7 +7,7 @@
     "#shared/*": "../../packages/shared/src/*"
   },
   "scripts": {
-    "dev": "nuxt dev",
+    "dev": "TMPDIR=/tmp nuxt dev",
     "build": "nuxt build",
     "generate": "nuxt generate",
     "preview": "nuxt preview",

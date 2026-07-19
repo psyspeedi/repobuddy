@@ -10,6 +10,8 @@ import {
 
 const { t } = useI18n()
 const { loggedIn } = useAuth()
+const { public: { apiBaseUrl } } = useRuntimeConfig()
+const githubAuthUrl = `${apiBaseUrl}/auth/github`
 
 // Each feature gets a distinct tint so the cards read as a colourful
 // grid rather than six identical boxes. Colors come from Tailwind's
@@ -86,7 +88,7 @@ useHead({
         {{ t('landing.hero.subtitle') }}
       </p>
       <div class="flex flex-wrap justify-center gap-3">
-        <a v-if="!loggedIn" href="/auth/github">
+        <a v-if="!loggedIn" :href="githubAuthUrl">
           <Button size="lg" class="shadow-lg shadow-primary/30">
             {{ t('landing.hero.cta') }}
           </Button>

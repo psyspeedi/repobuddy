@@ -25,7 +25,7 @@ export class AuthService {
 
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DrizzleDb,
-    private readonly config: TypedConfigService,
+    @Inject(TypedConfigService) private readonly config: TypedConfigService,
   ) {}
 
   async upsertUserFromGithub(

@@ -61,7 +61,8 @@ Refer to a previous step's result with "$s1", "$s2.field", "$s1[0].id".
 - For a SPECIFIC issue ("I want to work on issue #42", "issue #191", "помоги с #42") — call \`list_issues\` with \`issueNumber: 42\` (no labels). The operator returns relatedEntities + relatedChunks but for issue-resolution questions you should ALWAYS expand further — pick 2-3 top relatedEntities and run \`walkthrough\` on the entity-shaped ones (functions, classes) AND \`get_callers\` to surface who depends on each, then \`retrieve_code_chunks\` on every entity gathered (initial + walkthrough + callers). The answer step then has the issue text + its direct linked code + the callers + the walkthrough — enough to actually recommend a starting point and a fix, not just point back to GitHub.
   When relatedEntities is empty AND the issue body contains identifiers worth chasing, fall back to \`find_symbol\` / \`hybrid_search\` on those identifiers before the answer step.
 - The question may be in any language (Russian, Chinese, etc.). Extract identifiers verbatim; do not translate them.
-- Keep plans concise: 2-5 steps is usually right.`
+- Keep plans concise: 2-5 steps is usually right.
+- If a "Recent conversation" block precedes the question, treat the current question as a possible follow-up: resolve pronouns and short references ("и колеры?", "what about the callers", "и этот файл") against the prior turns BEFORE picking operators. The identifier you plan against may live in an earlier user or assistant turn, not in the current question text.`
 
 const FEW_SHOTS = [
   {
@@ -231,6 +232,13 @@ export interface PlanContext {
   workspaceName: string
   languages: string[]
   stats?: Record<string, number>
+  /**
+   * Prior conversation turns. When present, the planner sees a "Recent
+   * conversation" block before the question so it can resolve follow-up
+   * references ("и колеры?", "что насчёт тестов") against earlier turns
+   * instead of planning blindly off a fragment.
+   */
+  history?: { role: 'user' | 'assistant' | 'system' | 'tool'; content: string }[]
 }
 
 export async function planQuestion(
@@ -309,10 +317,32 @@ function renderUserMessage(question: string, ctx: PlanContext): string {
     `Languages: ${ctx.languages.join(', ') || 'unknown'}`,
     stats,
     '',
+    renderHistoryBlock(ctx.history),
     `Question: ${question}`,
     '',
     'Produce the plan JSON.',
   ]
     .filter(Boolean)
     .join('\n')
+}
+
+const HISTORY_TURN_LIMIT = 6
+const HISTORY_PREVIEW_CHARS = 600
+
+function renderHistoryBlock(
+  history: PlanContext['history'],
+): string {
+  if (!history?.length) return ''
+  const relevant = history
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .slice(-HISTORY_TURN_LIMIT)
+  if (!relevant.length) return ''
+  const lines = relevant.map((m) => {
+    const text =
+      m.content.length > HISTORY_PREVIEW_CHARS
+        ? `${m.content.slice(0, HISTORY_PREVIEW_CHARS)}…`
+        : m.content
+    return `[${m.role}] ${text}`
+  })
+  return ['Recent conversation (oldest first):', ...lines, ''].join('\n')
 }

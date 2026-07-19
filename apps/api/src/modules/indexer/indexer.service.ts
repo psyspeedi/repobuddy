@@ -25,7 +25,7 @@ interface IndexJobResult {
 export class IndexerService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DrizzleDb,
-    private readonly providers: ProviderResolverService,
+    @Inject(ProviderResolverService) private readonly providers: ProviderResolverService,
   ) {}
 
   async run(job: Job<IndexJobData, IndexJobResult>): Promise<IndexJobResult> {

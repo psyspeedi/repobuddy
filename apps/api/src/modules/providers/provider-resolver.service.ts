@@ -17,7 +17,7 @@ import type { User } from '#server/db/schema'
 export class ProviderResolverService {
   constructor(
     @Inject(DRIZZLE_DB) private readonly db: DrizzleDb,
-    private readonly config: TypedConfigService,
+    @Inject(TypedConfigService) private readonly config: TypedConfigService,
   ) {}
 
   /** Resolve by user id; falls back to server defaults when id is null. */

@@ -330,6 +330,7 @@ export class ChatService {
           workspaceName: ws.name,
           languages: ws.languages,
           stats: ws.stats as Record<string, number>,
+          history: priorHistory,
         })
         emit('plan', plan)
         savedPlan = plan

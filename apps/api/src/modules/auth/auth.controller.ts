@@ -28,7 +28,17 @@ export class AuthController {
   /** GitHub OAuth callback — passport hydrates req.user; we redirect to the SPA. */
   @Get('github/callback')
   @UseGuards(AuthGuard('github'))
-  callback(@Res() res: Response): void {
+  async callback(@Req() req: Request, @Res() res: Response): Promise<void> {
+    // @nestjs/passport's AuthGuard fills req.user but does NOT call
+    // req.login() — we have to do that ourselves to persist the user id
+    // into req.session.passport. Then save the session explicitly so
+    // the redirect doesn't race the async Redis write.
+    await new Promise<void>((resolve, reject) => {
+      req.logIn(req.user as Express.User, (err) => (err ? reject(err) : resolve()))
+    })
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()))
+    })
     res.redirect(`${this.config.get('APP_URL')}/`)
   }
 

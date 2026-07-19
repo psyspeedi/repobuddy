@@ -4,6 +4,8 @@ definePageMeta({ layout: 'default', auth: false })
 
 const { t } = useI18n()
 const route = useRoute()
+const { public: { apiBaseUrl } } = useRuntimeConfig()
+const githubAuthUrl = `${apiBaseUrl}/auth/github`
 const errorMessage = computed(() => {
   if (route.query.error === 'github_auth_failed') {
     return t('login.errorGithub')
@@ -32,7 +34,7 @@ useHead({ title: () => `${t('login.title')} — RepoBuddy` })
       {{ errorMessage }}
     </p>
 
-    <a href="/auth/github" class="w-full">
+    <a :href="githubAuthUrl" class="w-full">
       <Button class="w-full" size="lg">
         {{ t('login.button') }}
       </Button>
