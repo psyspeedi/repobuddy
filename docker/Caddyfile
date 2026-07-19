@@ -1,14 +1,21 @@
 {$APP_DOMAIN} {
     encode gzip zstd
 
-    # SSE / streaming: disable buffering for /api/* event-stream endpoints
-    @sse {
-        path /api/*
-        header Accept text/event-stream
-    }
-    reverse_proxy @sse app:3000 {
+    # Same-origin layout: browser talks to one domain, Caddy splits
+    # traffic between the Nuxt SSR server (web:3000) and the NestJS API
+    # (api:3001). Set NUXT_PUBLIC_API_BASE_URL / API_URL / APP_URL to the
+    # same https://{$APP_DOMAIN} — no CORS, one session cookie.
+    #
+    # API-owned paths outside the /api prefix:
+    #   /auth/github*  — OAuth start + callback (stable URL for the GitHub app)
+    #   robots/sitemap/feed/indexnow — SEO routes served at canonical paths
+    @api path /api/* /auth/github* /robots.txt /sitemap.xml /feed.xml /indexnow/*
+
+    # flush_interval -1 disables buffering so the two SSE streams
+    # (chat, index progress) deliver events as they happen.
+    reverse_proxy @api api:3001 {
         flush_interval -1
     }
 
-    reverse_proxy app:3000
+    reverse_proxy web:3000
 }

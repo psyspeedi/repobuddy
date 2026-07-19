@@ -88,6 +88,9 @@ const EnvSchema = z
     TELEGRAM_BOT_TOKEN: optionalString(),
     TELEGRAM_CHAT_ID: optionalString(),
 
+    /** Bearer token for /api/metrics. Unset ⇒ endpoint is 404 in production. */
+    METRICS_TOKEN: optionalString(),
+
     COST_BUDGET_USD_PER_DAY: z.coerce.number().nonnegative().default(3),
   })
   .refine(
