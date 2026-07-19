@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { resolveProvidersByUserId, resolveProvidersForUser, type ResolvedProviders } from '#server/providers/resolve'
+import { resolveProvidersByUserId, resolveProvidersForUser, type ResolvedProviders, type ResolveOpts } from '#server/providers/resolve'
 import { createLLMProvider, type LLMProvider } from '#server/providers/llm'
 import { createEmbeddingsProvider, type EmbeddingsProvider } from '#server/providers/embeddings'
 import { DRIZZLE_DB, type DrizzleDb } from '../drizzle/drizzle.tokens'
@@ -23,7 +23,7 @@ export class ProviderResolverService {
   /** Resolve by user id; falls back to server defaults when id is null. */
   async resolveForUserId(
     userId: string | null,
-    opts: { llmModel?: string } = {},
+    opts: ResolveOpts = {},
   ): Promise<ResolvedProviders> {
     return resolveProvidersByUserId(this.db, userId, opts)
   }
@@ -31,7 +31,7 @@ export class ProviderResolverService {
   /** Resolve from a hydrated user row (skip the extra SELECT). */
   async resolveForUser(
     user: Pick<User, 'id' | 'byokBaseUrl' | 'byokModel' | 'byokEmbeddingModel' | 'encryptedByokApiKey'> | null,
-    opts: { llmModel?: string } = {},
+    opts: ResolveOpts = {},
   ): Promise<ResolvedProviders> {
     return resolveProvidersForUser(this.db, user, opts)
   }

@@ -30,6 +30,14 @@ Be conservative — empty arrays for concepts/patterns are fine when nothing cle
 export interface AnnotateOptions {
   /** Hard cap on number of entities to annotate (to control cost). */
   maxEntities?: number
+  /**
+   * Hard USD cap for this annotation run (LLM_BUDGET_USD_PER_INDEX).
+   * Estimated the same way recordCost does (prompt chars / 4 input,
+   * ~200 output tokens). When the running estimate crosses the cap,
+   * remaining entities are skipped — the index stays usable, just with
+   * fewer descriptions.
+   */
+  budgetUsd?: number
 }
 
 /**
@@ -47,7 +55,12 @@ export async function annotateAndEmbed(
   embeddings: EmbeddingsProvider,
   options: AnnotateOptions = {},
   onProgress?: (done: number, total: number) => void,
-): Promise<{ annotated: number; conceptsCreated: number; patternsCreated: number }> {
+): Promise<{
+  annotated: number
+  conceptsCreated: number
+  patternsCreated: number
+  budgetExhausted: boolean
+}> {
   const candidates = await db
     .select()
     .from(entities)
@@ -75,6 +88,10 @@ export async function annotateAndEmbed(
   let annotated = 0
   let conceptsCreated = 0
   let patternsCreated = 0
+  let spentCents = 0
+  let budgetExhausted = false
+  const budgetCents =
+    options.budgetUsd && options.budgetUsd > 0 ? options.budgetUsd * 100 : null
   // Parallelism cap: gpt-4o-mini sustains many concurrent requests, but we
   // also write to the DB on each completion. 8 is a safe default that cuts
   // a 500-entity run from ~15 min to ~2 min without tripping rate limits.
@@ -83,6 +100,16 @@ export async function annotateAndEmbed(
 
   const worker = async (): Promise<void> => {
     while (true) {
+      if (budgetCents !== null && spentCents >= budgetCents) {
+        if (!budgetExhausted) {
+          budgetExhausted = true
+          log.warn(
+            { workspaceId, spentCents, budgetCents, done: annotated, total: subset.length },
+            'per-index LLM budget exhausted — skipping remaining annotations',
+          )
+        }
+        return
+      }
       const i = cursor++
       if (i >= subset.length) return
       const entity = subset[i]
@@ -117,6 +144,9 @@ export async function annotateAndEmbed(
         // estimate input from the prompt size. Output is bounded by the
         // schema — ~200 tokens upper bound for our SemanticAnnotation.
         const promptChars = SYSTEM_PROMPT.length + userContent.length
+        spentCents +=
+          Math.ceil((Math.ceil(promptChars / 4) * (llm.costCentsPer1MInputTokens ?? 0)) / 1_000_000) +
+          Math.ceil((200 * (llm.costCentsPer1MOutputTokens ?? 0)) / 1_000_000)
         await recordCost(db, {
           workspaceId,
           phase: 'annotation',
@@ -190,7 +220,7 @@ export async function annotateAndEmbed(
   // Phase 4.2: embed descriptions.
   await embedEntityDescriptions(db, workspaceId, embeddings)
 
-  return { annotated, conceptsCreated, patternsCreated }
+  return { annotated, conceptsCreated, patternsCreated, budgetExhausted }
 }
 
 function readAuthorDocs(entity: typeof entities.$inferSelect): string | null {

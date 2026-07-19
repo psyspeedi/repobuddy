@@ -25,12 +25,29 @@ export interface ResolvedProviders {
   usesByok: boolean
 }
 
+export interface ResolveOpts {
+  llmModel?: string
+  /**
+   * Which server-default model family to use when no explicit model is
+   * given: 'planning' (gpt-4o class — chat planning/answers) or
+   * 'extraction' (gpt-4o-mini class — bulk annotation during indexing,
+   * ~16x cheaper). BYOK users' own model choice always wins.
+   */
+  tier?: 'planning' | 'extraction'
+}
+
 export async function resolveProvidersForUser(
   db: Database,
   user: Pick<User, 'id' | 'byokBaseUrl' | 'byokModel' | 'byokEmbeddingModel' | 'encryptedByokApiKey'> | null,
-  opts: { llmModel?: string } = {},
+  opts: ResolveOpts = {},
 ): Promise<ResolvedProviders> {
   const env = loadEnv()
+
+  const serverModel =
+    opts.llmModel ??
+    (opts.tier === 'extraction'
+      ? env.LLM_MODEL_EXTRACTION ?? env.OPENAI_MODEL_EXTRACTION
+      : env.LLM_MODEL_PLANNING ?? env.OPENAI_MODEL_PLANNING)
 
   // Try BYOK first when the user row says it has one.
   if (user?.encryptedByokApiKey) {
@@ -39,7 +56,7 @@ export async function resolveProvidersForUser(
       const llm = createLLMProvider({
         apiKey,
         baseURL: user.byokBaseUrl ?? undefined,
-        model: user.byokModel ?? opts.llmModel ?? env.LLM_MODEL_PLANNING ?? env.OPENAI_MODEL_PLANNING,
+        model: user.byokModel ?? serverModel,
       })
       const embeddings = createEmbeddingsProvider({
         apiKey,
@@ -57,9 +74,7 @@ export async function resolveProvidersForUser(
     }
   }
 
-  const llm = createLLMProvider({
-    model: opts.llmModel ?? env.LLM_MODEL_PLANNING ?? env.OPENAI_MODEL_PLANNING,
-  })
+  const llm = createLLMProvider({ model: serverModel })
   const embeddings = createEmbeddingsProvider({
     model: env.EMBEDDING_MODEL ?? env.OPENAI_EMBEDDING_MODEL,
   })
@@ -70,7 +85,7 @@ export async function resolveProvidersForUser(
 export async function resolveProvidersByUserId(
   db: Database,
   userId: string | null,
-  opts: { llmModel?: string } = {},
+  opts: ResolveOpts = {},
 ): Promise<ResolvedProviders> {
   if (!userId) return resolveProvidersForUser(db, null, opts)
   const [row] = await db

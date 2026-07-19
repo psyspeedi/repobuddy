@@ -50,6 +50,8 @@ export interface DiscoveredFile {
 export interface WalkResult {
   files: DiscoveredFile[]
   languages: Language[]
+  /** True when the walk stopped at maxFiles — the index covers only a prefix of the repo. */
+  truncated: boolean
 }
 
 /**
@@ -67,7 +69,7 @@ export async function walkRepo(
   await walk(workdir, workdir, rootIgnore, files, maxFiles)
 
   const languages = summariseLanguages(files.map((f) => f.language))
-  return { files, languages }
+  return { files, languages, truncated: files.length >= maxFiles }
 }
 
 async function loadIgnore(dir: string): Promise<Ignore> {

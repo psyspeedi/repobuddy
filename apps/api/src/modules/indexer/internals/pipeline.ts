@@ -1,5 +1,7 @@
 import type { Job } from 'bullmq'
 import { readFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { eq, sql } from 'drizzle-orm'
 import type { Database } from '#server/db/client'
 import { entities as entitiesTable, workspaces } from '#server/db/schema'
@@ -46,6 +48,19 @@ import type {
 
 const log = getLogger().child({ component: 'indexer/pipeline' })
 
+const execFileAsync = promisify(execFile)
+
+/** On-disk size of a directory in MB via `du -sk` (git objects included). 0 on failure. */
+async function dirSizeMb(dir: string): Promise<number> {
+  try {
+    const { stdout } = await execFileAsync('du', ['-sk', dir])
+    const kb = Number(stdout.trim().split(/\s+/)[0])
+    return Number.isFinite(kb) ? kb / 1024 : 0
+  } catch {
+    return 0
+  }
+}
+
 export interface PipelineDeps {
   embeddings?: EmbeddingsProvider
   llm?: LLMProvider
@@ -53,6 +68,12 @@ export interface PipelineDeps {
   skipAnnotation?: boolean
   /** Hard cap on annotated entities (forwarded to annotateAndEmbed). */
   maxAnnotated?: number
+  /** Hard USD cap for the annotation phase (LLM_BUDGET_USD_PER_INDEX). */
+  annotationBudgetUsd?: number
+  /** Walk cap (MAX_FILES_PER_INDEX). Defaults to 2000 inside walkRepo. */
+  maxFiles?: number
+  /** Reject repos whose on-disk clone exceeds this size (MAX_REPO_SIZE_MB). */
+  maxRepoSizeMb?: number
 }
 
 export async function runIndexPipeline(
@@ -90,6 +111,15 @@ export async function runIndexPipeline(
         )
       }
 
+      if (deps.maxRepoSizeMb) {
+        const sizeMb = await dirSizeMb(source.workdir)
+        if (sizeMb > deps.maxRepoSizeMb) {
+          throw new Error(
+            `Repository too large: ~${Math.round(sizeMb)} MB on disk (incl. git history) exceeds the ${deps.maxRepoSizeMb} MB limit`,
+          )
+        }
+      }
+
       // Persist HEAD info.
       if (source.headSha) {
         await db
@@ -107,7 +137,7 @@ export async function runIndexPipeline(
         percent: 20,
         message: 'Walking files…',
       })
-      const walked = await walkRepo(source.workdir)
+      const walked = await walkRepo(source.workdir, { maxFiles: deps.maxFiles })
       await db
         .update(workspaces)
         .set({ languages: walked.languages })
@@ -127,6 +157,12 @@ export async function runIndexPipeline(
       const allRelations: ParsedRelation[] = []
       const allChunks: CodeChunk[] = []
       const warnings: string[] = []
+
+      if (walked.truncated) {
+        warnings.push(
+          `File cap reached (${walked.files.length} files): the index covers only part of the repository`,
+        )
+      }
 
       const parsable = walked.files.filter(
         (f) => f.language !== null && f.sizeBytes > 0,
@@ -331,7 +367,12 @@ export async function runIndexPipeline(
       )
 
       // 9c. LLM semantic annotation (phase 4).
-      let annotationStats = { annotated: 0, conceptsCreated: 0, patternsCreated: 0 }
+      let annotationStats = {
+        annotated: 0,
+        conceptsCreated: 0,
+        patternsCreated: 0,
+        budgetExhausted: false,
+      }
       let resolutionStats = { merged: 0, flagged: 0 }
       if (!deps.skipAnnotation && deps.llm) {
         await setWorkspaceProgress(db, workspaceId, {
@@ -347,7 +388,7 @@ export async function runIndexPipeline(
           workspaceId,
           deps.llm,
           embeddings,
-          { maxEntities: deps.maxAnnotated },
+          { maxEntities: deps.maxAnnotated, budgetUsd: deps.annotationBudgetUsd },
           async (done, total) => {
             const now = Date.now()
             if (done < total && now - lastProgressWrite < 1000 && done % 5 !== 0) {
@@ -431,6 +472,8 @@ export async function runIndexPipeline(
         mergedDuplicates: resolutionStats.merged,
         flaggedDuplicates: resolutionStats.flagged,
         tokensSpent: 0,
+        filesTruncated: walked.truncated ? 1 : 0,
+        annotationBudgetHit: annotationStats.budgetExhausted ? 1 : 0,
       })
 
       // 11a'. Fetch + persist recent merged PRs as pull_request entities
