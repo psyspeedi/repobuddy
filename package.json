@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "description": "RepoBuddy — AI assistant for understanding codebases via knowledge graphs (KAG)",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=22.0.0",
