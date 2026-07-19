@@ -49,6 +49,13 @@ const EnvSchema = z
 
     GITHUB_CLIENT_ID: z.string().min(1, 'GITHUB_CLIENT_ID required'),
     GITHUB_CLIENT_SECRET: z.string().min(1, 'GITHUB_CLIENT_SECRET required'),
+    /**
+     * Optional personal access token for GitHub API reads (issues, PRs,
+     * find_resolution, PR-history indexing). Raises the rate limit from
+     * 60 req/h (anonymous, per IP) to 5000 req/h. Read-only public
+     * scope is enough.
+     */
+    GITHUB_TOKEN: optionalString(),
     NUXT_SESSION_PASSWORD: z
       .string()
       .min(32, 'NUXT_SESSION_PASSWORD must be at least 32 chars'),

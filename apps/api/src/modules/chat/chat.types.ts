@@ -5,7 +5,6 @@ export const ChatBodySchema = z.object({
   workspaceId: z.string().uuid(),
   locale: z.enum(['en', 'ru']).optional(),
   mode: z.enum(['planned', 'agentic']).optional().default('planned'),
-  selfCritique: z.boolean().optional().default(false),
   focus: z
     .object({
       entityIds: z.array(z.string().uuid()).max(15).optional(),

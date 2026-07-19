@@ -1,9 +1,10 @@
 import { DRIZZLE_DB, type DrizzleDb } from '#modules/drizzle/drizzle.tokens'
 import type { Database } from '#server/db/client'
 import { Inject, Injectable } from '@nestjs/common'
-import { Octokit } from '@octokit/rest'
+import type { Octokit } from '@octokit/rest'
 import { sql } from 'drizzle-orm'
 import { entities } from '#server/db/schema'
+import { createOctokit } from '#server/lib/github'
 import type { KagOperator } from './_interface'
 import {
   excerptIssueBody,
@@ -42,7 +43,8 @@ const KAG_GH_URL_RE = /github\.com\/([^/]+)\/([^/.]+)/
  * body excerpt + the matched code entities + their chunks so the
  * model can ground its answer in real source.
  *
- * Anonymous Octokit (60 req/h per IP).
+ * Octokit via createOctokit() — anonymous (60 req/h per IP) unless
+ * GITHUB_TOKEN is set (5000 req/h).
  */
 export interface ListIssuesParams {
   /** Optional label filter. Defaults to a broad open-issue scan. */
@@ -94,7 +96,7 @@ export async function listIssues(
     ? params.labels.join(',')
     : undefined
 
-  const octokit = new Octokit()
+  const octokit = createOctokit()
   let rawIssues: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>['data']
   try {
     if (params.issueNumber) {
@@ -185,162 +187,7 @@ export async function listIssues(
   return { issues: finalIssues, relatedChunks }
 }
 
-// ---------- list_prs ----------
-/**
- * Open / merged GitHub pull requests from the workspace repo. Same
- * Octokit-anonymous budget as list_issues. Lives outside the graph
- * (no schema for PR entities yet) — fetched on demand.
- */
-export interface ListPrsParams {
-  state?: 'open' | 'closed' | 'all'
-  labels?: string[]
-  limit?: number
-  prNumber?: number
-}
-
-export interface PrResult {
-  number: number
-  title: string
-  url: string
-  state: 'open' | 'closed'
-  merged: boolean
-  mergedAt: string | null
-  author: string | null
-  bodyExcerpt: string
-  labels: string[]
-  /** Issue numbers the PR body references via `fixes #N` / `closes #N`. */
-  referencedIssues: number[]
-  updatedAt: string
-}
-
-export interface PrsEnvelope {
-  prs: PrResult[]
-  reason?: 'no_source_url' | 'not_github' | 'rate_limited' | 'repo_not_found' | 'fetch_failed'
-}
-
-const FIX_REF_RE = /(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s+#(\d{1,7})/gi
-
-export async function listPrs(
-  params: ListPrsParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<PrsEnvelope> {
-  const sourceUrl = ctx.workspace?.sourceUrl ?? null
-  if (!sourceUrl) return { prs: [], reason: 'no_source_url' }
-  const match = sourceUrl.match(KAG_GH_URL_RE)
-  if (!match) return { prs: [], reason: 'not_github' }
-  const owner = match[1] as string
-  const repo = match[2] as string
-  const limit = Math.min(Math.max(params.limit ?? 15, 1), 30)
-
-  const octokit = new Octokit()
-  try {
-    if (params.prNumber) {
-      const single = await octokit.rest.pulls.get({
-        owner,
-        repo,
-        pull_number: params.prNumber,
-      })
-      return { prs: [normalisePr(single.data)] }
-    }
-    const res = await octokit.rest.pulls.list({
-      owner,
-      repo,
-      state: params.state ?? 'all',
-      per_page: limit,
-      sort: 'updated',
-      direction: 'desc',
-    })
-    return { prs: res.data.map(normalisePr) }
-  } catch (err) {
-    const status = (err as { status?: number }).status ?? 0
-    return {
-      prs: [],
-      reason: status === 403 ? 'rate_limited' : status === 404 ? 'repo_not_found' : 'fetch_failed',
-    }
-  }
-}
-
-function normalisePr(p: Record<string, unknown>): PrResult {
-  const body = typeof p.body === 'string' ? p.body : ''
-  const refs = new Set<number>()
-  for (const m of body.matchAll(FIX_REF_RE)) {
-    const n = Number(m[1])
-    if (Number.isFinite(n)) refs.add(n)
-  }
-  const labels = Array.isArray(p.labels)
-    ? p.labels.map((l: unknown) => (typeof l === 'string' ? l : (l as { name?: string }).name ?? '')).filter(Boolean)
-    : []
-  return {
-    number: p.number as number,
-    title: p.title as string,
-    url: p.html_url as string,
-    state: p.state as 'open' | 'closed',
-    merged: Boolean(p.merged_at),
-    mergedAt: (p.merged_at as string | null) ?? null,
-    author: ((p.user as { login?: string } | null)?.login) ?? null,
-    bodyExcerpt: excerptIssueBody(body),
-    labels,
-    referencedIssues: [...refs],
-    updatedAt: p.updated_at as string,
-  }
-}
-
-// ---------- find_prs_for_issue ----------
-/**
- * Graph query: PRs whose metadata.referencedIssues contains the given
- * issue number. Returns persisted pull_request entities so the answer
- * can ground "how was this issue fixed" in concrete merged PRs.
- */
-export interface FindPrsForIssueParams {
-  issueNumber: number
-  limit?: number
-}
-
-export interface PrSummary {
-  id: string
-  number: number
-  title: string
-  url: string | null
-  mergedAt: string | null
-  author: string | null
-  bodyExcerpt: string | null
-}
-
-export async function findPrsForIssue(
-  params: FindPrsForIssueParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<PrSummary[]> {
-  if (!Number.isFinite(params.issueNumber) || params.issueNumber < 1) return []
-  const limit = Math.min(Math.max(params.limit ?? 10, 1), 30)
-  const rows = await db.execute<{
-    id: string
-    metadata: Record<string, unknown> | null
-  }>(sql`
-    SELECT id, metadata
-    FROM ${entities}
-    WHERE workspace_id = ${ctx.workspaceId}
-      AND type = 'pull_request'
-      AND metadata -> 'referencedIssues' @> ${JSON.stringify([params.issueNumber])}::jsonb
-    ORDER BY (metadata ->> 'mergedAt') DESC NULLS LAST
-    LIMIT ${limit}
-  `)
-  return rows.map((r) => {
-    const meta = (r.metadata ?? {}) as Record<string, unknown>
-    return {
-      id: r.id,
-      number: (meta.number as number | undefined) ?? 0,
-      title: (meta.title as string | undefined) ?? '',
-      url: (meta.url as string | null | undefined) ?? null,
-      mergedAt: (meta.mergedAt as string | null | undefined) ?? null,
-      author: (meta.author as string | null | undefined) ?? null,
-      bodyExcerpt: (meta.bodyExcerpt as string | null | undefined) ?? null,
-    }
-  })
-}
-
-// ---------- find_similar_issues ----------
+// ---------- similar-issue lookup (internal) ----------
 /**
  * In-memory TTL cache for issue embeddings. Keyed by workspace ID;
  * value carries the issue snapshot (list + each issue's pre-computed
@@ -358,14 +205,14 @@ interface IssueEmbeddingCacheEntry {
 const ISSUE_EMBED_CACHE = new Map<string, IssueEmbeddingCacheEntry>()
 const ISSUE_EMBED_TTL_MS = 30 * 60 * 1000
 
-export interface FindSimilarIssuesParams {
+interface FindSimilarIssuesParams {
   issueNumber?: number
   query?: string
   /** Max results. Default 5, max 10. */
   limit?: number
 }
 
-export interface SimilarIssueResult {
+interface SimilarIssueResult {
   number: number
   title: string
   url: string
@@ -375,7 +222,12 @@ export interface SimilarIssueResult {
   labels: string[]
 }
 
-export async function findSimilarIssues(
+/**
+ * Embedding-cosine similarity over recent issues. Used to be a public
+ * operator — now internal, feeding find_resolution's channel 3
+ * (duplicate / related detection) only.
+ */
+async function findSimilarIssues(
   params: FindSimilarIssuesParams,
   ctx: OperatorContext,
   db: Database,
@@ -387,7 +239,7 @@ export async function findSimilarIssues(
   const owner = match[1] as string
   const repo = match[2] as string
   const limit = Math.min(Math.max(params.limit ?? 5, 1), 10)
-  const octokit = new Octokit()
+  const octokit = createOctokit()
 
   // 1. Resolve target text.
   let targetText: string
@@ -564,7 +416,7 @@ export async function findResolution(
   const mergedByCommits: ResolutionCommit[] = [...commitRows]
 
   // Channel 2 — live GitHub search for any PRs mentioning #N.
-  const octokit = new Octokit()
+  const octokit = createOctokit()
   const refRe = FIX_REF_RE_FOR(n)
   const linkedPullRequests: ResolutionPr[] = []
   try {
@@ -744,27 +596,6 @@ export class ListIssuesOperator implements KagOperator<ListIssuesParams, IssuesE
   readonly name = 'list_issues' as const
   constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
   execute(p: ListIssuesParams, c: OperatorContext) { return listIssues(p, c, this.db) }
-}
-
-@Injectable()
-export class ListPrsOperator implements KagOperator<ListPrsParams, PrsEnvelope> {
-  readonly name = 'list_prs' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: ListPrsParams, c: OperatorContext) { return listPrs(p, c, this.db) }
-}
-
-@Injectable()
-export class FindPrsForIssueOperator implements KagOperator<FindPrsForIssueParams, PrSummary[]> {
-  readonly name = 'find_prs_for_issue' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: FindPrsForIssueParams, c: OperatorContext) { return findPrsForIssue(p, c, this.db) }
-}
-
-@Injectable()
-export class FindSimilarIssuesOperator implements KagOperator<FindSimilarIssuesParams> {
-  readonly name = 'find_similar_issues' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: FindSimilarIssuesParams, c: OperatorContext) { return findSimilarIssues(p, c, this.db) }
 }
 
 @Injectable()

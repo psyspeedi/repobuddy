@@ -478,7 +478,8 @@ export async function runIndexPipeline(
 
       // 11a'. Fetch + persist recent merged PRs as pull_request entities
       // with metadata.referencedIssues parsed from "fixes #N" patterns.
-      // Powers find_prs_for_issue without hitting GitHub per question.
+      // Keeps issue→fix-PR linkage queryable without hitting GitHub
+      // per question.
       try {
         const prResult = await indexPullRequests(db, workspaceId, ws.sourceUrl)
         log.info({ workspaceId, ...prResult }, 'pr-history indexed')

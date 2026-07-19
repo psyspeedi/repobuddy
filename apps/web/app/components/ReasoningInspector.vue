@@ -65,32 +65,19 @@ const agenticByIteration = computed<{ iteration: number; steps: AgenticStep[] }[
 // work happened (search vs traversal vs git vs answer-grounding).
 const OP_FAMILY: Record<string, string> = {
   find_symbol: 'lookup',
-  find_file: 'lookup',
   get_project_overview: 'lookup',
-  list_concepts: 'lookup',
   get_callers: 'traversal',
   get_callees: 'traversal',
-  get_dependencies: 'traversal',
-  get_dependents: 'traversal',
-  find_implementations: 'traversal',
   walkthrough: 'traversal',
   hybrid_search: 'search',
-  vector_search_chunks: 'search',
   search_docs: 'search',
-  find_by_concept: 'search',
   retrieve_code_chunks: 'retrieve',
   get_summary: 'retrieve',
   read_file: 'retrieve',
   tests_for: 'analysis',
   list_issues: 'external',
-  list_prs: 'external',
-  find_similar_issues: 'external',
-  find_prs_for_issue: 'external',
   find_resolution: 'external',
   git_history: 'external',
-  web_search: 'research',
-  web_fetch: 'research',
-  propose_edit: 'edit',
 }
 const FAMILY_TINT: Record<string, string> = {
   lookup: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 ring-sky-500/30',
@@ -99,8 +86,6 @@ const FAMILY_TINT: Record<string, string> = {
   retrieve: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-emerald-500/30',
   analysis: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 ring-cyan-500/30',
   external: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 ring-rose-500/30',
-  research: 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300 ring-fuchsia-500/30',
-  edit: 'bg-orange-500/15 text-orange-700 dark:text-orange-300 ring-orange-500/30',
   other: 'bg-muted text-muted-foreground ring-border',
 }
 function opTint(op: string): string {

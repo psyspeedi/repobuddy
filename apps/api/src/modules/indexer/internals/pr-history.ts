@@ -2,19 +2,19 @@
  * Indexer step: pull recent merged GitHub pull requests for the
  * workspace's source repo and persist them as `pull_request` entities.
  *
- * Why persist (vs the live list_prs operator): once issues are linked
- * to fixing PRs via metadata.referencedIssues, the chat can answer
+ * Why persist (vs live GitHub queries): once issues are linked to
+ * fixing PRs via metadata.referencedIssues, the chat can answer
  * "how was a similar issue fixed before" by graph query — no GitHub
- * round-trip per question. Survives rate-limit windows. Powers the
- * find_prs_for_issue operator.
+ * round-trip per question. Survives rate-limit windows.
  *
- * Scope: up to 200 most recently updated merged PRs. Anonymous
- * Octokit (60 req/h per IP) — that's 2 paginated calls (per_page=100).
- * No diff fetching (would be 200 extra calls) — body excerpt only.
+ * Scope: up to 200 most recently updated merged PRs — that's 2
+ * paginated calls (per_page=100) via createOctokit() (60 req/h
+ * anonymous, 5000 req/h with GITHUB_TOKEN). No diff fetching (would
+ * be 200 extra calls) — body excerpt only.
  */
-import { Octokit } from '@octokit/rest'
 import type { Database } from '#server/db/client'
 import { entities } from '#server/db/schema'
+import { createOctokit } from '#server/lib/github'
 import { getLogger } from '#server/lib/logger'
 
 const log = getLogger().child({ component: 'indexer/pr-history' })
@@ -38,7 +38,7 @@ export async function indexPullRequests(
   // CONFLICT DO NOTHING below makes the upsert safe. To pick up
   // changed PR metadata we'd need DO UPDATE — deferred.
 
-  const octokit = new Octokit()
+  const octokit = createOctokit()
   const all: Awaited<ReturnType<typeof octokit.rest.pulls.list>>['data'] = []
   for (const page of [1, 2]) {
     try {

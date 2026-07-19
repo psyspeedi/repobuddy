@@ -14,6 +14,12 @@ export interface TraceEntry {
   durationMs: number
   summary?: string
   error?: string
+  /**
+   * Structured envelope for the small set of operators whose UI
+   * renders the result directly (find_resolution → resolution banner).
+   * The executor only attaches it for whitelisted ops.
+   */
+  result?: unknown
 }
 
 /**
@@ -44,18 +50,24 @@ export interface AgenticTrace {
 export type AnyTrace = TraceEntry[] | AgenticTrace
 
 /**
- * Pull the most recent find_resolution envelope out of an agentic
- * trace. Returns null if the trace isn't agentic, has no resolution
- * step, or the step's status is "none" (nothing to surface). Used by
- * the chat page to feed ChatMessage's banner without each message
- * having to know about trace shape.
+ * Pull the most recent find_resolution envelope out of a trace —
+ * agentic ({ mode, steps } with `name`) or planned (TraceEntry[] with
+ * `op`; the executor attaches `result` for whitelisted ops). Returns
+ * null if there's no resolution step or its status is "none" (nothing
+ * to surface). Used by the chat page to feed ChatMessage's banner
+ * without each message having to know about trace shape.
  */
 export function extractResolution(trace: AnyTrace | undefined): ResolutionEnvelope | null {
-  if (!trace || !('mode' in trace) || trace.mode !== 'agentic') return null
+  if (!trace) return null
+  const steps: { name: string; result?: unknown }[] = Array.isArray(trace)
+    ? trace.map((t) => ({ name: t.op, result: t.result }))
+    : trace.mode === 'agentic'
+      ? trace.steps
+      : []
   // Iterate newest-first so a second find_resolution call (rare but
-  // possible if the LLM checks two issues in one turn) takes priority.
-  for (let i = trace.steps.length - 1; i >= 0; i--) {
-    const step = trace.steps[i]
+  // possible if two issues are checked in one turn) takes priority.
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i]
     if (!step || step.name !== 'find_resolution' || !step.result) continue
     const env = step.result as ResolutionEnvelope
     if (env.status && env.status !== 'none') return env
@@ -299,10 +311,12 @@ export function useChat(workspaceId: string) {
       } catch { /* malformed */ }
     } else if (event === 'tool_step') {
       // Agentic mode streams tool_step events one at a time as the LLM
-      // dispatches them. We accumulate into a live AgenticTrace so the
-      // Reasoning Inspector can render the unfolding sequence in real
-      // time (the final 'trace' event will overwrite this with the
-      // canonical snapshot, but the live stream is the more useful UX).
+      // dispatches them; planned mode emits them too for surfaced ops
+      // (find_resolution → banner). We accumulate into a live
+      // AgenticTrace so the Reasoning Inspector can render the
+      // unfolding sequence in real time (the final 'trace' event will
+      // overwrite this with the canonical snapshot, but the live
+      // stream is the more useful UX).
       try {
         const step = JSON.parse(data) as AgenticStep
         if (!last.trace || !('mode' in last.trace) || last.trace.mode !== 'agentic') {

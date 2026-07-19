@@ -1,5 +1,4 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common'
-import { Octokit } from '@octokit/rest'
 import { and, desc, eq, ilike, inArray, isNotNull, ne, not, or, sql } from 'drizzle-orm'
 import { chunks, entities, entityChunks, relations, workspaces } from '#server/db/schema'
 import {
@@ -8,6 +7,7 @@ import {
   lookupEntitiesByRefs,
   type LinkedEntity,
 } from '#server/lib/github-issue-linking'
+import { createOctokit } from '#server/lib/github'
 import { getProjectOverview } from '#server/lib/project-overview'
 import { DRIZZLE_DB, type DrizzleDb } from '../drizzle/drizzle.tokens'
 
@@ -678,7 +678,7 @@ export class WorkspacesQueryService {
     const owner = match[1] as string
     const repo = match[2] as string
 
-    const octokit = new Octokit()
+    const octokit = createOctokit()
     let raw: Awaited<ReturnType<typeof octokit.rest.issues.listForRepo>>['data']
     try {
       const res = await octokit.rest.issues.listForRepo({

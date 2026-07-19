@@ -9,7 +9,7 @@ import { ExecutorService } from './executor.service'
 import { PlannerService } from './planner.service'
 
 /**
- * Knowledge-Augmented Graph domain. Each of the ~28 operators is an
+ * Knowledge-Augmented Graph domain. Each of the 15 operators is an
  * @Injectable class that implements KagOperator; KagOperatorsRegistry
  * collects them and exposes a `Record<OperatorName, fn>` map matching
  * the legacy dispatch shape, which ExecutorService / AgenticService

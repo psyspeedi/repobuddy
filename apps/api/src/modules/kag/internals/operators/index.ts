@@ -11,85 +11,46 @@ import { DRIZZLE_DB, type DrizzleDb } from '#modules/drizzle/drizzle.tokens'
  * calls it). Operator implementations live in domain-specific siblings:
  *   - _types.ts          shared OperatorContext / GraphEntity
  *   - _helpers.ts        idsFromParam, entityProjection
- *   - traversal.ts       find_symbol, find_file, get_callers/callees/
- *                        dependencies/dependents, find_implementations,
+ *   - traversal.ts       find_symbol, get_callers/callees,
  *                        get_summary, walkthrough
  *   - git.ts             git_history
- *   - search.ts          find_by_concept, vector_search_chunks,
- *                        hybrid_search, search_docs, retrieve_code_chunks
- *   - github.ts          list_issues, list_prs, find_prs_for_issue,
- *                        find_similar_issues, find_resolution
- *   - insights.ts        tests_for, list_concepts, read_file,
- *                        get_project_overview
- *   - web.ts             web_search, web_fetch
- *   - mutations.ts       propose_edit
+ *   - search.ts          hybrid_search, search_docs,
+ *                        retrieve_code_chunks
+ *   - github.ts          list_issues, find_resolution
+ *   - insights.ts        tests_for, read_file, get_project_overview
  *   - answer.ts          finalising LLM stream
  *   - hybrid_search.ts   RRF helper used by both search and answer
  */
 import { Inject, Injectable } from '@nestjs/common'
 import type { Database } from '#server/db/client'
-import type { LinkedChunk } from '#server/lib/github-issue-linking'
+import type { LinkedChunk, LinkedEntity } from '#server/lib/github-issue-linking'
 import type { ProjectOverview } from '#server/lib/project-overview'
+import type { ResolutionEnvelope } from '#shared/schemas/resolution'
 import { answer, type AnswerStreamChunk } from './answer'
 import { hybridSearch } from './hybrid_search'
 import {
-  findImplementations,
-  findFile,
-  findSymbol,
-  getCallees,
-  getCallers,
-  getDependencies,
-  getDependents,
-  getSummary,
-  walkthrough,
-  FindFileOperator,
-  FindImplementationsOperator,
   FindSymbolOperator,
   GetCalleesOperator,
   GetCallersOperator,
-  GetDependenciesOperator,
-  GetDependentsOperator,
   GetSummaryOperator,
   WalkthroughOperator,
 } from './traversal'
-import { gitHistory, GitHistoryOperator } from './git'
+import { GitHistoryOperator } from './git'
 import {
-  findByConcept,
-  hybridSearchOp,
-  retrieveCodeChunks,
-  searchDocs,
-  vectorSearchChunks,
-  FindByConceptOperator,
   HybridSearchOperator,
   RetrieveCodeChunksOperator,
   SearchDocsOperator,
-  VectorSearchChunksOperator,
 } from './search'
 import {
-  findPrsForIssue,
-  findResolution,
-  findSimilarIssues,
-  listIssues,
-  listPrs,
   type IssueResult,
-  FindPrsForIssueOperator,
   FindResolutionOperator,
-  FindSimilarIssuesOperator,
   ListIssuesOperator,
-  ListPrsOperator,
 } from './github'
 import {
-  getProjectOverviewOp,
-  listConcepts,
-  readFileOp,
-  testsFor,
   GetProjectOverviewOperator,
-  ListConceptsOperator,
   ReadFileOperator,
   TestsForOperator,
 } from './insights'
-import { webFetchOp, webSearchOp, WebFetchOperator, WebSearchOperator } from './web'
-import { proposeEditOp, ProposeEditOperator } from './mutations'
 import type { KagOperator } from './_interface'
 import type { OperatorContext } from './_types'
 
@@ -103,51 +64,33 @@ export { KagOperatorsRegistry } from './_registry'
 export type { OperatorContext, GraphEntity } from './_types'
 export type {
   FindSymbolParams,
-  FindFileParams,
-  FindImplementationsParams,
   WalkthroughParams,
   WalkthroughResult,
   GetSummaryParams,
 } from './traversal'
-export { findSymbol, findFile, getCallers, getCallees, getDependencies, getDependents, findImplementations, getSummary, walkthrough } from './traversal'
+export { findSymbol, getCallers, getCallees, getSummary, walkthrough } from './traversal'
 export type { GitHistoryParams } from './git'
 export { gitHistory } from './git'
+export type { RetrieveCodeChunksParams } from './search'
+export { hybridSearchOp, retrieveCodeChunks, searchDocs } from './search'
 export type {
-  FindByConceptParams,
-  VectorSearchParams,
-  RetrieveCodeChunksParams,
-} from './search'
-export { findByConcept, hybridSearchOp, retrieveCodeChunks, searchDocs, vectorSearchChunks } from './search'
-export type {
-  FindPrsForIssueParams,
   FindResolutionParams,
-  FindSimilarIssuesParams,
   IssueResult,
   IssuesEnvelope,
   ListIssuesParams,
-  ListPrsParams,
-  PrResult,
-  PrSummary,
-  PrsEnvelope,
   ResolutionCommit,
   ResolutionDuplicate,
   ResolutionEnvelope,
   ResolutionPr,
   ResolutionStatus,
-  SimilarIssueResult,
 } from './github'
-export { classifyResolution, findPrsForIssue, findResolution, findSimilarIssues, listIssues, listPrs, FIX_REF_RE_FOR } from './github'
+export { classifyResolution, findResolution, listIssues, FIX_REF_RE_FOR } from './github'
 export type {
-  ListConceptsParams,
   ProjectOverviewParams,
   ReadFileParams,
   TestsForParams,
 } from './insights'
-export { getProjectOverviewOp, listConcepts, readFileOp, testsFor } from './insights'
-export type { WebFetchParams, WebSearchParams } from './web'
-export { webFetchOp, webSearchOp } from './web'
-export type { ProposeEditParams, ProposeEditResult } from './mutations'
-export { proposeEditOp } from './mutations'
+export { getProjectOverviewOp, readFileOp, testsFor } from './insights'
 
 // ---------- answer wrapper for plan executor ----------
 // Lives here (rather than in answer.ts) because it folds together
@@ -191,6 +134,10 @@ export async function* answerOp(
   // the prompt with entrypoints + core abstractions + stats so the
   // model can ground broad/orientation questions.
   let overview: ProjectOverview | null = null
+  // Resolution envelope from find_resolution. Rendered as a dedicated
+  // prompt section (status + fixing commits + linked PRs) so the model
+  // explicitly tells the user whether the issue is already fixed.
+  let resolution: ResolutionEnvelope | null = null
 
   // 1a) Pinned entities from the user's [entity:UUID] citations always go
   //     in first — they're the most likely thing the user wants summarised.
@@ -249,6 +196,49 @@ export async function* answerOp(
           endLine: null,
           language: null,
           signature: null,
+        })
+      }
+      continue
+    }
+    // find_resolution envelope: detected by status + mergedByCommits +
+    // linkedPullRequests together (no other envelope carries the trio).
+    // Last one wins if the plan somehow ran find_resolution twice.
+    if (
+      typeof obj.status === 'string'
+      && typeof obj.issueNumber === 'number'
+      && Array.isArray(obj.mergedByCommits)
+      && Array.isArray(obj.linkedPullRequests)
+    ) {
+      resolution = obj as unknown as ResolutionEnvelope
+      // Defensive: should a future envelope carry pre-linked code the
+      // way list_issues does (relatedEntities / relatedChunks), lift it
+      // into the citation context too.
+      for (const e of (obj.relatedEntities as LinkedEntity[] | undefined) ?? []) {
+        if (!e?.entityId || seenEntityIds.has(e.entityId)) continue
+        seenEntityIds.add(e.entityId)
+        entitiesContext.push({
+          id: e.entityId,
+          name: e.name,
+          type: e.type,
+          description: e.description,
+          qualifiedName: e.qualifiedName,
+          metadata: null,
+          filePath: e.filePath,
+          startLine: null,
+          endLine: null,
+          language: null,
+          signature: null,
+        })
+      }
+      for (const c of (obj.relatedChunks as LinkedChunk[] | undefined) ?? []) {
+        if (!c?.id || seenChunkIds.has(c.id)) continue
+        seenChunkIds.add(c.id)
+        chunks.push({
+          id: c.id,
+          text: c.text,
+          filePath: c.filePath,
+          startLine: c.startLine,
+          endLine: c.endLine,
         })
       }
       continue
@@ -319,7 +309,7 @@ export async function* answerOp(
       }
       continue
     }
-    // Chunks come back with either `id` (search_docs, vector_search_chunks,
+    // Chunks come back with either `id` (search_docs,
     // retrieve_code_chunks) or `chunkId` (hybrid_search) — accept both.
     const chunkId =
       typeof obj.id === 'string'
@@ -392,6 +382,7 @@ export async function* answerOp(
     mermaidDiagrams: mermaidBlocks,
     issues: issueResults,
     overview,
+    resolution,
     userPastedDiff: ctx.userPastedDiff,
     history: ctx.history,
   })) {
@@ -448,31 +439,18 @@ export class AnswerOperator implements KagOperator {
  */
 export const KAG_OPERATOR_CLASSES = [
   FindSymbolOperator,
-  FindFileOperator,
   GetCallersOperator,
   GetCalleesOperator,
-  GetDependenciesOperator,
-  GetDependentsOperator,
-  FindImplementationsOperator,
   GitHistoryOperator,
-  FindByConceptOperator,
-  VectorSearchChunksOperator,
   HybridSearchOperator,
   SearchDocsOperator,
   RetrieveCodeChunksOperator,
   GetSummaryOperator,
   WalkthroughOperator,
   ListIssuesOperator,
-  ListPrsOperator,
-  FindSimilarIssuesOperator,
-  FindPrsForIssueOperator,
   FindResolutionOperator,
   GetProjectOverviewOperator,
   ReadFileOperator,
   TestsForOperator,
-  ListConceptsOperator,
-  WebSearchOperator,
-  WebFetchOperator,
-  ProposeEditOperator,
   AnswerOperator,
 ] as const

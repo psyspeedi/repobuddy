@@ -3,7 +3,6 @@ import postgres from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import * as schema from '#server/db/schema'
 import {
-  findFile,
   findSymbol,
   getCallees,
   getCallers,
@@ -195,12 +194,6 @@ describe('operators', () => {
     const ids_returned = new Set(result.map((r) => r.id))
     expect(ids_returned.has(ids.orderClass!)).toBe(true)
     expect(result.length).toBeGreaterThan(1)
-  })
-
-  it('find_file resolves glob-like patterns', async () => {
-    const { ctx } = await seedTinyGraph()
-    const result = await findFile({ pathPattern: 'src/*.ts' }, ctx, db)
-    expect(result.map((f) => f.name).sort()).toEqual(['orders.ts', 'telemetry.ts'])
   })
 
   it('search_docs returns only doc chunks, ignores code chunks', async () => {

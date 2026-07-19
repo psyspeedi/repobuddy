@@ -1,5 +1,6 @@
 import type { LLMProvider, ChatMessage } from '#server/providers/llm'
 import type { ProjectOverview } from '#server/lib/project-overview'
+import type { ResolutionEnvelope } from '#shared/schemas/resolution'
 
 export interface AnswerContextChunk {
   id: string
@@ -66,6 +67,13 @@ export interface AnswerParams {
    * questions ("tell me about this project", "where do I start").
    */
   overview?: ProjectOverview | null
+  /**
+   * Resolution envelope from the find_resolution operator. When present,
+   * an "Issue resolution" section is rendered (status + fixing commit
+   * shas + linked PR numbers/URLs) with an instruction to tell the user
+   * EXPLICITLY whether the issue is already fixed before anything else.
+   */
+  resolution?: ResolutionEnvelope | null
   /**
    * The user's question carries an embedded unified diff. Triggers an
    * extra instruction in the user prompt asking the model to analyse
@@ -267,6 +275,51 @@ function renderUserMessage(params: AnswerParams): string {
       lines.push('```')
       lines.push('')
     }
+  }
+
+  if (params.resolution) {
+    const r = params.resolution
+    lines.push('')
+    lines.push(`## Issue #${r.issueNumber} resolution status`)
+    if (r.status === 'none') {
+      lines.push(
+        'find_resolution found NO merged fix, no open/draft PR, and no'
+        + ' duplicate for this issue. Tell the user explicitly that the issue'
+        + ' appears unresolved, then help them start working on it.',
+      )
+    } else {
+      lines.push(
+        `Status: ${r.status} (confidence: ${r.confidence}). Tell the user`
+        + ' EXPLICITLY whether this issue is already fixed BEFORE diving into'
+        + ' the code: "merged" → already fixed, name the commit sha(s) and'
+        + ' suggest pulling latest; "open_pr" / "draft_pr" → a PR is in'
+        + ' flight, link it and frame the contribution around finishing it;'
+        + ' "stale_pr" → a PR exists but went inactive, reviving it is the'
+        + ' entry point; "duplicate_closed" / "related" → point at the'
+        + ' similar issue(s) listed below.',
+      )
+    }
+    if (r.mergedByCommits.length > 0) {
+      lines.push('### Fixing commits')
+      for (const c of r.mergedByCommits.slice(0, 5)) {
+        lines.push(`- ${c.sha} by ${c.author} (${c.date}): ${c.message.split('\n')[0]}`)
+      }
+    }
+    if (r.linkedPullRequests.length > 0) {
+      lines.push('### Linked pull requests')
+      for (const p of r.linkedPullRequests) {
+        const state = p.merged ? 'merged' : p.draft ? 'draft' : p.stale ? 'open, stale' : p.state
+        const author = p.author ? `, by @${p.author}` : ''
+        lines.push(`- [#${p.number}](${p.url}) (${state}${author}): ${p.title}`)
+      }
+    }
+    if (r.duplicateCandidates.length > 0) {
+      lines.push('### Similar issues')
+      for (const d of r.duplicateCandidates) {
+        lines.push(`- [#${d.number}](${d.url}) (${d.state}, similarity ${d.similarity}): ${d.title}`)
+      }
+    }
+    lines.push('')
   }
 
   if (params.issues && params.issues.length > 0) {

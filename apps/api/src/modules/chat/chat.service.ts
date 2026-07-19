@@ -309,7 +309,6 @@ export class ChatService {
         for await (const evt of this.agentic.run(llm, ctx, body.question, {
           responseLocale: body.locale ?? 'en',
           history: priorHistory,
-          selfCritique: body.selfCritique,
         })) {
           if (isClosed()) return
           if (evt.type === 'text' && evt.text) {
@@ -352,6 +351,25 @@ export class ChatService {
           history: priorHistory,
         })
         savedTrace = result.trace
+
+        // Surface find_resolution envelopes with the same tool_step
+        // event agentic mode emits — that's what feeds the resolution
+        // banner (useChat → ChatResolutionBanner). The trace entry also
+        // carries `result` (see ExecutorTraceEntry), so the persisted
+        // trace re-hydrates the banner when the session is reopened.
+        let surfacedSteps = 0
+        for (const entry of result.trace) {
+          if (entry.op !== 'find_resolution' || entry.result === undefined) continue
+          const step = plan.steps.find((s) => s.id === entry.stepId)
+          emit('tool_step', {
+            iteration: ++surfacedSteps,
+            name: entry.op,
+            args: (step?.params ?? {}) as Record<string, unknown>,
+            summary: entry.summary ?? '',
+            durationMs: entry.durationMs,
+            result: entry.result,
+          })
+        }
         emit('trace', result.trace)
 
         if (result.finalStream) {

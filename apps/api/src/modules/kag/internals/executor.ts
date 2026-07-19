@@ -1,5 +1,6 @@
 import type { OperatorContext, OperatorName } from './operators'
 import type { Plan, PlanStep } from '#shared/schemas/plan'
+import { TOOL_RESULTS_SURFACED_TO_UI } from './agentic'
 import { getLogger } from '#server/lib/logger'
 import { operatorLatency, operatorRuns } from '#server/lib/metrics'
 
@@ -16,6 +17,13 @@ export interface ExecutorTraceEntry {
   /** Compact summary of the result (length / preview). */
   summary?: string
   error?: string
+  /**
+   * Full result envelope — only for TOOL_RESULTS_SURFACED_TO_UI ops
+   * (find_resolution). The chat service re-emits it as a tool_step
+   * event, and because the trace is persisted with the message, the
+   * client can re-hydrate the resolution banner on session reopen.
+   */
+  result?: unknown
 }
 
 export interface ExecutorResult {
@@ -91,6 +99,7 @@ export async function executePlan(
         ok: true,
         durationMs: Date.now() - start,
         summary: summarise(result),
+        ...(TOOL_RESULTS_SURFACED_TO_UI.has(step.op) ? { result } : {}),
       })
       operatorRuns.inc({ op: step.op, outcome: 'ok' })
       stopTimer()

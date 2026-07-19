@@ -7,70 +7,6 @@ import { hybridSearch } from './hybrid_search'
 import type { KagOperator } from './_interface'
 import type { GraphEntity, OperatorContext } from './_types'
 
-// ---------- find_by_concept ----------
-export interface FindByConceptParams {
-  query: string
-  limit?: number
-}
-
-export async function findByConcept(
-  params: FindByConceptParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<GraphEntity[]> {
-  const limit = params.limit ?? 10
-  const [vec] = await ctx.embeddings.embedBatch([params.query])
-  if (!vec) return []
-  const literal = `[${vec.join(',')}]`
-  return db.execute<GraphEntity>(sql`
-    SELECT id, type, name, qualified_name AS "qualifiedName",
-           file_path AS "filePath", start_line AS "startLine",
-           end_line AS "endLine", language, description
-    FROM entities
-    WHERE workspace_id = ${ctx.workspaceId}
-      AND embedding IS NOT NULL
-    ORDER BY embedding <=> ${literal}::vector ASC
-    LIMIT ${limit}
-  `) as unknown as Promise<GraphEntity[]>
-}
-
-// ---------- vector_search_chunks ----------
-export interface VectorSearchParams {
-  query: string
-  limit?: number
-}
-
-export async function vectorSearchChunks(
-  params: VectorSearchParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<{ id: string; text: string; filePath: string | null; startLine: number | null; endLine: number | null }[]> {
-  const limit = params.limit ?? 10
-  const [vec] = await ctx.embeddings.embedBatch([params.query])
-  if (!vec) return []
-  const literal = `[${vec.join(',')}]`
-  const rows = await db.execute<{
-    id: string
-    text: string
-    file_path: string | null
-    start_line: number | null
-    end_line: number | null
-  }>(sql`
-    SELECT id, text, file_path, start_line, end_line
-    FROM ${chunks}
-    WHERE workspace_id = ${ctx.workspaceId} AND embedding IS NOT NULL
-    ORDER BY embedding <=> ${literal}::vector ASC
-    LIMIT ${limit}
-  `)
-  return rows.map((r) => ({
-    id: r.id,
-    text: r.text,
-    filePath: r.file_path,
-    startLine: r.start_line,
-    endLine: r.end_line,
-  }))
-}
-
 // ---------- hybrid_search wrapper ----------
 export async function hybridSearchOp(
   params: { query: string; limit?: number },
@@ -222,20 +158,6 @@ export async function retrieveCodeChunks(
 }
 
 // ---------- @Injectable wrappers ----------
-
-@Injectable()
-export class FindByConceptOperator implements KagOperator<FindByConceptParams, GraphEntity[]> {
-  readonly name = 'find_by_concept' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: FindByConceptParams, c: OperatorContext) { return findByConcept(p, c, this.db) }
-}
-
-@Injectable()
-export class VectorSearchChunksOperator implements KagOperator<VectorSearchParams> {
-  readonly name = 'vector_search_chunks' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: VectorSearchParams, c: OperatorContext) { return vectorSearchChunks(p, c, this.db) }
-}
 
 @Injectable()
 export class HybridSearchOperator implements KagOperator {

@@ -1,7 +1,7 @@
 import { DRIZZLE_DB, type DrizzleDb } from '#modules/drizzle/drizzle.tokens'
 import type { Database } from '#server/db/client'
 import { Inject, Injectable } from '@nestjs/common'
-import { and, eq, ilike, inArray, or } from 'drizzle-orm'
+import { and, eq, ilike, inArray } from 'drizzle-orm'
 import { entities, relations } from '#server/db/schema'
 import { entityProjection, idsFromParam } from './_helpers'
 import type { KagOperator } from './_interface'
@@ -75,33 +75,7 @@ export async function findSymbol(
   return rows
 }
 
-// ---------- find_file ----------
-export interface FindFileParams {
-  pathPattern: string
-  limit?: number
-}
-
-export async function findFile(
-  params: FindFileParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<GraphEntity[]> {
-  const limit = params.limit ?? 50
-  const pattern = params.pathPattern.replace(/\*/g, '%')
-  return db
-    .select(entityProjection())
-    .from(entities)
-    .where(
-      and(
-        eq(entities.workspaceId, ctx.workspaceId),
-        eq(entities.type, 'file'),
-        ilike(entities.filePath, pattern),
-      ),
-    )
-    .limit(limit)
-}
-
-// ---------- get_callers / get_callees / get_dependencies / get_dependents ----------
+// ---------- get_callers / get_callees ----------
 interface TraversalParams {
   target?: GraphEntity | GraphEntity[]
   source?: GraphEntity | GraphEntity[]
@@ -130,27 +104,7 @@ export async function getCallees(
   return traverse(db, ctx, ids, 'calls', 'out', params)
 }
 
-export async function getDependencies(
-  params: TraversalParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<GraphEntity[]> {
-  const ids = idsFromParam(params.source ?? params.target)
-  if (ids.length === 0) return []
-  return traverse(db, ctx, ids, 'imports', 'out', params)
-}
-
-export async function getDependents(
-  params: TraversalParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<GraphEntity[]> {
-  const ids = idsFromParam(params.target ?? params.source)
-  if (ids.length === 0) return []
-  return traverse(db, ctx, ids, 'imports', 'in', params)
-}
-
-/** BFS over relations, used by callers/callees/dependencies/dependents + walkthrough. */
+/** BFS over relations, used by callers/callees + walkthrough. */
 async function traverse(
   db: Database,
   ctx: OperatorContext,
@@ -196,35 +150,6 @@ async function traverse(
     .from(entities)
     .where(inArray(entities.id, reached))
     .limit(limit)
-}
-
-// ---------- find_implementations ----------
-export interface FindImplementationsParams {
-  interfaceOrType: GraphEntity
-  limit?: number
-}
-
-export async function findImplementations(
-  params: FindImplementationsParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<GraphEntity[]> {
-  const targetId = params.interfaceOrType?.id
-  if (!targetId) return []
-  const limit = params.limit ?? 50
-  const rows = await db
-    .select(entityProjection())
-    .from(entities)
-    .innerJoin(relations, eq(relations.fromEntityId, entities.id))
-    .where(
-      and(
-        eq(relations.workspaceId, ctx.workspaceId),
-        eq(relations.toEntityId, targetId),
-        or(eq(relations.type, 'implements'), eq(relations.type, 'extends'))!,
-      ),
-    )
-    .limit(limit)
-  return rows
 }
 
 // ---------- get_summary ----------
@@ -382,13 +307,6 @@ export class FindSymbolOperator implements KagOperator<FindSymbolParams, GraphEn
 }
 
 @Injectable()
-export class FindFileOperator implements KagOperator<FindFileParams, GraphEntity[]> {
-  readonly name = 'find_file' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: FindFileParams, c: OperatorContext) { return findFile(p, c, this.db) }
-}
-
-@Injectable()
 export class GetCallersOperator implements KagOperator {
   readonly name = 'get_callers' as const
   constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
@@ -400,27 +318,6 @@ export class GetCalleesOperator implements KagOperator {
   readonly name = 'get_callees' as const
   constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
   execute(p: never, c: OperatorContext) { return getCallees(p, c, this.db) }
-}
-
-@Injectable()
-export class GetDependenciesOperator implements KagOperator {
-  readonly name = 'get_dependencies' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: never, c: OperatorContext) { return getDependencies(p, c, this.db) }
-}
-
-@Injectable()
-export class GetDependentsOperator implements KagOperator {
-  readonly name = 'get_dependents' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: never, c: OperatorContext) { return getDependents(p, c, this.db) }
-}
-
-@Injectable()
-export class FindImplementationsOperator implements KagOperator<FindImplementationsParams, GraphEntity[]> {
-  readonly name = 'find_implementations' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: FindImplementationsParams, c: OperatorContext) { return findImplementations(p, c, this.db) }
 }
 
 @Injectable()

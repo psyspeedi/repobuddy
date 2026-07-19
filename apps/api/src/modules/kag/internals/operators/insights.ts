@@ -67,61 +67,6 @@ export async function testsFor(
   }))
 }
 
-// ---------- list_concepts ----------
-/**
- * Surface the project's domain glossary — concept entities created
- * by the LLM annotation step during indexing (e.g. "Realm", "Hub",
- * "Workspace", project-specific jargon). Without these a newcomer
- * can't parse issues. Ordered by how many other entities link to
- * each concept (proxy for "how central is this term").
- */
-export interface ListConceptsParams {
-  /** Optional substring filter applied to name / description. */
-  query?: string
-  /** Max concepts to return. Default 20. */
-  limit?: number
-}
-
-export async function listConcepts(
-  params: ListConceptsParams,
-  ctx: OperatorContext,
-  db: Database,
-): Promise<GraphEntity[]> {
-  const limit = Math.min(Math.max(params.limit ?? 20, 1), 50)
-  const filter = params.query?.trim() ?? ''
-  const filterExpr = filter
-    ? sql`AND (lower(e.name) LIKE ${'%' + filter.toLowerCase() + '%'} OR lower(coalesce(e.description, '')) LIKE ${'%' + filter.toLowerCase() + '%'})`
-    : sql``
-  const rows = await db.execute<{
-    id: string
-    type: string
-    name: string
-    qualified_name: string | null
-    description: string | null
-    in_degree: number
-  }>(sql`
-    SELECT e.id, e.type, e.name, e.qualified_name, e.description,
-           coalesce((SELECT count(*) FROM ${relations} r WHERE r.to_entity_id = e.id AND r.workspace_id = e.workspace_id), 0)::int AS in_degree
-    FROM ${entities} e
-    WHERE e.workspace_id = ${ctx.workspaceId}
-      AND e.type IN ('concept', 'pattern', 'decision')
-      ${filterExpr}
-    ORDER BY in_degree DESC, e.name ASC
-    LIMIT ${limit}
-  `)
-  return rows.map((r) => ({
-    id: r.id,
-    type: r.type,
-    name: r.name,
-    qualifiedName: r.qualified_name,
-    filePath: null,
-    startLine: null,
-    endLine: null,
-    language: null,
-    description: r.description,
-  }))
-}
-
 // ---------- read_file ----------
 /**
  * Return all chunks for a given file path. Matches by exact path OR
@@ -212,13 +157,6 @@ export class TestsForOperator implements KagOperator<TestsForParams, GraphEntity
   readonly name = 'tests_for' as const
   constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
   execute(p: TestsForParams, c: OperatorContext) { return testsFor(p, c, this.db) }
-}
-
-@Injectable()
-export class ListConceptsOperator implements KagOperator<ListConceptsParams, GraphEntity[]> {
-  readonly name = 'list_concepts' as const
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
-  execute(p: ListConceptsParams, c: OperatorContext) { return listConcepts(p, c, this.db) }
 }
 
 @Injectable()
