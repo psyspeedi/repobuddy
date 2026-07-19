@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { History } from 'lucide-vue-next'
 
 // Guests need to reach the page; server-side readAccess decides whether
 // the workspace is publicly visible. If not, the API returns 404 and
 // useFetch surfaces it as an error.
 definePageMeta({ auth: false })
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const { loggedIn } = useAuth()
 const route = useRoute()
 const workspaceId = String(route.params.id)
@@ -25,6 +26,10 @@ interface WorkspaceResponse {
 }
 
 interface WorkspaceStats {
+  files?: number
+  entities?: number
+  filesTruncated?: number
+  annotationBudgetHit?: number
   gitInsights?: {
     lastCommitAt: string | null
     totalCommitsScanned: number
@@ -78,13 +83,84 @@ const message = computed(() => state.value.progress?.message ?? '')
 const isReady = computed(() => phase.value === 'ready')
 const isFailed = computed(() => phase.value === 'failed')
 
+// Raw pipeline phase names (cloning / parsing / extracting…) are engine
+// jargon — map them to human labels, fall back to the raw name for
+// anything unmapped so a new phase never renders as a blank.
+const phaseLabel = computed(() => {
+  const key = `workspace.phase.${phase.value}`
+  return te(key) ? t(key) : phase.value
+})
+
+// Index freshness — how far the indexed commit lags behind the repo's
+// HEAD. Loaded lazily once the workspace is ready; the API caches the
+// GitHub round-trip in Redis so this stays cheap.
+interface FreshnessResponse {
+  indexedSha: string | null
+  headSha: string | null
+  behindBy: number | null
+  checkedAt: string
+}
+const { data: freshness, execute: loadFreshness } = useApiFetch<FreshnessResponse>(
+  `/api/workspaces/${workspaceId}/freshness`,
+  { immediate: false, server: false, lazy: true },
+)
+onMounted(() => {
+  if (isReady.value) void loadFreshness()
+})
+watch(isReady, (ready) => {
+  if (ready) void loadFreshness()
+})
+const freshnessSha7 = computed(() => freshness.value?.indexedSha?.slice(0, 7) ?? '')
+
+// Honest-coverage notices. `stats` lands on the workspace row after
+// indexing; each flag maps to a quiet banner so the user knows what the
+// index can and cannot answer for this repo.
+const coverageNotices = computed(() => {
+  const stats = wsData.value?.workspace.stats
+  if (!stats || !isReady.value) return []
+  const out: { key: string; tone: 'warning' | 'notice'; text: string }[] = []
+  if (stats.entities === 0) {
+    out.push({ key: 'noEntities', tone: 'warning', text: t('workspace.coverage.noEntities') })
+  }
+  if (stats.filesTruncated === 1) {
+    out.push({
+      key: 'filesTruncated',
+      tone: 'notice',
+      text: t('workspace.coverage.filesTruncated', { n: stats.files ?? 0 }),
+    })
+  }
+  if (stats.annotationBudgetHit === 1) {
+    out.push({ key: 'annotationBudget', tone: 'notice', text: t('workspace.coverage.annotationBudget') })
+  }
+  return out
+})
+
 // Chat
 const chat = useChat(workspaceId)
 const isMobile = useIsMobile()
 const chatSessions = useChatSessions(workspaceId)
 const inputText = ref('')
 const openChunkId = ref<string | null>(null)
-const sidePanel = ref<'inspector' | 'viewer' | 'neighbours' | null>('inspector')
+// Default panel is Source — showing where answers come from matters more
+// to a newcomer than the engine's reasoning trace. Inspector stays one
+// tab away.
+const sidePanel = ref<'inspector' | 'viewer' | 'neighbours' | null>('viewer')
+// On phones the side column renders inside a BottomSheet — keeping the
+// default panel open would cover the chat on load, so drop the empty
+// Source placeholder once the viewport is known to be mobile.
+watch(isMobile, (mobile) => {
+  if (mobile && sidePanel.value === 'viewer' && !openChunkId.value) sidePanel.value = null
+})
+// Mobile-only chat-history sheet (the sessions sidebar is hidden < lg).
+const sessionsSheetOpen = ref(false)
+// Panel ids differ from their i18n keys ('viewer' tab is labelled
+// "Source") — map explicitly for the mobile sheet title.
+const sidePanelTitle = computed(() => {
+  if (!sidePanel.value) return ''
+  const key =
+    sidePanel.value === 'inspector' ? 'reasoning' : sidePanel.value === 'viewer' ? 'source' : 'neighbours'
+  return t(`chat.panels.${key}`)
+})
 const neighbourEntityId = ref<string | null>(null)
 function openNeighbours(entityId: string): void {
   neighbourEntityId.value = entityId
@@ -401,6 +477,28 @@ useHead(() => {
           >
             {{ isPublic ? t('workspace.makePrivate') : t('workspace.makePublic') }}
           </Button>
+          <span
+            v-if="isReady && freshness && freshness.behindBy === 0"
+            class="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground"
+            :title="t('workspace.freshness.upToDateHint', { sha: freshnessSha7 })"
+          >
+            {{ t('workspace.freshness.upToDate', { sha: freshnessSha7 }) }}
+          </span>
+          <!-- Owners can click through to a re-index; for everyone else
+               the same badge is a plain read-only signal. -->
+          <component
+            :is="viewerIsOwner ? 'button' : 'span'"
+            v-else-if="isReady && freshness && (freshness.behindBy ?? 0) > 0"
+            :type="viewerIsOwner ? 'button' : undefined"
+            class="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+            :class="viewerIsOwner ? 'hover:bg-amber-500/20' : ''"
+            :title="viewerIsOwner
+              ? t('workspace.freshness.behindHint', { n: freshness.behindBy, sha: freshnessSha7 })
+              : t('workspace.freshness.behindHintGuest', { n: freshness.behindBy, sha: freshnessSha7 })"
+            @click="viewerIsOwner && reindex()"
+          >
+            {{ t('workspace.freshness.behind', { n: freshness.behindBy }) }}
+          </component>
           <Button
             v-if="viewerIsOwner && (isReady || isFailed)"
             variant="outline"
@@ -495,7 +593,7 @@ useHead(() => {
         <h2 class="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           {{ t('workspace.indexing') }}
         </h2>
-        <span class="text-sm font-mono">{{ phase }} · {{ percent }}%</span>
+        <span class="text-sm tabular-nums">{{ phaseLabel }} · {{ percent }}%</span>
       </div>
       <div class="h-2 w-full overflow-hidden rounded-full bg-muted">
         <div
@@ -522,6 +620,21 @@ useHead(() => {
 
     <GitInsightsCard v-if="isReady && gitInsights" :insights="gitInsights" />
 
+    <!-- Coverage / limitation notices — honest signals about what the
+         index does and doesn't cover for this repo. -->
+    <section v-if="isReady && coverageNotices.length > 0" class="space-y-2">
+      <div
+        v-for="notice in coverageNotices"
+        :key="notice.key"
+        class="rounded-lg border px-4 py-3 text-sm"
+        :class="notice.tone === 'warning'
+          ? 'border-amber-500/30 bg-amber-500/8 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+          : 'border-border bg-muted/40 text-muted-foreground'"
+      >
+        {{ notice.text }}
+      </div>
+    </section>
+
     <section
       v-if="isReady"
       class="flex flex-1 flex-col gap-3 min-h-[400px] lg:flex-row"
@@ -541,16 +654,39 @@ useHead(() => {
         @delete="deleteSession"
       />
       <div class="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card min-h-0">
-        <div class="flex items-center justify-end gap-2 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
-          <button
-            type="button"
-            class="hover:text-foreground"
-            :title="t('workspace.shareTitle')"
-            @click="shareChat"
-          >
-            {{ shareCopied ? t('workspace.shareCopied') : t('workspace.share') }}
-          </button>
-          <span class="hidden tabular-nums sm:inline">⌘K · ⌘↵</span>
+        <div class="flex items-center gap-2 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+          <!-- Mobile-only session controls — the sessions sidebar is
+               hidden below lg, so "new chat" and the history sheet
+               trigger live here instead. -->
+          <div v-if="loggedIn" class="flex items-center gap-1 lg:hidden">
+            <button
+              type="button"
+              class="rounded-md border border-border px-2 py-1 hover:bg-accent hover:text-foreground"
+              @click="startNewChat"
+            >
+              {{ t('chat.newChat') }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md border border-border p-1 hover:bg-accent hover:text-foreground"
+              :title="t('chat.history')"
+              :aria-label="t('chat.history')"
+              @click="sessionsSheetOpen = true"
+            >
+              <History class="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div class="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              class="hover:text-foreground"
+              :title="t('workspace.shareTitle')"
+              @click="shareChat"
+            >
+              {{ shareCopied ? t('workspace.shareCopied') : t('workspace.share') }}
+            </button>
+            <span class="hidden tabular-nums sm:inline">⌘K · ⌘↵</span>
+          </div>
         </div>
         <div ref="scroller" class="flex-1 space-y-3 overflow-y-auto p-4 min-h-0">
           <div v-if="chat.messages.value.length === 0" class="space-y-4">
@@ -579,7 +715,6 @@ useHead(() => {
             :pending="msg.pending"
             :invalid="msg.invalid"
             :citations="msg.citations"
-            :tokens-per-sec="msg.tokensPerSec"
             :workspace-id="workspaceId"
             :resolution="extractResolution(msg.trace)"
             @open-chunk="onOpenChunk"
@@ -642,9 +777,28 @@ useHead(() => {
          state is driven by sidePanel being set on viewports below the lg
          breakpoint; closing the sheet clears sidePanel so the next chat
          turn doesn't reopen it. -->
+    <!-- Mobile (< lg): chat-history sessions in a sheet — the sidebar
+         above is hidden on small screens. -->
+    <BottomSheet
+      :open="isMobile && sessionsSheetOpen"
+      :title="t('chat.history')"
+      @close="sessionsSheetOpen = false"
+    >
+      <div class="h-[60vh]">
+        <ChatSessionsList
+          :sessions="chatSessions.sessions.value"
+          :loading="chatSessions.loading.value"
+          :active-session-id="chat.sessionId.value"
+          @new="() => { startNewChat(); sessionsSheetOpen = false }"
+          @select="(id: string) => { void selectSession(id); sessionsSheetOpen = false }"
+          @delete="deleteSession"
+        />
+      </div>
+    </BottomSheet>
+
     <BottomSheet
       :open="isMobile && sidePanel !== null"
-      :title="sidePanel ? t('chat.panels.' + sidePanel) : ''"
+      :title="sidePanelTitle"
       @close="sidePanel = null"
     >
       <SidePanelStack

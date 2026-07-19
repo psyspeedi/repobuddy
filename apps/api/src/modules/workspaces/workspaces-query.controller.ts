@@ -69,6 +69,12 @@ export class WorkspacesQueryController {
     return this.query.getGraph(id, { limit, typeFilter: types, langFilter: languages, includeNeighbors })
   }
 
+  @Get('freshness')
+  async freshness(@Req() req: Request, @Param('id') id: string) {
+    await this.access.read(req, id)
+    return this.query.getFreshness(id)
+  }
+
   @Get('onboarding')
   async onboarding(@Req() req: Request, @Param('id') id: string) {
     await this.access.read(req, id)

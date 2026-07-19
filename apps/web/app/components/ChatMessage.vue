@@ -15,7 +15,6 @@ interface Props {
   invalid?: string[]
   citations?: Citation[]
   workspaceId?: string
-  tokensPerSec?: number
   /**
    * If the assistant ran find_resolution and it returned a non-"none"
    * status, the page extracts that envelope from the trace and passes
@@ -262,11 +261,6 @@ function onClick(e: MouseEvent): void {
         <span v-if="pending" class="ml-2 animate-pulse text-primary">…</span>
       </span>
       <span class="flex items-center gap-2">
-        <span
-          v-if="role === 'assistant' && tokensPerSec && tokensPerSec > 0"
-          class="text-[10px] tabular-nums text-muted-foreground"
-          :title="t('chat.tokensPerSecTitle')"
-        >{{ tokensPerSec }} {{ t('chat.tokensPerSec') }}</span>
         <button
           v-if="role === 'assistant' && !pending && content"
           type="button"

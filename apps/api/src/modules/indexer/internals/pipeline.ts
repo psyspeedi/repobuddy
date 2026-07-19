@@ -410,10 +410,11 @@ export async function runIndexPipeline(
         resolutionStats = await resolveEntities(db, workspaceId)
       }
 
-      // 10. Git history.
+      // 10. Git history. Percent stays at 95 — the annotation phase above
+      // already reported 92–95, and the bar must never move backwards.
       await setWorkspaceProgress(db, workspaceId, {
         phase: 'embedding',
-        percent: 90,
+        percent: 95,
         message: 'Reading git history…',
       })
       const fileIdByPath = new Map<string, string>()

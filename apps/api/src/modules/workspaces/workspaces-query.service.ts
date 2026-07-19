@@ -10,8 +10,15 @@ import {
 import { createOctokit } from '#server/lib/github'
 import { getProjectOverview } from '#server/lib/project-overview'
 import { DRIZZLE_DB, type DrizzleDb } from '../drizzle/drizzle.tokens'
+import { REDIS_CLIENT, type RedisClient } from '../redis/redis.tokens'
 
 const SEARCH_DEFAULT_LIMIT = 20
+// Freshness (indexed sha vs GitHub HEAD) is two GitHub calls per check —
+// cache per workspace so page loads don't burn the rate budget.
+const FRESHNESS_TTL_SECONDS = 30 * 60
+// Failures (rate limit, repo moved, force-pushed base) get a shorter TTL
+// so a transient error doesn't pin the badge to "unknown" for half an hour.
+const FRESHNESS_ERROR_TTL_SECONDS = 5 * 60
 const GRAPH_DEFAULT_LIMIT = 2000
 const GRAPH_NEIGHBOR_LIMIT = 1500
 const GH_URL_RE = /github\.com\/([^/]+)\/([^/.]+)/
@@ -57,6 +64,13 @@ interface SetupGuide {
   readmeQuickStart: string | null
 }
 
+interface FreshnessResult {
+  indexedSha: string | null
+  headSha: string | null
+  behindBy: number | null
+  checkedAt: string
+}
+
 interface TreemapNode {
   name: string
   path: string
@@ -72,7 +86,86 @@ interface TreemapNode {
 
 @Injectable()
 export class WorkspacesQueryService {
-  constructor(@Inject(DRIZZLE_DB) private readonly db: DrizzleDb) {}
+  constructor(
+    @Inject(DRIZZLE_DB) private readonly db: DrizzleDb,
+    @Inject(REDIS_CLIENT) private readonly redis: RedisClient,
+  ) {}
+
+  /**
+   * How far the indexed commit lags behind the repo's current HEAD.
+   * Two GitHub calls (default branch head + compare), cached in Redis.
+   * Any GitHub failure degrades to {headSha: null, behindBy: null} —
+   * the badge simply doesn't render; never a 500.
+   */
+  async getFreshness(workspaceId: string): Promise<FreshnessResult> {
+    const cacheKey = `cg:freshness:${workspaceId}`
+    try {
+      const cached = await this.redis.get(cacheKey)
+      if (cached) return JSON.parse(cached) as FreshnessResult
+    } catch {
+      /* Redis hiccup — recompute */
+    }
+
+    const [ws] = await this.db
+      .select({
+        indexedCommitSha: workspaces.indexedCommitSha,
+        sourceUrl: workspaces.sourceUrl,
+      })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1)
+    if (!ws) throw new NotFoundException('workspace not found')
+
+    const indexedSha = ws.indexedCommitSha ?? null
+    const degraded: FreshnessResult = {
+      indexedSha,
+      headSha: null,
+      behindBy: null,
+      checkedAt: new Date().toISOString(),
+    }
+    const match = ws.sourceUrl?.match(GH_URL_RE)
+    if (!indexedSha || !match) return degraded
+    const owner = match[1] as string
+    const repo = match[2] as string
+
+    const octokit = createOctokit()
+    let result: FreshnessResult
+    try {
+      const { data: repoInfo } = await octokit.rest.repos.get({ owner, repo })
+      const { data: headCommits } = await octokit.rest.repos.listCommits({
+        owner,
+        repo,
+        sha: repoInfo.default_branch,
+        per_page: 1,
+      })
+      const headSha = headCommits[0]?.sha ?? null
+      if (!headSha) {
+        result = degraded
+      } else if (headSha === indexedSha) {
+        result = { indexedSha, headSha, behindBy: 0, checkedAt: new Date().toISOString() }
+      } else {
+        // base = what we indexed, head = current HEAD → ahead_by is the
+        // number of commits the index hasn't seen yet.
+        const { data: cmp } = await octokit.rest.repos.compareCommits({
+          owner,
+          repo,
+          base: indexedSha,
+          head: headSha,
+        })
+        result = { indexedSha, headSha, behindBy: cmp.ahead_by, checkedAt: new Date().toISOString() }
+      }
+    } catch {
+      result = degraded
+    }
+
+    const ttl = result.behindBy === null ? FRESHNESS_ERROR_TTL_SECONDS : FRESHNESS_TTL_SECONDS
+    try {
+      await this.redis.set(cacheKey, JSON.stringify(result), 'EX', ttl)
+    } catch {
+      /* cache is best-effort */
+    }
+    return result
+  }
 
   async searchEntities(workspaceId: string, q: string, limit: number) {
     const trimmed = q.trim()

@@ -40,6 +40,21 @@ const { t } = useI18n()
 const wrapper = ref<HTMLDivElement | null>(null)
 const preset = ref<'loc' | 'hotness' | 'coverage'>('loc')
 
+// Below lg there is no graph drawer next to the treemap, so a tap
+// opens a BottomSheet with the file's basics instead of silently
+// doing nothing. The full neighbour graph stays desktop-only.
+const isMobile = useIsMobile()
+const mobileSelected = ref<Rect | null>(null)
+
+function onRectClick(r: Rect): void {
+  if (!r.meta) return
+  if (isMobile.value) {
+    mobileSelected.value = r
+    return
+  }
+  emit('focus', r.meta.entityId)
+}
+
 const { data, pending } = await useApiFetch<{ root: RawNode; totalFiles: number }>(
   `/api/workspaces/${props.workspaceId}/treemap`,
 )
@@ -168,7 +183,7 @@ watch(() => data.value, () => nextTick(() => layout()))
             :class="hovered?.path === r.path ? 'opacity-80' : ''"
             @mouseenter="hovered = r"
             @mouseleave="hovered = null"
-            @click="r.meta && emit('focus', r.meta.entityId)"
+            @click="onRectClick(r)"
           />
           <text
             v-if="r.x1 - r.x0 > 40 && r.y1 - r.y0 > 14"
@@ -206,5 +221,33 @@ watch(() => data.value, () => nextTick(() => layout()))
         </p>
       </div>
     </div>
+
+    <!-- Mobile (< lg): tapped-file basics. The neighbour graph panel is
+         desktop-only, so be honest about it instead of a dead tap. -->
+    <BottomSheet
+      :open="mobileSelected !== null"
+      :title="mobileSelected?.name ?? ''"
+      @close="mobileSelected = null"
+    >
+      <div v-if="mobileSelected" class="space-y-3 text-sm">
+        <p class="break-all font-mono text-xs">
+          {{ mobileSelected.path }}
+        </p>
+        <p v-if="mobileSelected.meta" class="text-muted-foreground">
+          {{ t('explore.tooltip.entities', { n: mobileSelected.meta.entityCount }) }}
+          <span class="mx-1">·</span>
+          <span :class="mobileSelected.meta.hotness > 0 ? 'text-amber-600 dark:text-amber-400' : ''">
+            {{ t('explore.tooltip.hotness', { n: mobileSelected.meta.hotness }) }}
+          </span>
+          <span class="mx-1">·</span>
+          <span :class="mobileSelected.meta.hasTests ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'">
+            {{ mobileSelected.meta.hasTests ? t('explore.tooltip.tested') : t('explore.tooltip.untested') }}
+          </span>
+        </p>
+        <p class="rounded-md border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+          {{ t('explore.mobileNotice') }}
+        </p>
+      </div>
+    </BottomSheet>
   </section>
 </template>

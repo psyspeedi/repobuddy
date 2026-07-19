@@ -89,6 +89,9 @@ useHead(() => ({ title: `${t('app.name')} — ${loggedIn.value ? t('dashboard.ti
         class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         @keyup.enter="createFromGithub"
       >
+      <p class="text-xs text-muted-foreground">
+        {{ t('dashboard.supportedLanguages') }}
+      </p>
       <p v-if="error" class="text-sm text-destructive">
         {{ error }}
       </p>

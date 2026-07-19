@@ -35,7 +35,9 @@ async function onDelete(e: MouseEvent, id: string): Promise<void> {
 </script>
 
 <template>
-  <aside class="flex h-full w-52 shrink-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-2">
+  <!-- Full width below lg (rendered inside the mobile BottomSheet),
+       fixed sidebar width on desktop. -->
+  <aside class="flex h-full w-full shrink-0 flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-2 lg:w-52">
     <div class="flex items-center justify-between gap-1 px-1">
       <h2 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {{ t('chat.chats') }}
@@ -71,9 +73,11 @@ async function onDelete(e: MouseEvent, id: string): Promise<void> {
               {{ t('chat.messageCount', { n: s.messageCount }) }} · {{ relativeTime(s.updatedAt) }}
             </p>
           </div>
+          <!-- Always visible below lg (no hover on touch); hover-revealed
+               on desktop. -->
           <button
             type="button"
-            class="invisible h-5 w-5 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:visible"
+            class="h-5 w-5 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive lg:invisible lg:group-hover:visible"
             :title="t('chat.deleteChat')"
             @click="onDelete($event, s.id)"
           >

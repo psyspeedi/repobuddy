@@ -83,8 +83,6 @@ export interface ChatMessageData {
   pending?: boolean
   plan?: PlanData
   trace?: AnyTrace
-  /** Tokens per second for the most recently completed assistant turn. */
-  tokensPerSec?: number
   /** Filled with the abort signal when the message is still streaming so the UI can call cancel(). */
   aborted?: boolean
 }
@@ -194,7 +192,6 @@ export function useChat(workspaceId: string) {
   // Abort handle for the in-flight chat fetch. Set in send(), cleared
   // when streaming ends. cancel() aborts and lets send() exit cleanly.
   let activeController: AbortController | null = null
-  let startedAt = 0
 
   async function loadHistory(): Promise<void> {
     try {
@@ -234,7 +231,6 @@ export function useChat(workspaceId: string) {
     streaming.value = true
 
     activeController = new AbortController()
-    startedAt = Date.now()
     try {
       const { public: { apiBaseUrl } } = useRuntimeConfig()
       const response = await fetch(`${apiBaseUrl}/api/chat/${sessionId.value}`, {
@@ -337,14 +333,6 @@ export function useChat(workspaceId: string) {
       }
     } else if (event === 'done') {
       last.pending = false
-      // Compute tokens/sec from elapsed wall-clock and the totals in the
-      // done payload. Display is fully optional; falls back gracefully.
-      try {
-        const payload = JSON.parse(data) as { inputTokens?: number; outputTokens?: number }
-        const elapsed = Math.max(0.5, (Date.now() - startedAt) / 1000)
-        const total = (payload.outputTokens ?? 0)
-        if (total > 0) last.tokensPerSec = Math.round(total / elapsed)
-      } catch { /* malformed */ }
       // Tell the layout's quota pill to re-fetch /api/me/quota now that
       // the server has recorded this message's tokens.
       quotaBump.value++

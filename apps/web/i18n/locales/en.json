@@ -36,23 +36,6 @@
     "cancel": "Cancel",
     "failed": "Failed to send."
   },
-  "onboarding": {
-    "s1": {
-      "title": "Ask anything — get cited answers",
-      "body": "Type a question. Every claim in the answer carries a clickable citation (↗ opens the source, ◆ opens the entity's neighbour graph)."
-    },
-    "s2": {
-      "title": "Reasoning is transparent",
-      "body": "The Reasoning panel on the right shows the plan the AI ran — find_symbol → get_callers → answer. Click a step to inspect its result."
-    },
-    "s3": {
-      "title": "Explore the codebase",
-      "body": "Explore (top right) opens a treemap of every file, sized by LOC and coloured by hotness or coverage. Click a tile to dive into that file's neighbour graph."
-    },
-    "skip": "Skip",
-    "next": "Next",
-    "finish": "Got it"
-  },
   "admin": {
     "title": "Admin",
     "subtitle": "Service-wide observability and bulk actions. Visible to GitHub logins listed in ADMIN_LOGINS.",
@@ -162,7 +145,7 @@
         },
         "4": {
           "title": "Ask anything, get cited answers",
-          "body": "Each claim links to a specific chunk or entity. A KAG planner stitches multi-hop reasoning (find_symbol → get_callers → answer) and shows the plan + trace inline."
+          "body": "Each claim links to the exact code behind it. The assistant plans a step-by-step investigation of the codebase and shows its reasoning next to the answer — so you can check every step, not just trust the summary."
         },
         "5": {
           "title": "Judge project health at a glance",
@@ -208,7 +191,8 @@
     "indexing": "Creating…",
     "loading": "Loading…",
     "empty": "No workspaces yet. Create one from a public GitHub URL above.",
-    "uploaded": "uploaded archive"
+    "uploaded": "uploaded archive",
+    "supportedLanguages": "Supported languages: TypeScript, JavaScript, Vue, Python, Go. Other repos still get text search, just without the code graph."
   },
   "workspace": {
     "viewGraph": "View graph",
@@ -217,7 +201,7 @@
     "tourHint": "Open the contributor's tour — entrypoints, core abstractions, good first issue zones",
     "askWalkthrough": "Walk me through {name} step by step",
     "autoExplore": "Auto-explore",
-    "autoExploreHint": "Let the assistant call graph operators (find_symbol, walkthrough, list_issues…) on its own as it answers. Slower and more expensive per question, but the answer grounds in more code.",
+    "autoExploreHint": "Let the assistant explore the code graph and the project's issues on its own as it answers. Digs deeper, but each question is slower and costs more.",
     "reindex": "Re-index",
     "reindexing": "Queuing…",
     "reindexHint": "Re-run indexing on the latest commit (picks up new diffs, files, annotations)",
@@ -254,18 +238,36 @@
     "makePublic": "Make public",
     "makePrivate": "Make private",
     "publicBadge": "Public",
-    "publicHint": "Anyone with the link can open this workspace in read-only mode (chat with guest limits, graph). No reindex / delete / settings."
+    "publicHint": "Anyone with the link can open this workspace in read-only mode (chat with guest limits, graph). No reindex / delete / settings.",
+    "freshness": {
+      "upToDate": "Up to date @ {sha}",
+      "upToDateHint": "The index matches the repository's latest commit ({sha}).",
+      "behind": "{n} commits behind",
+      "behindHint": "The index was built at commit {sha}; the repository has {n} newer commits. Re-index to catch up.",
+      "behindHintGuest": "The index was built at commit {sha}; the repository has {n} newer commits."
+    },
+    "phase": {
+      "pending": "Queued",
+      "cloning": "Fetching the repository",
+      "parsing": "Reading source files",
+      "extracting": "Building the code map",
+      "embedding": "Preparing search"
+    },
+    "coverage": {
+      "noEntities": "This repository's language isn't supported by the parser — chat falls back to plain text search, without the code graph.",
+      "filesTruncated": "The index covers the first {n} files of the repository.",
+      "annotationBudget": "The annotation budget ran out — some entities have no descriptions."
+    }
   },
   "chat": {
     "you": "You",
     "assistant": "RepoBuddy",
-    "tokensPerSec": "t/s",
-    "tokensPerSecTitle": "Output tokens per second for this turn",
     "copy": "Copy",
     "copied": "Copied",
     "copyMarkdown": "Copy answer as markdown",
     "chats": "Chats",
     "newChat": "+ New",
+    "history": "Chat history",
     "noChats": "No saved chats yet.",
     "messageCount": "{n} msg",
     "deleteChat": "Delete this chat",
@@ -352,6 +354,7 @@
     "title": "Explore",
     "subtitle": "{n} indexed files. Click a tile to open its neighbour graph.",
     "loading": "Loading file map…",
+    "mobileNotice": "Open this workspace on a desktop to see the file's connection graph.",
     "preset": {
       "loc": "Size",
       "hotness": "Hotness",
