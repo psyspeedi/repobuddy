@@ -54,3 +54,69 @@ describe('answer operator', () => {
     expect(events[1]?.type).toBe('done')
   })
 })
+
+describe('resolution status in the answer prompt', () => {
+  /**
+   * Captures the rendered user message so we can assert on the prompt
+   * itself. MockLLMProvider discards its messages.
+   */
+  class RecordingLLM extends MockLLMProvider {
+    lastUserMessage = ''
+    override async *stream(messages: { role: string; content: string }[]) {
+      this.lastUserMessage = messages.find((m) => m.role === 'user')?.content ?? ''
+      yield { type: 'text' as const, text: 'ok' }
+      yield { type: 'done' as const, inputTokens: 1, outputTokens: 1 }
+    }
+  }
+
+  const run = async (resolution: Record<string, unknown>): Promise<string> => {
+    const llm = new RecordingLLM()
+    for await (const _ of answer(llm as never, {
+      question: 'I want to take issue #42',
+      chunks: [],
+      resolution: resolution as never,
+    })) { /* drain */ }
+    return llm.lastUserMessage
+  }
+
+  const base = {
+    issueNumber: 42,
+    status: 'none' as const,
+    confidence: 'low' as const,
+    mergedByCommits: [],
+    linkedPullRequests: [],
+    duplicateCandidates: [],
+  }
+
+  it('asserts "unresolved" only when the check actually completed', async () => {
+    const prompt = await run(base)
+    expect(prompt).toContain('found NO merged fix')
+    expect(prompt).not.toContain('could NOT complete')
+  })
+
+  it('hedges instead of asserting when the lookup was rate limited', async () => {
+    const prompt = await run({ ...base, reason: 'rate_limited' })
+    expect(prompt).toContain('could NOT complete')
+    expect(prompt).toContain('rate limit')
+    // The whole point: it must not tell the user nobody is working on it.
+    expect(prompt).not.toContain('found NO merged fix')
+  })
+
+  it('hedges when the GitHub call failed outright', async () => {
+    const prompt = await run({ ...base, reason: 'fetch_failed' })
+    expect(prompt).toContain('could NOT complete')
+    expect(prompt).not.toContain('found NO merged fix')
+  })
+
+  it('still reports a positive verdict normally', async () => {
+    const prompt = await run({
+      ...base,
+      status: 'merged',
+      confidence: 'high',
+      mergedByCommits: [{ sha: 'abc1234', message: 'fixes #42', author: 'me', date: '2026-01-01' }],
+    })
+    expect(prompt).toContain('Status: merged')
+    expect(prompt).toContain('### Fixing commits')
+    expect(prompt).not.toContain('could NOT complete')
+  })
+})

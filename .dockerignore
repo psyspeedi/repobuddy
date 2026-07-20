@@ -1,0 +1,31 @@
+# The Dockerfiles run `pnpm install` and then COPY apps/* over the
+# result. Without this, host node_modules land on top of the installed
+# ones — symlinks pointing at .pnpm paths that do not exist in the
+# image — and the container dies on MODULE_NOT_FOUND. Build output is
+# excluded for the same reason: apps/web/Dockerfile builds Nuxt itself.
+node_modules
+**/node_modules
+
+.nuxt
+**/.nuxt
+.output
+**/.output
+dist
+**/dist
+.vite
+**/.vite
+
+.git
+.github
+coverage
+**/coverage
+
+.env
+.env.*
+!.env.example
+
+docker/backups
+*.log
+.DS_Store
+.idea
+.vscode

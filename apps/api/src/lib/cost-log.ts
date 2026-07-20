@@ -28,6 +28,15 @@ export interface CostInput {
   /** Cents per 1M input tokens. Pass from provider.costCentsPer1M*. */
   costCentsPer1MInput?: number
   costCentsPer1MOutput?: number
+  /**
+   * The call was billed to the user's own provider key, not the
+   * operator's. Still written to the ledger (per-workspace spend stays
+   * observable), but kept out of the service-wide daily counter — that
+   * counter gates indexing and chat for *everyone*, so charging it for
+   * money the operator never spent lets one BYOK run lock the whole
+   * deployment out until UTC midnight.
+   */
+  byok?: boolean
 }
 
 /** 1 cent = 10_000 micro-cents. */
@@ -81,7 +90,7 @@ export async function recordCost(db: Database, input: CostInput): Promise<void> 
     if (outTok > 0) llmTokens.inc({ phase: input.phase, direction: 'out', model: input.model }, outTok)
     if (microCents > 0) {
       llmCostCents.inc({ phase: input.phase, model: input.model }, microCents / MICRO_CENTS_PER_CENT)
-      await trackGlobalDailySpend(microCents)
+      if (!input.byok) await trackGlobalDailySpend(microCents)
     }
   } catch (err) {
     // Cost logging is best-effort. A DB error here must never block the

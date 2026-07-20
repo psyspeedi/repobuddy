@@ -5,6 +5,13 @@ const colorMode = useColorMode()
 const { loggedIn, user, clear } = useAuth()
 const { t, locale, locales, setLocale } = useI18n()
 
+// Guests arriving from a README badge land straight on /w/<id>, which
+// opts out of the auth middleware — without this the header offered them
+// no way to sign in at all, and the guest quota copy promising "higher
+// limits after signing in" pointed nowhere.
+const { public: { apiBaseUrl } } = useRuntimeConfig()
+const githubAuthUrl = `${apiBaseUrl}/auth/github`
+
 interface QuotaResponse {
   bypass: boolean
   viewerKind: 'user' | 'admin' | 'guest'
@@ -129,6 +136,11 @@ async function pickLocale(code: 'en' | 'ru'): Promise<void> {
               {{ t('nav.signOut') }}
             </Button>
           </template>
+          <a v-else :href="githubAuthUrl">
+            <Button variant="outline" size="sm">
+              {{ t('nav.signIn') }}
+            </Button>
+          </a>
         </div>
       </div>
     </header>

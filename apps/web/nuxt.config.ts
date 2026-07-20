@@ -27,6 +27,8 @@ export default defineNuxtConfig({
   ],
 
   i18n: {
+    // Russian plural rules live here — see i18n.config.ts.
+    vueI18n: './i18n.config.ts',
     locales: [
       { code: 'en', name: 'English', file: 'en.json' },
       { code: 'ru', name: 'Русский', file: 'ru.json' },

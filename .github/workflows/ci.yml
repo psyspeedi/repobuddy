@@ -39,6 +39,15 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
+      # Typecheck does not exercise the Nuxt production build, so
+      # build-only failures reached the deploy unseen — an unescaped `@`
+      # in a locale file is a hard error for the i18n message compiler
+      # but perfectly valid TypeScript.
+      - name: Web production build
+        run: pnpm --filter @repobuddy/web build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
   integration:
     name: integration
     runs-on: ubuntu-latest

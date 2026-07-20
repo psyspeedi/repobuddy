@@ -226,6 +226,10 @@ useHead({
       </p>
       <div class="flex flex-wrap justify-center gap-2 text-sm font-medium">
         <span class="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-sky-700 dark:text-sky-300">TypeScript</span>
+        <!-- Vue SFCs are parsed via @vue/compiler-sfc and land in the
+             graph as TypeScript, so they earn a chip: a Vue maintainer
+             scanning this row should not conclude they're unsupported. -->
+        <span class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:text-emerald-300">Vue SFC</span>
         <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-amber-700 dark:text-amber-300">JavaScript</span>
         <span class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:text-emerald-300">Python</span>
         <span class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-cyan-700 dark:text-cyan-300">Go</span>

@@ -38,6 +38,12 @@ export interface AnnotateOptions {
    * fewer descriptions.
    */
   budgetUsd?: number
+  /**
+   * The run is billed to the user's own provider key. Costs are still
+   * logged per workspace, but must not count against the service-wide
+   * daily cap that gates indexing for every other user.
+   */
+  byok?: boolean
 }
 
 /**
@@ -166,6 +172,7 @@ export async function annotateAndEmbed(
           outputTokens: 200,
           costCentsPer1MInput: llm.costCentsPer1MInputTokens,
           costCentsPer1MOutput: llm.costCentsPer1MOutputTokens,
+          byok: options.byok,
         })
 
         await db

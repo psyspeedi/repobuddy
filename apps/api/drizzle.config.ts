@@ -1,5 +1,9 @@
 import { defineConfig } from 'drizzle-kit'
-import 'dotenv/config'
+import { config as loadDotenv } from 'dotenv'
+import { resolve } from 'node:path'
+
+// cwd is apps/api; the .env is at the monorepo root two levels up.
+loadDotenv({ path: resolve(process.cwd(), '../../.env') })
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) {

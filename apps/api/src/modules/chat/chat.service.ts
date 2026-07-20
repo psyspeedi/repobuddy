@@ -149,8 +149,14 @@ export class ChatService {
         .catch((err) => {
           this.log.error({ err }, 'chat stream failed')
           const msg = err instanceof Error ? err.message : String(err)
+          // The stream is already open with a 200, so the HTTP status
+          // can't carry this. Forward the code the thrower attached
+          // (quotas.ts sets 429) so the client can render a localized
+          // message instead of leaking English backend prose into the
+          // transcript.
+          const statusCode = (err as { statusCode?: number }).statusCode ?? null
           if (!closed) {
-            subscriber.next({ type: 'error', data: msg })
+            subscriber.next({ type: 'error', data: JSON.stringify({ message: msg, statusCode }) })
             subscriber.complete()
           }
         })
@@ -409,6 +415,7 @@ export class ChatService {
         outputTokens,
         costCentsPer1MInput: llm.costCentsPer1MInputTokens,
         costCentsPer1MOutput: llm.costCentsPer1MOutputTokens,
+        byok: usesByok,
       })
 
       chatRequests.inc({ status: 'ok', viewer: viewerLabel })

@@ -22,6 +22,8 @@ export async function embedChunks(
   chunkIds: string[],
   provider: EmbeddingsProvider,
   onProgress?: (done: number, total: number) => void,
+  /** Billed to the user's own key — keep out of the operator's daily cap. */
+  byok = false,
 ): Promise<number> {
   if (chunkIds.length === 0) return 0
 
@@ -71,6 +73,7 @@ export async function embedChunks(
     model: provider.model,
     inputTokens: approxTokens,
     costCentsPer1MInput: provider.costCentsPer1MTokens,
+    byok,
   })
 
   log.info({ workspaceId, count: processed, model: provider.model }, 'embedded chunks')
@@ -85,13 +88,14 @@ export async function embedAllPendingChunks(
   db: Database,
   workspaceId: string,
   provider: EmbeddingsProvider,
+  byok = false,
 ): Promise<number> {
   const rows = await db
     .select({ id: chunks.id })
     .from(chunks)
     .where(sql`${chunks.workspaceId} = ${workspaceId} AND ${chunks.embedding} IS NULL`)
   if (rows.length === 0) return 0
-  return embedChunks(db, workspaceId, rows.map((r) => r.id), provider)
+  return embedChunks(db, workspaceId, rows.map((r) => r.id), provider, undefined, byok)
 }
 
 // Re-export inArray for callers — avoids extra Drizzle imports in callsites.

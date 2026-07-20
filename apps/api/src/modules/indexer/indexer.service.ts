@@ -77,6 +77,7 @@ export class IndexerService {
       maxFiles: env.MAX_FILES_PER_INDEX,
       maxRepoSizeMb: env.MAX_REPO_SIZE_MB,
       annotationBudgetUsd: usesByok ? undefined : env.LLM_BUDGET_USD_PER_INDEX,
+      usesByok,
     }
     return runIndexPipeline(this.db, job, deps)
   }

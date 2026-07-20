@@ -419,6 +419,7 @@ export async function findResolution(
   const octokit = createOctokit()
   const refRe = FIX_REF_RE_FOR(n)
   const linkedPullRequests: ResolutionPr[] = []
+  let prLookupFailed: ResolutionEnvelope['reason'] | null = null
   try {
     const search = await octokit.rest.search.issuesAndPullRequests({
       q: `repo:${owner}/${repo} type:pr "#${n}"`,
@@ -460,13 +461,12 @@ export async function findResolution(
     }
   } catch (err) {
     const status = (err as { status?: number }).status ?? 0
-    if (status === 403) {
-      return {
-        ...emptyResolution(n),
-        mergedByCommits,
-        reason: 'rate_limited',
-      }
-    }
+    // Channel 2 is gone, but channel 1 already ran: commits found in the
+    // index still decide the verdict, so classify instead of returning a
+    // hardcoded `none` that would contradict a non-empty mergedByCommits.
+    // `reason` records that the PR lookup never happened, so answer.ts
+    // can hedge instead of asserting the issue is unresolved.
+    prLookupFailed = status === 403 ? 'rate_limited' : 'fetch_failed'
   }
 
   // Channel 3 — cosine-similar issues. Delegate to findSimilarIssues
@@ -482,7 +482,12 @@ export async function findResolution(
       similarity: s.similarity,
     }))
 
-  return classifyResolution(n, mergedByCommits, linkedPullRequests, duplicateCandidates)
+  const verdict = classifyResolution(n, mergedByCommits, linkedPullRequests, duplicateCandidates)
+  // Only a `none` verdict is weakened by the missing channel — any
+  // positive status stands on evidence we actually collected.
+  return prLookupFailed && verdict.status === 'none'
+    ? { ...verdict, reason: prLookupFailed }
+    : verdict
 }
 
 export function classifyResolution(

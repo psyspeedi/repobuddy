@@ -281,11 +281,30 @@ function renderUserMessage(params: AnswerParams): string {
     const r = params.resolution
     lines.push('')
     lines.push(`## Issue #${r.issueNumber} resolution status`)
-    if (r.status === 'none') {
+    if (r.status === 'none' && r.reason) {
+      // A `none` carrying a reason means the lookup did not complete —
+      // absence of evidence, not evidence of absence. Asserting "nobody
+      // is working on this" here sends contributors to duplicate work.
+      const why: Record<string, string> = {
+        rate_limited: 'the GitHub API rate limit was hit',
+        fetch_failed: 'the GitHub API call failed',
+        not_github: 'this workspace is not backed by a GitHub repository',
+        no_source_url: 'this workspace has no source repository URL',
+        no_issue: 'no valid issue number was supplied',
+      }
+      lines.push(
+        `find_resolution could NOT complete its check (${why[r.reason] ?? r.reason}).`
+        + ' Do NOT claim the issue is unresolved or that nobody is working on'
+        + ' it. Say the existing-fix check could not be completed, suggest the'
+        + ' user confirm on GitHub, and help them explore the code meanwhile.',
+      )
+    } else if (r.status === 'none') {
       lines.push(
         'find_resolution found NO merged fix, no open/draft PR, and no'
-        + ' duplicate for this issue. Tell the user explicitly that the issue'
-        + ' appears unresolved, then help them start working on it.',
+        + ' duplicate for this issue. Note that the PR search only matches'
+        + ' explicit "fixes/closes #N" references, so a fix without that'
+        + ' wording would not show up — say the issue appears unresolved,'
+        + ' but do not overstate it, then help them start working on it.',
       )
     } else {
       lines.push(

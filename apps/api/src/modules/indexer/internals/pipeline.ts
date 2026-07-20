@@ -74,6 +74,13 @@ export interface PipelineDeps {
   maxFiles?: number
   /** Reject repos whose on-disk clone exceeds this size (MAX_REPO_SIZE_MB). */
   maxRepoSizeMb?: number
+  /**
+   * The run uses the user's own provider key. Such spend is exempt from
+   * the per-index cap already; it must equally stay out of the
+   * service-wide daily counter, or one BYOK index of a large monorepo
+   * blocks indexing for every non-BYOK user until UTC midnight.
+   */
+  usesByok?: boolean
 }
 
 export async function runIndexPipeline(
@@ -364,6 +371,7 @@ export async function runIndexPipeline(
             message: `Embedded ${done}/${total} chunks`,
           })
         },
+        deps.usesByok,
       )
 
       // 9c. LLM semantic annotation (phase 4).
@@ -388,7 +396,7 @@ export async function runIndexPipeline(
           workspaceId,
           deps.llm,
           embeddings,
-          { maxEntities: deps.maxAnnotated, budgetUsd: deps.annotationBudgetUsd },
+          { maxEntities: deps.maxAnnotated, budgetUsd: deps.annotationBudgetUsd, byok: deps.usesByok },
           async (done, total) => {
             const now = Date.now()
             if (done < total && now - lastProgressWrite < 1000 && done % 5 !== 0) {
@@ -439,6 +447,7 @@ export async function runIndexPipeline(
         db,
         workspaceId,
         embeddings,
+        deps.usesByok,
       )
       if (diffEmbedded > 0) {
         await setWorkspaceProgress(db, workspaceId, {

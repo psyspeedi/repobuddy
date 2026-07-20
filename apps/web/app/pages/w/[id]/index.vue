@@ -6,7 +6,7 @@ import { History } from 'lucide-vue-next'
 // useFetch surfaces it as an error.
 definePageMeta({ auth: false })
 
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const { loggedIn } = useAuth()
 const route = useRoute()
 const workspaceId = String(route.params.id)
@@ -491,7 +491,11 @@ async function copyBadgeSnippet(): Promise<void> {
             <span v-else>Uploaded archive</span>
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <!-- Wraps: with the freshness badge this cluster runs to seven
+             children, and the Russian labels alone overflow a phone
+             viewport. The page shell is overflow-hidden, so anything
+             past the edge is clipped, not scrollable. -->
+        <div class="flex flex-wrap items-center justify-end gap-2 gap-y-2">
           <span
             v-if="isPublic"
             class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
@@ -527,11 +531,11 @@ async function copyBadgeSnippet(): Promise<void> {
             class="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300"
             :class="viewerIsOwner ? 'hover:bg-amber-500/20' : ''"
             :title="viewerIsOwner
-              ? t('workspace.freshness.behindHint', { n: freshness.behindBy, sha: freshnessSha7 })
-              : t('workspace.freshness.behindHintGuest', { n: freshness.behindBy, sha: freshnessSha7 })"
+              ? t('workspace.freshness.behindHint', { n: freshness.behindBy, sha: freshnessSha7 }, freshness.behindBy ?? 0)
+              : t('workspace.freshness.behindHintGuest', { n: freshness.behindBy, sha: freshnessSha7 }, freshness.behindBy ?? 0)"
             @click="viewerIsOwner && reindex()"
           >
-            {{ t('workspace.freshness.behind', { n: freshness.behindBy }) }}
+            {{ t('workspace.freshness.behind', { n: freshness.behindBy }, freshness.behindBy ?? 0) }}
           </component>
           <Button
             v-if="viewerIsOwner && (isReady || isFailed)"
@@ -635,8 +639,13 @@ async function copyBadgeSnippet(): Promise<void> {
           :style="{ width: `${percent}%` }"
         />
       </div>
+      <!-- The backend's progress `message` is English-only prose built in
+           pipeline.ts ("Walking files…", "Embedded 12/40 chunks"). Under
+           a localized phase label it read as half-translated, and the
+           phase + percent above already carry the information, so the
+           raw string is kept for English only. -->
       <p class="text-sm text-muted-foreground">
-        {{ message || t('workspace.waiting') }}
+        {{ (locale === 'en' && message) || t('workspace.waiting') }}
       </p>
     </section>
 
@@ -648,7 +657,7 @@ async function copyBadgeSnippet(): Promise<void> {
         {{ t('workspace.indexingFailed') }}
       </h2>
       <p class="text-sm">
-        {{ wsData.workspace.error ?? 'Unknown error' }}
+        {{ wsData.workspace.error ?? t('workspace.unknownError') }}
       </p>
     </section>
 
@@ -676,31 +685,43 @@ async function copyBadgeSnippet(): Promise<void> {
          choice already; nagging them on every visit is exactly the
          noise this page has been shedding, so the hint lives on the
          "Make public" tooltip instead. -->
-    <section
+    <!-- Collapsed by default: this is a one-time setup action, and the
+         page cannot scroll, so ~190px spent on it permanently is ~190px
+         taken from the chat below. -->
+    <details
       v-if="viewerIsOwner && isReady && isPublic"
-      class="space-y-2 rounded-lg border border-border bg-card p-4"
+      class="shrink-0 rounded-lg border border-border bg-card px-4 py-3"
     >
-      <h2 class="text-sm font-medium">
+      <summary class="cursor-pointer text-sm font-medium marker:text-muted-foreground">
         {{ t('workspace.invite.title') }}
-      </h2>
-      <p class="text-sm text-muted-foreground">
-        {{ t('workspace.invite.body') }}
-      </p>
-      <div class="flex items-center gap-2">
-        <code class="flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-muted/50 px-2 py-1.5 text-xs">{{ badgeSnippet }}</code>
-        <Button variant="outline" size="sm" class="shrink-0" @click="copyBadgeSnippet">
-          {{ badgeCopied ? t('workspace.invite.copied') : t('workspace.invite.copy') }}
-        </Button>
+      </summary>
+      <div class="mt-2 space-y-2">
+        <p class="text-sm text-muted-foreground">
+          {{ t('workspace.invite.body') }}
+        </p>
+        <div class="flex items-center gap-2">
+          <code class="flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-muted/50 px-2 py-1.5 text-xs">{{ badgeSnippet }}</code>
+          <Button variant="outline" size="sm" class="shrink-0" @click="copyBadgeSnippet">
+            {{ badgeCopied ? t('workspace.invite.copied') : t('workspace.invite.copy') }}
+          </Button>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{{ t('workspace.invite.preview') }}</span>
+          <img :src="badgeUrl" alt="Explore with RepoBuddy" height="20" class="h-5">
+        </div>
       </div>
-      <div class="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>{{ t('workspace.invite.preview') }}</span>
-        <img :src="badgeUrl" alt="Explore with RepoBuddy" height="20" class="h-5">
-      </div>
-    </section>
+    </details>
 
+    <!-- min-h-0 rather than min-h-[400px]: the shell forbids page scroll,
+         so a floor taller than the space left pushes the composer off
+         screen with no way to reach it. The blocks above (insights,
+         coverage banners, invite card) already cost ~650px on a laptop.
+         Letting chat shrink keeps the input reachable; the inner
+         container is min-h-0 + overflow-hidden, so the message list
+         gives up the space, not the composer. -->
     <section
       v-if="isReady"
-      class="flex flex-1 flex-col gap-3 min-h-[400px] lg:flex-row"
+      class="flex flex-1 flex-col gap-3 min-h-0 lg:flex-row"
     >
       <!-- Hide the chat history sidebar for guests — their sessions are
            ephemeral, so the list would always be empty and useless.

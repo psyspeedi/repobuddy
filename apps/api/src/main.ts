@@ -38,14 +38,20 @@ async function bootstrap() {
   app.useLogger(app.get(PinoLogger))
   app.enableShutdownHooks()
 
-  // In production the API never publishes a port: Caddy terminates TLS
-  // and proxies /api/* to api:3001, so without this every request would
-  // report the proxy container's address as `req.ip` and the whole
-  // internet would share one per-IP rate-limit bucket. `1` means "trust
-  // exactly one hop": Express reads the right-most X-Forwarded-For
-  // entry, which is the one Caddy appended, so a client that sends its
-  // own X-Forwarded-For cannot push a fake address into that slot.
-  app.set('trust proxy', 1)
+  // In the bundled deployment the API never publishes a port: Caddy
+  // terminates TLS and proxies /api/* to api:3001, so without this every
+  // request would report the proxy container's address as `req.ip` and
+  // the whole internet would share one per-IP rate-limit bucket. `1`
+  // means "trust exactly one hop": Express reads the right-most
+  // X-Forwarded-For entry, which is the one Caddy appended.
+  //
+  // That guarantee holds ONLY when a proxy really is in front. Exposed
+  // directly, trusting a hop makes req.ip client-controlled, and every
+  // per-IP limit (MCP, badge, chat, freshness) is bypassed by varying a
+  // header. So the hop count is configurable and defaults to 0 —
+  // docker-compose.prod.yml sets it to 1, where Caddy is guaranteed.
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0)
+  app.set('trust proxy', Number.isFinite(trustProxyHops) && trustProxyHops > 0 ? trustProxyHops : false)
 
   // Frontend lives on a separate origin (Nuxt at :3000 in dev). CORS
   // + credentials are required so the session cookie travels with

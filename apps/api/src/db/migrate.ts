@@ -4,12 +4,17 @@
  * (tsvector generated column + GIN index) that are not expressible
  * via the typed schema.
  */
-import 'dotenv/config'
+import { config as loadDotenv } from 'dotenv'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+
+// The .env lives at the monorepo root but pnpm runs this script with cwd
+// = apps/api, so bare `dotenv/config` finds nothing. main.ts and
+// config.module.ts already resolve it explicitly; this is the third.
+loadDotenv({ path: resolve(process.cwd(), '../../.env') })
 
 const DRIZZLE_DIR = process.env.DRIZZLE_DIR ?? '../../drizzle'
 const RAW_SQL_DIR = join(process.cwd(), DRIZZLE_DIR, 'raw')

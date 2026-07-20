@@ -19,6 +19,12 @@ const FRESHNESS_TTL_SECONDS = 30 * 60
 // Failures (rate limit, repo moved, force-pushed base) get a shorter TTL
 // so a transient error doesn't pin the badge to "unknown" for half an hour.
 const FRESHNESS_ERROR_TTL_SECONDS = 5 * 60
+// Held only for the duration of the GitHub round-trip; short enough that
+// a crashed request cannot pin the badge to "unknown".
+const FRESHNESS_LOCK_SECONDS = 20
+
+const freshnessCacheKey = (workspaceId: string): string =>
+  `cg:freshness:${workspaceId}`
 const GRAPH_DEFAULT_LIMIT = 2000
 const GRAPH_NEIGHBOR_LIMIT = 1500
 const GH_URL_RE = /github\.com\/([^/]+)\/([^/.]+)/
@@ -98,13 +104,7 @@ export class WorkspacesQueryService {
    * the badge simply doesn't render; never a 500.
    */
   async getFreshness(workspaceId: string): Promise<FreshnessResult> {
-    const cacheKey = `cg:freshness:${workspaceId}`
-    try {
-      const cached = await this.redis.get(cacheKey)
-      if (cached) return JSON.parse(cached) as FreshnessResult
-    } catch {
-      /* Redis hiccup — recompute */
-    }
+    const cacheKey = freshnessCacheKey(workspaceId)
 
     const [ws] = await this.db
       .select({
@@ -117,6 +117,21 @@ export class WorkspacesQueryService {
     if (!ws) throw new NotFoundException('workspace not found')
 
     const indexedSha = ws.indexedCommitSha ?? null
+
+    // Read the cache only after we know the current indexed sha: a
+    // re-index that moved the sha must invalidate the entry immediately,
+    // otherwise the badge keeps saying "N commits behind" for up to 30
+    // minutes right after the re-index it itself asked for.
+    try {
+      const cached = await this.redis.get(cacheKey)
+      if (cached) {
+        const hit = JSON.parse(cached) as FreshnessResult
+        if (hit.indexedSha === indexedSha) return hit
+      }
+    } catch {
+      /* Redis hiccup — recompute */
+    }
+
     const degraded: FreshnessResult = {
       indexedSha,
       headSha: null,
@@ -127,6 +142,23 @@ export class WorkspacesQueryService {
     if (!indexedSha || !match) return degraded
     const owner = match[1] as string
     const repo = match[2] as string
+
+    // Single-flight: the endpoint is anonymous, so N concurrent misses on
+    // a cold key would otherwise fan out to 2-3 GitHub calls each and
+    // drain the token's hourly budget for the indexer and the KAG
+    // operators too. Losers degrade (badge just doesn't render) rather
+    // than queue up behind the winner.
+    let lockHeld = false
+    try {
+      lockHeld = (await this.redis.set(
+        `${cacheKey}:lock`, '1', 'EX', FRESHNESS_LOCK_SECONDS, 'NX',
+      )) === 'OK'
+    } catch {
+      // Redis down — fall through and just do the work; without a cache
+      // there is nothing to stampede against anyway.
+      lockHeld = true
+    }
+    if (!lockHeld) return degraded
 
     const octokit = createOctokit()
     let result: FreshnessResult
@@ -161,6 +193,10 @@ export class WorkspacesQueryService {
     const ttl = result.behindBy === null ? FRESHNESS_ERROR_TTL_SECONDS : FRESHNESS_TTL_SECONDS
     try {
       await this.redis.set(cacheKey, JSON.stringify(result), 'EX', ttl)
+      // Release rather than wait out the TTL: a re-index that lands
+      // seconds later invalidates the entry by sha, and holding the lock
+      // would blank the badge until it expired.
+      await this.redis.del(`${cacheKey}:lock`)
     } catch {
       /* cache is best-effort */
     }

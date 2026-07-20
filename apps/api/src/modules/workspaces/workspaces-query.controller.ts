@@ -1,5 +1,6 @@
 import { BadRequestException, Controller, Get, Inject, Param, Query, Req } from '@nestjs/common'
 import type { Request } from 'express'
+import { rateLimitTake } from '#server/lib/rate-limit'
 import { WorkspaceAccessService } from './workspace-access.service'
 import {
   GRAPH_DEFAULT_LIMIT,
@@ -7,12 +8,28 @@ import {
   WorkspacesQueryService,
 } from './workspaces-query.service'
 
+// Both routes below reach out to GitHub with the deployment-wide token,
+// and both are readable anonymously on a public workspace. Throttle per
+// IP so a scripted sweep over /sitemap.xml cannot drain the hourly
+// budget shared with the indexer and the KAG operators.
+const GITHUB_ROUTE_RATE_LIMIT = 60
+const GITHUB_ROUTE_RATE_WINDOW_SEC = 60
+
 @Controller('workspaces/:id')
 export class WorkspacesQueryController {
   constructor(
     @Inject(WorkspaceAccessService) private readonly access: WorkspaceAccessService,
     @Inject(WorkspacesQueryService) private readonly query: WorkspacesQueryService,
   ) {}
+
+  private async takeGithubRouteSlot(req: Request, route: string): Promise<boolean> {
+    const quota = await rateLimitTake(
+      `cg:rl:${route}:ip:${req.ip ?? 'unknown'}`,
+      GITHUB_ROUTE_RATE_LIMIT,
+      GITHUB_ROUTE_RATE_WINDOW_SEC,
+    )
+    return quota.ok
+  }
 
   @Get('search')
   async search(@Req() req: Request, @Param('id') id: string, @Query() q: Record<string, string | string[]>) {
@@ -72,6 +89,11 @@ export class WorkspacesQueryController {
   @Get('freshness')
   async freshness(@Req() req: Request, @Param('id') id: string) {
     await this.access.read(req, id)
+    // Throttled reads degrade the same way a GitHub failure does: the
+    // badge just doesn't render. Never a 500, never a stale lie.
+    if (!(await this.takeGithubRouteSlot(req, 'freshness'))) {
+      return { indexedSha: null, headSha: null, behindBy: null, checkedAt: new Date().toISOString() }
+    }
     return this.query.getFreshness(id)
   }
 
@@ -90,6 +112,10 @@ export class WorkspacesQueryController {
   @Get('github-issues')
   async githubIssues(@Req() req: Request, @Param('id') id: string) {
     await this.access.read(req, id)
+    // `rate_limited` is already a reason the onboarding UI renders.
+    if (!(await this.takeGithubRouteSlot(req, 'gh-issues'))) {
+      return { issues: [], reason: 'rate_limited' }
+    }
     return this.query.getFirstIssues(id)
   }
 

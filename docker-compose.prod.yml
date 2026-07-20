@@ -37,13 +37,19 @@ services:
       PROCESS_ROLE: web
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?required}
+      # Not :?required — env.ts accepts either OPENAI_API_KEY or
+      # LLM_API_KEY (the documented Groq/OpenRouter path) and validates
+      # the pair itself, with a clearer message than compose can give.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?required}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?required}
       NUXT_SESSION_PASSWORD: ${NUXT_SESSION_PASSWORD:?required}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
       APP_URL: ${APP_URL:?required}
-      WEB_ORIGIN: ${WEB_ORIGIN:?required}
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      # Behind the bundled Caddy everything is one origin, so this may
+      # stay unset — main.ts falls back to http://localhost:3000.
+      WEB_ORIGIN: ${WEB_ORIGIN:-}
       API_URL: ${API_URL:-}
       # Only needed for a split-origin deployment (API on its own
       # domain): the MCP endpoint validates the Host header against
@@ -51,6 +57,22 @@ services:
       # it. Optional so the same-origin default keeps working unset.
       API_BASE_URL: ${API_BASE_URL:-}
       API_PORT: 3001
+      # Operational levers documented in README "Deployment notes".
+      # Without these the container only ever sees env.ts defaults and
+      # anything the operator sets in .env is silently ignored.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ADMIN_LOGINS: ${ADMIN_LOGINS:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      MCP_ENABLED: ${MCP_ENABLED:-true}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      COST_BUDGET_USD_PER_DAY: ${COST_BUDGET_USD_PER_DAY:-3}
+      LLM_BUDGET_USD_PER_INDEX: ${LLM_BUDGET_USD_PER_INDEX:-2.0}
+      MAX_FILES_PER_INDEX: ${MAX_FILES_PER_INDEX:-2000}
+      MAX_REPO_SIZE_MB: ${MAX_REPO_SIZE_MB:-200}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,8 +92,25 @@ services:
       PROCESS_ROLE: worker
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?required}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?required}
+      # EnvSchema is shared between roles, so the worker must satisfy the
+      # same required fields as the API even though it serves no OAuth
+      # and holds no sessions. Without these it dies on bootstrap.
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?required}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?required}
+      NUXT_SESSION_PASSWORD: ${NUXT_SESSION_PASSWORD:?required}
+      APP_URL: ${APP_URL:?required}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ADMIN_LOGINS: ${ADMIN_LOGINS:-}
+      COST_BUDGET_USD_PER_DAY: ${COST_BUDGET_USD_PER_DAY:-3}
+      LLM_BUDGET_USD_PER_INDEX: ${LLM_BUDGET_USD_PER_INDEX:-2.0}
+      MAX_FILES_PER_INDEX: ${MAX_FILES_PER_INDEX:-2000}
+      MAX_REPO_SIZE_MB: ${MAX_REPO_SIZE_MB:-200}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,7 +126,10 @@ services:
     restart: always
     environment:
       NUXT_PUBLIC_APP_URL: ${APP_URL:?required}
-      NUXT_PUBLIC_API_BASE_URL: ${API_BASE_URL:?required}
+      # Empty = same-origin relative calls, which is what the bundled
+      # Caddy serves. Marking it required contradicted the api service
+      # above, where the same variable is explicitly optional.
+      NUXT_PUBLIC_API_BASE_URL: ${API_BASE_URL:-}
       NUXT_HOST: 0.0.0.0
       NUXT_PORT: 3000
     depends_on:
@@ -99,6 +141,11 @@ services:
     image: caddy:2-alpine
     container_name: repobuddy-caddy
     restart: always
+    # Caddyfile line 1 is `{$APP_DOMAIN} {`. Without this the
+    # substitution is empty, Caddy reads a bare `{` as the global
+    # options block and dies on `unrecognized global option: encode`.
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?required}
     ports:
       - "80:80"
       - "443:443"

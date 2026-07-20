@@ -225,7 +225,7 @@ export function useChat(workspaceId: string) {
           last.aborted = true
           if (!last.content) last.content = '_(stopped by user)_'
         } else {
-          last.content = `Error: ${err instanceof Error ? err.message : String(err)}`
+          last.content = `${i18n.t('chat.errorPrefix')}: ${err instanceof Error ? err.message : String(err)}`
         }
         last.pending = false
       }
@@ -287,7 +287,20 @@ export function useChat(workspaceId: string) {
       // the server has recorded this message's tokens.
       quotaBump.value++
     } else if (event === 'error') {
-      last.content += `\n\n_Error: ${data}_`
+      // The server sends {message, statusCode} since the SSE stream is
+      // already committed to a 200. A 429 is the guest hitting the daily
+      // cap — the one error a visitor can act on, so it gets localized
+      // copy pointing at sign-in instead of raw English backend prose.
+      let message = data
+      let statusCode: number | null = null
+      try {
+        const parsed = JSON.parse(data) as { message?: string; statusCode?: number | null }
+        if (typeof parsed.message === 'string') message = parsed.message
+        statusCode = parsed.statusCode ?? null
+      } catch { /* older/plain payload — show as-is */ }
+      last.content += statusCode === 429
+        ? `\n\n_${i18n.t('chat.quotaExceeded')}_`
+        : `\n\n_${i18n.t('chat.errorPrefix')}: ${message}_`
       last.pending = false
     }
   }

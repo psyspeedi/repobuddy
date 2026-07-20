@@ -166,7 +166,7 @@
     },
     "languages": {
       "title": "Supported languages",
-      "subtitle": "Static analysis covers four languages today. Markdown and per-commit diffs are indexed for every repo regardless of language."
+      "subtitle": "Static analysis covers four languages today, with Vue SFCs parsed as TypeScript. Markdown and per-commit diffs are indexed for every repo regardless of language."
     },
     "footer": "Open source. MIT licensed."
   },
@@ -188,7 +188,7 @@
     "loading": "Loading…",
     "empty": "No workspaces yet. Create one from a public GitHub URL above.",
     "uploaded": "uploaded archive",
-    "supportedLanguages": "Supported languages: TypeScript, JavaScript, Vue, Python, Go. Other repos still get text search, just without the code graph."
+    "supportedLanguages": "Supported languages: TypeScript (including Vue SFCs), JavaScript, Python, Go. Other repos still get text search, just without the code graph."
   },
   "workspace": {
     "viewGraph": "View graph",
@@ -203,6 +203,7 @@
     "reindexHint": "Re-run indexing on the latest commit (picks up new diffs, files, annotations)",
     "indexing": "Indexing",
     "waiting": "Waiting…",
+    "unknownError": "Unknown error",
     "indexingFailed": "Indexing failed",
     "askPlaceholder": "Ask about the repo…",
     "send": "Send",
@@ -236,11 +237,11 @@
     "publicBadge": "Public",
     "publicHint": "Anyone with the link can open this workspace in read-only mode (chat with guest limits, graph). No reindex / delete / settings.",
     "freshness": {
-      "upToDate": "Up to date @ {sha}",
+      "upToDate": "Up to date {'@'} {sha}",
       "upToDateHint": "The index matches the repository's latest commit ({sha}).",
-      "behind": "{n} commits behind",
-      "behindHint": "The index was built at commit {sha}; the repository has {n} newer commits. Re-index to catch up.",
-      "behindHintGuest": "The index was built at commit {sha}; the repository has {n} newer commits."
+      "behind": "{n} commit behind | {n} commits behind",
+      "behindHint": "The index was built at commit {sha}; the repository has {n} newer commit. Re-index to catch up. | The index was built at commit {sha}; the repository has {n} newer commits. Re-index to catch up.",
+      "behindHintGuest": "The index was built at commit {sha}; the repository has {n} newer commit. | The index was built at commit {sha}; the repository has {n} newer commits."
     },
     "phase": {
       "pending": "Queued",
@@ -277,6 +278,8 @@
     "messageCount": "{n} msg",
     "deleteChat": "Delete this chat",
     "untitled": "Untitled",
+    "errorPrefix": "Error",
+    "quotaExceeded": "You've used up today's message allowance. Sign in with GitHub for a higher daily limit, or come back tomorrow.",
     "citation": {
       "invalid": "invalid citation",
       "openChunk": "open source chunk",
