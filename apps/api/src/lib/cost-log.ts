@@ -30,14 +30,40 @@ export interface CostInput {
   costCentsPer1MOutput?: number
 }
 
+/** 1 cent = 10_000 micro-cents. */
+export const MICRO_CENTS_PER_CENT = 10_000
+/** 1 USD = 100 cents = 1_000_000 micro-cents. */
+export const MICRO_CENTS_PER_USD = 100 * MICRO_CENTS_PER_CENT
+
+/**
+ * Exact cost of one call in micro-cents.
+ *
+ * `tokens * centsPer1M / 1e6` cents, converted to micro-cents, is
+ * `tokens * centsPer1M / 100`. Rounding happens once per term at
+ * micro-cent granularity (≤ $5e-7 of error), instead of rounding each
+ * term up to a whole cent — which is what made a 0.04-cent annotation
+ * bill as 2 cents and exhausted a $2 index budget after ~100 entities.
+ */
+export function estimateMicroCents(input: {
+  inputTokens?: number
+  outputTokens?: number
+  costCentsPer1MInput?: number
+  costCentsPer1MOutput?: number
+}): number {
+  const inTok = Math.max(0, input.inputTokens ?? 0)
+  const outTok = Math.max(0, input.outputTokens ?? 0)
+  return (
+    Math.round((inTok * (input.costCentsPer1MInput ?? 0)) / 100) +
+    Math.round((outTok * (input.costCentsPer1MOutput ?? 0)) / 100)
+  )
+}
+
 export async function recordCost(db: Database, input: CostInput): Promise<void> {
   const inTok = Math.max(0, input.inputTokens ?? 0)
   const outTok = Math.max(0, input.outputTokens ?? 0)
   if (inTok === 0 && outTok === 0) return
 
-  const cents =
-    Math.ceil((inTok * (input.costCentsPer1MInput ?? 0)) / 1_000_000) +
-    Math.ceil((outTok * (input.costCentsPer1MOutput ?? 0)) / 1_000_000)
+  const microCents = estimateMicroCents(input)
 
   try {
     await db.insert(llmCostLog).values({
@@ -46,14 +72,17 @@ export async function recordCost(db: Database, input: CostInput): Promise<void> 
       model: input.model,
       inputTokens: inTok,
       outputTokens: outTok,
-      usdCents: cents,
+      usdMicroCents: microCents,
     })
     // Mirror into Prometheus counters so Grafana can graph trends
-    // without round-tripping the DB.
+    // without round-tripping the DB. The counter stays denominated in
+    // cents (the dashboards divide by 100) but is now fractional.
     if (inTok > 0) llmTokens.inc({ phase: input.phase, direction: 'in', model: input.model }, inTok)
     if (outTok > 0) llmTokens.inc({ phase: input.phase, direction: 'out', model: input.model }, outTok)
-    if (cents > 0) llmCostCents.inc({ phase: input.phase, model: input.model }, cents)
-    if (cents > 0) await trackGlobalDailySpend(cents)
+    if (microCents > 0) {
+      llmCostCents.inc({ phase: input.phase, model: input.model }, microCents / MICRO_CENTS_PER_CENT)
+      await trackGlobalDailySpend(microCents)
+    }
   } catch (err) {
     // Cost logging is best-effort. A DB error here must never block the
     // user-facing operation that triggered it.
@@ -66,19 +95,19 @@ export async function recordCost(db: Database, input: CostInput): Promise<void> 
  * service. Used by /api/chat/* to soft-block non-admin traffic when the
  * daily cap is reached, and fires Telegram alerts at 80% / 100%.
  */
-async function trackGlobalDailySpend(cents: number): Promise<void> {
+async function trackGlobalDailySpend(microCents: number): Promise<void> {
   const env = loadEnv()
   if (env.COST_BUDGET_USD_PER_DAY <= 0) return
   const day = new Date().toISOString().slice(0, 10)
-  const key = `cg:cost:day:${day}`
+  const key = dailySpendKey(day)
   const redis = getQuotaRedis()
   const res = await redis
     .multi()
-    .incrby(key, cents)
+    .incrby(key, microCents)
     .expire(key, 60 * 60 * 48)
     .exec()
   const after = Number(res?.[0]?.[1] ?? 0)
-  const usd = after / 100
+  const usd = after / MICRO_CENTS_PER_USD
   const cap = env.COST_BUDGET_USD_PER_DAY
   if (usd >= cap) {
     await sendAlert(
@@ -93,12 +122,22 @@ async function trackGlobalDailySpend(cents: number): Promise<void> {
   }
 }
 
+/**
+ * Redis key for a UTC day's accumulated spend. The `:uc` segment marks
+ * the unit: an older deploy stored whole cents under `cg:cost:day:<day>`,
+ * and silently reading those as micro-cents would report a day's spend
+ * 10_000x too low.
+ */
+function dailySpendKey(day: string): string {
+  return `cg:cost:day:uc:${day}`
+}
+
 /** Read today's accumulated spend (USD). Used by chat gate + admin UI. */
 export async function getTodaySpendUsd(): Promise<number> {
   const day = new Date().toISOString().slice(0, 10)
   try {
-    const v = await getQuotaRedis().get(`cg:cost:day:${day}`)
-    return v ? Number(v) / 100 : 0
+    const v = await getQuotaRedis().get(dailySpendKey(day))
+    return v ? Number(v) / MICRO_CENTS_PER_USD : 0
   } catch {
     return 0
   }

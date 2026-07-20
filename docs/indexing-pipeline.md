@@ -295,8 +295,8 @@ runs only when the caller passed an LLM and did not set `skipAnnotation`.
 - A failure on one entity is logged and skipped; the run continues.
 
 **Budget enforcement.** `LLM_BUDGET_USD_PER_INDEX` (default 2.0) arrives as
-`options.budgetUsd` and becomes `budgetCents`. Each worker checks
-`spentCents >= budgetCents` at the top of every iteration and returns if so,
+`options.budgetUsd` and becomes `budgetMicroCents`. Each worker checks
+`spentMicroCents >= budgetMicroCents` at the top of every iteration and returns if so,
 setting `budgetExhausted = true` and logging a warning with the counters. The
 remaining entities are simply left without descriptions — the index still
 reaches `ready`, `get_summary` just returns `null` for them. The flag surfaces as
@@ -310,21 +310,31 @@ the stop is always one iteration late by construction.
 return usage, so the code estimates `inputTokens = ceil(promptChars / 4)` and
 `outputTokens = 200` (schema-bounded). Cents are then
 
+converted to micro-cents by the single shared estimator in
+[`lib/cost-log.ts`](../apps/api/src/lib/cost-log.ts):
+
 ```ts
-spentCents +=
-  Math.ceil((inputTokens  * costCentsPer1MInputTokens)  / 1_000_000) +
-  Math.ceil((outputTokens * costCentsPer1MOutputTokens) / 1_000_000)
+// 1 cent = 10_000 micro-cents; tokens * centsPer1M / 1e6 cents == tokens * centsPer1M / 100 µ¢
+export function estimateMicroCents(input): number {
+  return (
+    Math.round((inputTokens  * costCentsPer1MInput)  / 100) +
+    Math.round((outputTokens * costCentsPer1MOutput) / 100)
+  )
+}
 ```
 
-`Math.ceil` applies to **each term separately**, so the floor is 2 cents per
-entity even when the true cost is around 0.035 cents. The same formula lives in
-[`lib/cost-log.ts`](../apps/api/src/lib/cost-log.ts), which means `llm_cost_log`
-and the Redis daily counter carry the same inflation.
+The unit matters. One annotation on the extraction tier costs about 0.04 cents,
+so rounding each term **up to a whole cent** — which an earlier revision did —
+put a 2-cent floor under every entity and exhausted the default `$2.00` budget
+after roughly 100 of them. Rounding at micro-cent granularity keeps the error
+below $5e-7 per call, so the budget now stops annotation at something close to
+$2 of estimated spend rather than at an entity count wearing a dollar sign.
 
-The practical effect: at the default `$2.00`, annotation stops after roughly
-100 entities (200 cents ÷ 2 cents), not after $2 of real spend. Treat
-`LLM_BUDGET_USD_PER_INDEX` as a conservative entity-count fuse with a dollar-shaped
-name, not as a billing limit.
+The same estimator feeds `llm_cost_log.usd_micro_cents`, the Redis daily
+counter behind `COST_BUDGET_USD_PER_DAY`, and the Prometheus counter (which
+stays denominated in cents, now fractional, so the Grafana panels are
+unchanged). Unit coverage lives in
+[`test/unit/cost-log.test.ts`](../apps/api/test/unit/cost-log.test.ts).
 
 Prices themselves are hardcoded in
 [`providers/internals/llm.ts`](../apps/api/src/modules/providers/internals/llm.ts):

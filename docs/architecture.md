@@ -233,7 +233,7 @@ erDiagram
 - **`entity_chunks`** — many-to-many join, primary key `(entity_id, chunk_id)` with a reverse index on `chunk_id`. Lets the answer operator hydrate citations both ways: entity → its source, chunk → its enclosing entity.
 - **`chat_sessions`** / **`chat_messages`** — conversation history, with `plan` and `trace` JSONB saved per assistant turn. Replaying a session rebuilds the Reasoning Inspector and the resolution banner from those columns without re-running anything.
 - **`audit_events`** — append-only record of noteworthy mutations (create, delete, visibility toggle, BYOK change), with the actor login denormalised so the admin timeline survives a cascade-delete of the user.
-- **`llm_cost_log`** — per-call ledger: workspace, `phase` (`indexing` | `planning` | `answering` | `embedding`), model, token counts, `usd_cents`.
+- **`llm_cost_log`** — per-call ledger: workspace, `phase` (`indexing` | `planning` | `answering` | `embedding`), model, token counts, `usd_micro_cents` (1 cent = 10 000 — annotation calls cost fractions of a cent).
 
 Migrations live in [`drizzle/`](../drizzle) and are applied by `pnpm db:migrate`, which runs the generated SQL and then the raw SQL in `drizzle/raw/`, recording the latter in a `_repobuddy_raw_migrations` table. `drizzle/meta/` is committed on purpose — without `_journal.json`, migrations will not run on a fresh clone. There is no automatic migration on container start; the operator runs it.
 

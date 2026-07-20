@@ -363,7 +363,11 @@ export const llmCostLog = pgTable(
     outputTokens: bigint('output_tokens', { mode: 'number' })
       .notNull()
       .default(0),
-    usdCents: integer('usd_cents').notNull().default(0),
+    // Micro-cents (1 cent = 10_000). Sub-cent calls are the norm — a
+    // single annotation on the extraction tier costs ~0.04 cents — so
+    // an integer-cent column would round almost every row to 0 or, if
+    // rounded up, overstate a run by ~50x.
+    usdMicroCents: integer('usd_micro_cents').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

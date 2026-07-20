@@ -1,0 +1,1 @@
+ALTER TABLE "llm_cost_log" DROP COLUMN "usd_cents";

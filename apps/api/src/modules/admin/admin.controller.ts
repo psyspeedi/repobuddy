@@ -89,7 +89,7 @@ export class AdminController {
       SELECT
         w.id, w.name, w.source_url, u.github_login AS owner_login,
         w.status, w.is_public, w.last_indexed_at, w.created_at,
-        coalesce((SELECT sum(usd_cents)::int FROM llm_cost_log c WHERE c.workspace_id = w.id), 0) AS cost_cents
+        coalesce((SELECT sum(usd_micro_cents) FROM llm_cost_log c WHERE c.workspace_id = w.id), 0)::float / 10000 AS cost_cents
       FROM workspaces w
       LEFT JOIN users u ON u.id = w.owner_user_id
       ORDER BY w.created_at DESC
@@ -116,9 +116,9 @@ export class AdminController {
         (SELECT count(*)::int FROM workspaces WHERE is_public=true) AS public_count,
         (SELECT count(DISTINCT user_id)::int FROM chat_sessions
           WHERE updated_at > now() - interval '30 days') AS active_30d,
-        (SELECT coalesce(sum(usd_cents),0)::int FROM llm_cost_log
+        (SELECT coalesce(sum(usd_micro_cents),0)::float / 10000 FROM llm_cost_log
           WHERE created_at::date = current_date) AS cost_cents_today,
-        (SELECT coalesce(sum(usd_cents),0)::int FROM llm_cost_log
+        (SELECT coalesce(sum(usd_micro_cents),0)::float / 10000 FROM llm_cost_log
           WHERE created_at > now() - interval '7 days') AS cost_cents_7d
     `)
     const liveSpend = await getTodaySpendUsd()

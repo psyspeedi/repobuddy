@@ -8,7 +8,7 @@ import {
   type SemanticAnnotation,
 } from '#shared/schemas/annotation'
 import { getLogger } from '#server/lib/logger'
-import { recordCost } from '#server/lib/cost-log'
+import { estimateMicroCents, recordCost, MICRO_CENTS_PER_USD } from '#server/lib/cost-log'
 
 const log = getLogger().child({ component: 'indexer/annotate' })
 
@@ -88,10 +88,12 @@ export async function annotateAndEmbed(
   let annotated = 0
   let conceptsCreated = 0
   let patternsCreated = 0
-  let spentCents = 0
+  let spentMicroCents = 0
   let budgetExhausted = false
-  const budgetCents =
-    options.budgetUsd && options.budgetUsd > 0 ? options.budgetUsd * 100 : null
+  const budgetMicroCents =
+    options.budgetUsd && options.budgetUsd > 0
+      ? options.budgetUsd * MICRO_CENTS_PER_USD
+      : null
   // Parallelism cap: gpt-4o-mini sustains many concurrent requests, but we
   // also write to the DB on each completion. 8 is a safe default that cuts
   // a 500-entity run from ~15 min to ~2 min without tripping rate limits.
@@ -100,11 +102,17 @@ export async function annotateAndEmbed(
 
   const worker = async (): Promise<void> => {
     while (true) {
-      if (budgetCents !== null && spentCents >= budgetCents) {
+      if (budgetMicroCents !== null && spentMicroCents >= budgetMicroCents) {
         if (!budgetExhausted) {
           budgetExhausted = true
           log.warn(
-            { workspaceId, spentCents, budgetCents, done: annotated, total: subset.length },
+            {
+              workspaceId,
+              spentUsd: spentMicroCents / MICRO_CENTS_PER_USD,
+              budgetUsd: options.budgetUsd,
+              done: annotated,
+              total: subset.length,
+            },
             'per-index LLM budget exhausted — skipping remaining annotations',
           )
         }
@@ -144,9 +152,12 @@ export async function annotateAndEmbed(
         // estimate input from the prompt size. Output is bounded by the
         // schema — ~200 tokens upper bound for our SemanticAnnotation.
         const promptChars = SYSTEM_PROMPT.length + userContent.length
-        spentCents +=
-          Math.ceil((Math.ceil(promptChars / 4) * (llm.costCentsPer1MInputTokens ?? 0)) / 1_000_000) +
-          Math.ceil((200 * (llm.costCentsPer1MOutputTokens ?? 0)) / 1_000_000)
+        spentMicroCents += estimateMicroCents({
+          inputTokens: Math.ceil(promptChars / 4),
+          outputTokens: 200,
+          costCentsPer1MInput: llm.costCentsPer1MInputTokens,
+          costCentsPer1MOutput: llm.costCentsPer1MOutputTokens,
+        })
         await recordCost(db, {
           workspaceId,
           phase: 'annotation',
