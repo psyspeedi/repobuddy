@@ -323,55 +323,6 @@ export const chatMessages = pgTable(
   ],
 )
 
-// ---------- Query cache (raw question → answer) ----------
-export const queryCache = pgTable(
-  'query_cache',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    workspaceId: uuid('workspace_id')
-      .notNull()
-      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    questionHash: text('question_hash').notNull(),
-    question: text('question').notNull(),
-    answer: text('answer').notNull(),
-    plan: jsonb('plan'),
-    trace: jsonb('trace'),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    unique('query_cache_workspace_hash_unique').on(
-      table.workspaceId,
-      table.questionHash,
-    ),
-  ],
-)
-
-// ---------- Interest signals (e.g. "I'd pay for more limits") ----------
-// One row per (user, kind) — UNIQUE so the same user can't spam the
-// signal. Carries an optional free-form message so people can explain
-// what they actually want. Admin reads this off /admin to decide
-// whether monetisation is worth building.
-export const interestPings = pgTable(
-  'interest_pings',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    kind: text('kind').notNull(), // 'more_limits' for now; future: 'team_plan', 'support_tier' …
-    message: text('message'),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    unique('interest_pings_user_kind_unique').on(table.userId, table.kind),
-    index('interest_pings_created_idx').on(table.createdAt),
-  ],
-)
-
 // ---------- Audit events (admin observability) ----------
 // One row per noteworthy mutation. Used by /admin to render an event
 // timeline and to answer "who deleted X and when". Append-only.
@@ -440,4 +391,3 @@ export type ChatSession = typeof chatSessions.$inferSelect
 export type ChatMessage = typeof chatMessages.$inferSelect
 export type AuditEvent = typeof auditEvents.$inferSelect
 export type LlmCostLog = typeof llmCostLog.$inferSelect
-export type InterestPing = typeof interestPings.$inferSelect

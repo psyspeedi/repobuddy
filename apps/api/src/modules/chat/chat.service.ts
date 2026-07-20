@@ -257,30 +257,6 @@ export class ChatService {
         }
       }
 
-      const focus = body.focus
-      if (focus?.entityIds && focus.entityIds.length > 0) {
-        const newIds = focus.entityIds.filter((id) => !citedIds.includes(id))
-        if (newIds.length > 0) {
-          const ents = await loadPinnedEntities(this.db, body.workspaceId, newIds)
-          for (const e of ents) {
-            if (pinnedEntities.find((p) => p.id === e.id)) continue
-            pinnedEntities.push(e)
-          }
-          const focusChunks = await loadPinnedChunks(this.db, body.workspaceId, newIds)
-          for (const c of focusChunks) {
-            if (pinnedChunks.find((p) => p.id === c.id)) continue
-            pinnedChunks.push(c)
-          }
-        }
-      }
-      if (focus?.filePaths && focus.filePaths.length > 0) {
-        const fileChunks = await loadChunksByFilePaths(this.db, body.workspaceId, focus.filePaths)
-        for (const c of fileChunks) {
-          if (pinnedChunks.find((p) => p.id === c.id)) continue
-          pinnedChunks.push(c)
-        }
-      }
-
       let assembled = ''
       let inputTokens = 0
       let outputTokens = 0

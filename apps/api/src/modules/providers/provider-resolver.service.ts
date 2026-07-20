@@ -36,7 +36,7 @@ export class ProviderResolverService {
     return resolveProvidersForUser(this.db, user, opts)
   }
 
-  /** Direct server-default LLM (no BYOK lookup). For indexer / digest paths. */
+  /** Direct server-default LLM (no BYOK lookup). For indexer paths. */
   serverLlm(opts: { llmModel?: string } = {}): LLMProvider {
     const env = this.config.all()
     return createLLMProvider({

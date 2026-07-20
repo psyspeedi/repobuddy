@@ -1,8 +1,6 @@
 import type { ConnectionOptions } from 'bullmq'
 
 export const INDEX_WORKSPACE_QUEUE = 'index-workspace'
-export const DIGEST_QUEUE = 'daily-digest'
-export const DIGEST_CRON_UTC = '0 9 * * *'
 
 /**
  * Parse a redis:// URL into BullMQ-compatible ConnectionOptions.
@@ -28,9 +26,4 @@ export interface IndexWorkspaceJobResult {
   ok: boolean
   filesProcessed?: number
   durationMs?: number
-}
-
-export interface DigestJobData {
-  /** ISO date the digest covers (yesterday in UTC). */
-  day: string
 }

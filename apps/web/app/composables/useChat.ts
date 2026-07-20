@@ -140,55 +140,6 @@ export function useChat(workspaceId: string) {
   const streaming = ref(false)
   const historyLoaded = ref(false)
 
-  // Session focus — entities / files / issues the user has pinned for
-  // this chat. Persisted in localStorage keyed by workspaceId so it
-  // survives reloads. The chat endpoint receives the focus on every
-  // turn and pre-loads the relevant chunks into the prompt.
-  interface SessionFocus {
-    entityIds: string[]
-    filePaths: string[]
-    issueNumbers: number[]
-  }
-  const FOCUS_KEY = `repobuddy:focus:${workspaceId}`
-  const focus = ref<SessionFocus>({ entityIds: [], filePaths: [], issueNumbers: [] })
-  if (import.meta.client) {
-    try {
-      const raw = localStorage.getItem(FOCUS_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<SessionFocus>
-        focus.value = {
-          entityIds: parsed.entityIds ?? [],
-          filePaths: parsed.filePaths ?? [],
-          issueNumbers: parsed.issueNumbers ?? [],
-        }
-      }
-    } catch { /* private mode / corrupt JSON — start blank */ }
-  }
-  watch(focus, (v) => {
-    try { localStorage.setItem(FOCUS_KEY, JSON.stringify(v)) } catch { /* private mode */ }
-  }, { deep: true })
-
-  function pinEntity(id: string): void {
-    if (!focus.value.entityIds.includes(id)) focus.value.entityIds = [...focus.value.entityIds, id]
-  }
-  function unpinEntity(id: string): void {
-    focus.value.entityIds = focus.value.entityIds.filter((x) => x !== id)
-  }
-  function pinFile(path: string): void {
-    if (!focus.value.filePaths.includes(path)) focus.value.filePaths = [...focus.value.filePaths, path]
-  }
-  function unpinFile(path: string): void {
-    focus.value.filePaths = focus.value.filePaths.filter((x) => x !== path)
-  }
-  function pinIssue(n: number): void {
-    if (!focus.value.issueNumbers.includes(n)) focus.value.issueNumbers = [...focus.value.issueNumbers, n]
-  }
-  function unpinIssue(n: number): void {
-    focus.value.issueNumbers = focus.value.issueNumbers.filter((x) => x !== n)
-  }
-  function clearFocus(): void {
-    focus.value = { entityIds: [], filePaths: [], issueNumbers: [] }
-  }
   // Abort handle for the in-flight chat fetch. Set in send(), cleared
   // when streaming ends. cancel() aborts and lets send() exit cleanly.
   let activeController: AbortController | null = null
@@ -243,7 +194,6 @@ export function useChat(workspaceId: string) {
           question: trimmed,
           locale: i18n.locale.value,
           mode: opts.mode ?? 'planned',
-          focus: focus.value,
         }),
       })
       if (!response.ok || !response.body) {
@@ -370,13 +320,5 @@ export function useChat(workspaceId: string) {
     cancel,
     loadHistory,
     newSession,
-    focus,
-    pinEntity,
-    unpinEntity,
-    pinFile,
-    unpinFile,
-    pinIssue,
-    unpinIssue,
-    clearFocus,
   }
 }

@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common'
 import { BullModule } from '@nestjs/bullmq'
 import { AppConfigModule } from '../config/config.module'
 import { TypedConfigService } from '../config/typed-config.service'
-import { DIGEST_QUEUE, INDEX_WORKSPACE_QUEUE } from './queue.constants'
+import { INDEX_WORKSPACE_QUEUE } from './queue.constants'
 
 @Module({
   imports: [
@@ -21,24 +21,14 @@ import { DIGEST_QUEUE, INDEX_WORKSPACE_QUEUE } from './queue.constants'
         }
       },
     }),
-    BullModule.registerQueue(
-      {
-        name: INDEX_WORKSPACE_QUEUE,
-        defaultJobOptions: {
-          attempts: 1,
-          removeOnComplete: { count: 100, age: 24 * 3600 },
-          removeOnFail: { count: 100, age: 7 * 24 * 3600 },
-        },
+    BullModule.registerQueue({
+      name: INDEX_WORKSPACE_QUEUE,
+      defaultJobOptions: {
+        attempts: 1,
+        removeOnComplete: { count: 100, age: 24 * 3600 },
+        removeOnFail: { count: 100, age: 7 * 24 * 3600 },
       },
-      {
-        name: DIGEST_QUEUE,
-        defaultJobOptions: {
-          attempts: 2,
-          removeOnComplete: { count: 14 },
-          removeOnFail: { count: 14 },
-        },
-      },
-    ),
+    }),
   ],
   exports: [BullModule],
 })

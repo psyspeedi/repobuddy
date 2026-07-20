@@ -129,28 +129,6 @@ export class AdminController {
     }
   }
 
-  @Get('interest')
-  async interest() {
-    const rows = await this.db.execute<{
-      id: string
-      kind: string
-      message: string | null
-      created_at: string
-      github_login: string
-      email: string | null
-    }>(sql`
-      SELECT i.id, i.kind, i.message, i.created_at, u.github_login, u.email
-      FROM interest_pings i
-      JOIN users u ON u.id = i.user_id
-      ORDER BY i.created_at DESC
-      LIMIT 500
-    `)
-    const [{ total = 0 } = {}] = await this.db.execute<{ total: number }>(sql`
-      SELECT count(*)::int AS total FROM interest_pings
-    `)
-    return { pings: [...rows], total }
-  }
-
   @Post('bulk-delete')
   async bulkDelete(@Req() req: Request, @Body() body: unknown) {
     const parsed = BulkDeleteBody.safeParse(body)

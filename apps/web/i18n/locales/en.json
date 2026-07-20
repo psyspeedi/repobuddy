@@ -22,20 +22,6 @@
     "quotaMessages": "msgs",
     "quotaTokens": "tokens"
   },
-  "interest": {
-    "cta": "Want more?",
-    "title": "Tell the team you'd use higher limits",
-    "sentLabel": "Noted!",
-    "sentTitle": "We saw your interest — thanks!",
-    "modalTitle": "Want more limits?",
-    "modalBody": "We're still figuring out whether to introduce paid plans. A click here tells us there's demand — and an optional note helps prioritise what you actually need (more workspaces? bigger token budget? team plan?). One submission per account.",
-    "messageLabel": "Optional note",
-    "messagePlaceholder": "e.g. I'd pay $5/mo for 10× more tokens / unlimited workspaces / etc.",
-    "send": "Send",
-    "sending": "Sending…",
-    "cancel": "Cancel",
-    "failed": "Failed to send."
-  },
   "admin": {
     "title": "Admin",
     "subtitle": "Service-wide observability and bulk actions. Visible to GitHub logins listed in ADMIN_LOGINS.",
@@ -43,15 +29,7 @@
       "overview": "Overview",
       "users": "Users",
       "workspaces": "Workspaces",
-      "audit": "Audit log",
-      "interest": "Interest"
-    },
-    "interest": {
-      "empty": "No one has tapped \"Want more?\" yet. The button shows in the header for users who haven't bypass status.",
-      "when": "When",
-      "user": "User",
-      "kind": "Kind",
-      "message": "Message"
+      "audit": "Audit log"
     },
     "cards": {
       "users": "Users",
@@ -63,8 +41,7 @@
       "weekHint": "sum of all phases × all workspaces"
     },
     "overview": {
-      "intro": "For graphs use Grafana. This page is the operator's quick-glance.",
-      "grafanaHint": "metrics + logs dashboards"
+      "intro": "For graphs use Grafana. This page is the operator's quick-glance."
     },
     "users": {
       "login": "Login",
@@ -466,25 +443,6 @@
     "agenticEmpty": "No tools were called — the model answered from prior context.",
     "iteration": "Iter",
     "parallelCalls": "{n} parallel calls"
-  },
-  "nodeDetail": {
-    "askAi": "Ask AI",
-    "askAiTitle": "Open the chat with a prefilled question about this entity",
-    "askPrefilled": "Tell me about {subject} in detail {ref}.",
-    "description": "Description",
-    "signature": "Signature",
-    "commit": "Commit",
-    "sha": "sha",
-    "author": "author",
-    "date": "date",
-    "message": "message",
-    "filesChanged": "Files changed",
-    "filesChangedMore": "+ {n} more",
-    "hotness": "Hotness",
-    "hotnessLabel": "{n} modification(s) in the last 90 days",
-    "outgoing": "→ Outgoing",
-    "incoming": "← Incoming",
-    "loading": "Loading…"
   },
   "viewer": {
     "title": "Source viewer",

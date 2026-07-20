@@ -50,22 +50,12 @@ interface AuditEvt {
   ip: string | null
   at: string
 }
-interface InterestRow {
-  id: string
-  kind: string
-  message: string | null
-  created_at: string
-  github_login: string
-  email: string | null
-}
-
-const tab = ref<'overview' | 'users' | 'workspaces' | 'audit' | 'interest'>('overview')
+const tab = ref<'overview' | 'users' | 'workspaces' | 'audit'>('overview')
 
 const { data: overview, refresh: refreshOverview } = await useApiFetch<Overview>('/api/admin/overview')
 const { data: usersData } = await useApiFetch<{ users: UserRow[] }>('/api/admin/users')
 const { data: wsData, refresh: refreshWs } = await useApiFetch<{ workspaces: WorkspaceRow[] }>('/api/admin/workspaces')
 const { data: auditData } = await useApiFetch<{ events: AuditEvt[] }>('/api/admin/audit')
-const { data: interestData } = await useApiFetch<{ pings: InterestRow[]; total: number }>('/api/admin/interest')
 
 const selected = ref<Set<string>>(new Set())
 function toggle(id: string): void {
@@ -192,7 +182,7 @@ useHead(() => ({
     <!-- Tabs -->
     <div class="flex flex-wrap gap-1 border-b border-border">
       <button
-        v-for="t_ in ['overview', 'users', 'workspaces', 'audit', 'interest'] as const"
+        v-for="t_ in ['overview', 'users', 'workspaces', 'audit'] as const"
         :key="t_"
         type="button"
         class="border-b-2 px-3 py-2 text-sm font-medium transition"
@@ -200,10 +190,6 @@ useHead(() => ({
         @click="tab = t_"
       >
         {{ t(`admin.tabs.${t_}`) }}
-        <span
-          v-if="t_ === 'interest' && interestData?.total"
-          class="ml-1 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
-        >{{ interestData.total }}</span>
       </button>
     </div>
 
@@ -211,11 +197,6 @@ useHead(() => ({
     <section v-if="tab === 'overview'" class="space-y-3 rounded-lg border border-border bg-card p-4 text-sm">
       <p>{{ t('admin.overview.intro') }}</p>
       <ul class="space-y-1 text-muted-foreground">
-        <li>
-          <a href="http://localhost:3301" target="_blank" class="text-primary underline-offset-2 hover:underline">
-            Grafana →
-          </a> {{ t('admin.overview.grafanaHint') }}
-        </li>
         <li>
           <a href="/api/health" target="_blank" class="text-primary underline-offset-2 hover:underline">
             /api/health
@@ -313,40 +294,6 @@ useHead(() => ({
                 <span v-else class="text-muted-foreground">—</span>
               </td>
               <td class="px-3 py-2 text-muted-foreground">{{ w.last_indexed_at ? formatDate(w.last_indexed_at) : '—' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Interest tab -->
-    <section v-else-if="tab === 'interest'" class="space-y-2">
-      <p v-if="!interestData?.pings.length" class="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-        {{ t('admin.interest.empty') }}
-      </p>
-      <div v-else class="overflow-x-auto rounded-lg border border-border bg-card">
-        <table class="w-full text-sm">
-          <thead class="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th class="px-3 py-2">{{ t('admin.interest.when') }}</th>
-              <th class="px-3 py-2">{{ t('admin.interest.user') }}</th>
-              <th class="px-3 py-2">{{ t('admin.interest.kind') }}</th>
-              <th class="px-3 py-2">{{ t('admin.interest.message') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="p in interestData.pings" :key="p.id" class="border-b border-border last:border-0 hover:bg-muted/20">
-              <td class="px-3 py-2 text-muted-foreground tabular-nums">{{ formatDate(p.created_at) }}</td>
-              <td class="px-3 py-2">
-                @{{ p.github_login }}
-                <span v-if="p.email" class="ml-1 text-xs text-muted-foreground">({{ p.email }})</span>
-              </td>
-              <td class="px-3 py-2">
-                <code class="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">{{ p.kind }}</code>
-              </td>
-              <td class="max-w-md px-3 py-2 text-muted-foreground">
-                {{ p.message || '—' }}
-              </td>
             </tr>
           </tbody>
         </table>

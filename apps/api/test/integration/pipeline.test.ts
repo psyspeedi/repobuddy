@@ -99,7 +99,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await sqlClient.unsafe(
     `TRUNCATE TABLE
-      chat_messages, chat_sessions, query_cache, llm_cost_log,
+      chat_messages, chat_sessions, llm_cost_log,
       entity_chunks, relations, entities, chunks,
       oauth_tokens, workspaces, users
     RESTART IDENTITY CASCADE`,

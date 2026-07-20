@@ -12,8 +12,7 @@ import { WorkersModule } from './modules/workers/workers.module'
 
 /**
  * Standalone root for the BullMQ worker process. No HTTP, no Auth /
- * Health controllers — just everything needed to run indexer jobs and
- * the daily digest.
+ * Health controllers — just everything needed to run indexer jobs.
  */
 @Module({
   imports: [

@@ -52,5 +52,6 @@ data/
 tmp/
 temp/
 
-# Drizzle journal (keep migrations, ignore meta)
-drizzle/meta/
+# Drizzle meta/ is NOT ignored on purpose: drizzle-orm's migrator reads
+# drizzle/meta/_journal.json to decide which migrations are pending, so a
+# fresh clone (CI, a new VPS) cannot run `pnpm db:migrate` without it.

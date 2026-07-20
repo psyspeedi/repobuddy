@@ -4,15 +4,13 @@ import {
   Controller,
   Get,
   Inject,
-  Post,
   Put,
-  Query,
   Req,
 } from '@nestjs/common'
 import type { Request } from 'express'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { interestPings, users } from '#server/db/schema'
+import { users } from '#server/db/schema'
 import { encrypt } from '#server/lib/crypto'
 import { recordAudit } from '#server/lib/audit'
 import { getStatus, type QuotaContext } from '#server/lib/quotas'
@@ -26,12 +24,6 @@ const BYOK_PUT = z.object({
   model: z.string().min(1).max(128).nullable().optional(),
   embeddingModel: z.string().min(1).max(128).nullable().optional(),
   apiKey: z.string().min(1).max(512).nullable().optional(),
-})
-
-const INTEREST_GET = z.object({ kind: z.string().min(1).max(64).default('more_limits') })
-const INTEREST_POST = z.object({
-  kind: z.string().min(1).max(64).default('more_limits'),
-  message: z.string().trim().max(500).optional(),
 })
 
 @Controller('me')
@@ -137,35 +129,5 @@ export class MeController {
       })
     }
     return { ok: true, changed: true }
-  }
-
-  @Get('interest')
-  async interestGet(@Req() req: Request, @Query() q: Record<string, string>) {
-    const user = await this.access.requireValidUser(req)
-    const { kind } = INTEREST_GET.parse(q)
-    const [row] = await this.db
-      .select()
-      .from(interestPings)
-      .where(and(eq(interestPings.userId, user.id), eq(interestPings.kind, kind)))
-      .limit(1)
-    return { sent: Boolean(row), sentAt: row?.createdAt ?? null }
-  }
-
-  @Post('interest')
-  async interestPost(@Req() req: Request, @Body() body: unknown) {
-    const user = await this.access.requireValidUser(req)
-    const parsed = INTEREST_POST.safeParse(body)
-    if (!parsed.success) throw new BadRequestException({ issues: parsed.error.issues })
-    const existing = await this.db
-      .select()
-      .from(interestPings)
-      .where(and(eq(interestPings.userId, user.id), eq(interestPings.kind, parsed.data.kind)))
-      .limit(1)
-    if (existing[0]) return { ok: true, alreadySent: true }
-    await this.db
-      .insert(interestPings)
-      .values({ userId: user.id, kind: parsed.data.kind, message: parsed.data.message || null })
-      .onConflictDoNothing()
-    return { ok: true, alreadySent: false }
   }
 }
