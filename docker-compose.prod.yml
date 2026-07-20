@@ -45,6 +45,11 @@ services:
       APP_URL: ${APP_URL:?required}
       WEB_ORIGIN: ${WEB_ORIGIN:?required}
       API_URL: ${API_URL:-}
+      # Only needed for a split-origin deployment (API on its own
+      # domain): the MCP endpoint validates the Host header against
+      # these URLs, and behind the bundled Caddy APP_URL already covers
+      # it. Optional so the same-origin default keeps working unset.
+      API_BASE_URL: ${API_BASE_URL:-}
       API_PORT: 3001
     depends_on:
       postgres:

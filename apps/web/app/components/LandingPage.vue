@@ -167,6 +167,55 @@ useHead({
       </div>
     </section>
 
+    <!-- For maintainers. The other blocks address the contributor
+         arriving at a repo; this one addresses the person who owns it,
+         for whom onboarding is a recurring cost rather than a one-off. -->
+    <section class="space-y-6 rounded-2xl border border-primary/20 bg-primary/5 p-6 sm:p-8">
+      <div class="space-y-2 text-center">
+        <h2 class="text-2xl font-semibold">
+          {{ t('landing.maintainers.title') }}
+        </h2>
+        <p class="mx-auto max-w-2xl text-sm text-muted-foreground">
+          {{ t('landing.maintainers.subtitle') }}
+        </p>
+      </div>
+      <ol class="grid gap-4 sm:grid-cols-3">
+        <li
+          v-for="(step, i) in [0, 1, 2]"
+          :key="step"
+          class="space-y-2 rounded-xl border border-border bg-card p-4"
+        >
+          <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary ring-1 ring-primary/30">
+            {{ i + 1 }}
+          </span>
+          <h3 class="font-semibold">
+            {{ t(`landing.maintainers.steps.${step}.title`) }}
+          </h3>
+          <p class="text-sm text-muted-foreground">
+            {{ t(`landing.maintainers.steps.${step}.body`) }}
+          </p>
+        </li>
+      </ol>
+      <p class="text-center text-sm font-medium">
+        {{ t('landing.maintainers.note') }}
+      </p>
+      <!-- Step 1 needs an account, and the only way to get one is four
+           screens up in the hero. Same action, repeated where the
+           reader has just decided this section is about them. -->
+      <div class="flex justify-center">
+        <a v-if="!loggedIn" :href="githubAuthUrl">
+          <Button size="lg" class="shadow-lg shadow-primary/30">
+            {{ t('landing.hero.cta') }}
+          </Button>
+        </a>
+        <NuxtLink v-else to="/" @click.prevent="$router.replace('/')">
+          <Button size="lg" variant="outline">
+            {{ t('landing.hero.cta2') }}
+          </Button>
+        </NuxtLink>
+      </div>
+    </section>
+
     <!-- Supported languages -->
     <section class="space-y-3">
       <h2 class="text-center text-lg font-semibold uppercase tracking-wide text-muted-foreground">

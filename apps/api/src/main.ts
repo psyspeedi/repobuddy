@@ -94,11 +94,14 @@ async function bootstrap() {
     // SEO routes live outside the /api prefix so crawlers find them at
     // canonical paths. GitHub OAuth start + callback also stay outside
     // /api so the GitHub App callback URL is a stable :3001/auth/github/callback.
+    // README badges join them: the URL a maintainer pastes into their
+    // README should be short and never look like an internal API call.
     exclude: [
       'robots.txt',
       'sitemap.xml',
       'feed.xml',
       'indexnow/:filename',
+      'badge/:file',
       { path: 'auth/github', method: RequestMethod.GET },
       { path: 'auth/github/callback', method: RequestMethod.GET },
     ],

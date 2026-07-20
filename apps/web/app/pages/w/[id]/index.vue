@@ -390,6 +390,7 @@ watch(
 // is ignored, the meta `robots` directive keeps them out.
 const runtimeCfg = useRuntimeConfig()
 const appUrl = (runtimeCfg.public.appUrl as string | undefined)?.replace(/\/$/, '') ?? ''
+const apiBaseUrl = (runtimeCfg.public.apiBaseUrl as string | undefined)?.replace(/\/$/, '') ?? ''
 const wsCanonical = computed(() => `${appUrl}/w/${workspaceId}`)
 const wsDescription = computed(() => {
   const ws = wsData.value?.workspace
@@ -432,6 +433,36 @@ useHead(() => {
       : [],
   }
 })
+
+// Contributor-invite snippet. The badge is what turns a one-off
+// indexing job into a repeating flow: it sits in the maintainer's
+// README and every newcomer who clicks it lands here as a guest.
+// Owner-only — for a visitor the snippet is just noise.
+//
+// The two URLs come from different origins on purpose. /badge/* is
+// served by the API (it only sits outside the /api prefix so the URL
+// stays short), so it is built from apiBaseUrl — the same reason
+// githubAuthUrl is. wsCanonical is a page, so it stays on appUrl.
+// Behind Caddy the two collapse into one domain; split-origin
+// deployments and the documented local setup (Nuxt :3000, API :3001)
+// need them apart or the preview renders a broken image and the
+// copied snippet ships a dead link.
+const badgeUrl = computed(() => `${apiBaseUrl}/badge/${workspaceId}.svg`)
+const badgeSnippet = computed(
+  () => `[![Explore with RepoBuddy](${badgeUrl.value})](${wsCanonical.value})`,
+)
+const badgeCopied = ref(false)
+async function copyBadgeSnippet(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(badgeSnippet.value)
+    badgeCopied.value = true
+    setTimeout(() => { badgeCopied.value = false }, 1500)
+  } catch {
+    // Clipboard access is denied on insecure origins and in some
+    // browsers — say so instead of leaving the button inert.
+    useToast().error(t('workspace.invite.copyFailed'))
+  }
+}
 </script>
 
 <template>
@@ -468,11 +499,14 @@ useHead(() => {
           >
             {{ t('workspace.publicBadge') }}
           </span>
+          <!-- While the workspace is private the tooltip carries the
+               badge hint, so the invite card below does not have to
+               exist just to say "make it public first". -->
           <Button
             v-if="viewerIsOwner"
             variant="outline"
             size="sm"
-            :title="t('workspace.publicHint')"
+            :title="isPublic ? t('workspace.publicHint') : t('workspace.invite.privateHint')"
             @click="togglePublic"
           >
             {{ isPublic ? t('workspace.makePrivate') : t('workspace.makePublic') }}
@@ -632,6 +666,35 @@ useHead(() => {
           : 'border-border bg-muted/40 text-muted-foreground'"
       >
         {{ notice.text }}
+      </div>
+    </section>
+
+    <!-- Invite contributors — owner-only, and only once the workspace
+         is public. The badge is the maintainer's distribution channel:
+         index once, then let the README bring newcomers in as guests.
+         An owner who is keeping the workspace private has made that
+         choice already; nagging them on every visit is exactly the
+         noise this page has been shedding, so the hint lives on the
+         "Make public" tooltip instead. -->
+    <section
+      v-if="viewerIsOwner && isReady && isPublic"
+      class="space-y-2 rounded-lg border border-border bg-card p-4"
+    >
+      <h2 class="text-sm font-medium">
+        {{ t('workspace.invite.title') }}
+      </h2>
+      <p class="text-sm text-muted-foreground">
+        {{ t('workspace.invite.body') }}
+      </p>
+      <div class="flex items-center gap-2">
+        <code class="flex-1 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-muted/50 px-2 py-1.5 text-xs">{{ badgeSnippet }}</code>
+        <Button variant="outline" size="sm" class="shrink-0" @click="copyBadgeSnippet">
+          {{ badgeCopied ? t('workspace.invite.copied') : t('workspace.invite.copy') }}
+        </Button>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>{{ t('workspace.invite.preview') }}</span>
+        <img :src="badgeUrl" alt="Explore with RepoBuddy" height="20" class="h-5">
       </div>
     </section>
 

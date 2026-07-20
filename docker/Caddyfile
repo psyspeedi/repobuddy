@@ -9,7 +9,8 @@
     # API-owned paths outside the /api prefix:
     #   /auth/github*  — OAuth start + callback (stable URL for the GitHub app)
     #   robots/sitemap/feed/indexnow — SEO routes served at canonical paths
-    @api path /api/* /auth/github* /robots.txt /sitemap.xml /feed.xml /indexnow/*
+    #   /badge/*       — README badge SVGs (short URL maintainers paste)
+    @api path /api/* /auth/github* /robots.txt /sitemap.xml /feed.xml /indexnow/* /badge/*
 
     # flush_interval -1 disables buffering so the two SSE streams
     # (chat, index progress) deliver events as they happen.

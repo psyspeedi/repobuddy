@@ -145,6 +145,25 @@
       "title": "Try it on a project you might contribute to",
       "subtitle": "These workspaces are open to anyone — open the tour, ask questions, skim the issues. No account needed."
     },
+    "maintainers": {
+      "title": "Maintain a project? Set contributors up once.",
+      "subtitle": "Index your repository, open it up, and drop a badge in your README. Everyone who shows up gets a guided tour of your codebase instead of an issue asking where to start.",
+      "steps": {
+        "0": {
+          "title": "Index your repository",
+          "body": "Paste the GitHub URL. RepoBuddy builds the knowledge graph — entry points, call chains, setup commands, git history."
+        },
+        "1": {
+          "title": "Make it public",
+          "body": "One toggle on the workspace page. Read-only for visitors: they can explore and ask, they can't reindex or delete."
+        },
+        "2": {
+          "title": "Put the badge in your README",
+          "body": "Copy the ready-made markdown snippet from your workspace page into README.md or CONTRIBUTING.md. Re-index when the repo moves on — the workspace page tells you how far behind the index is."
+        }
+      },
+      "note": "Contributors get cited answers about your code straight in the browser — no account, no clone, nothing to install. Guests get a daily message limit; signing in raises it."
+    },
     "languages": {
       "title": "Supported languages",
       "subtitle": "Static analysis covers four languages today. Markdown and per-commit diffs are indexed for every repo regardless of language."
@@ -234,6 +253,15 @@
       "noEntities": "This repository's language isn't supported by the parser — chat falls back to plain text search, without the code graph.",
       "filesTruncated": "The index covers the first {n} files of the repository.",
       "annotationBudget": "The annotation budget ran out — some entities have no descriptions."
+    },
+    "invite": {
+      "title": "Invite contributors",
+      "body": "Drop this badge in your README.md or CONTRIBUTING.md. Newcomers land here and figure the project out on their own — no account needed, within guest limits.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Couldn't copy — select the snippet and copy it manually.",
+      "preview": "Preview",
+      "privateHint": "Make this workspace public first — the badge only works for public workspaces."
     }
   },
   "chat": {
