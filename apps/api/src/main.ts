@@ -15,6 +15,8 @@ import { NestFactory } from '@nestjs/core'
 // eslint-disable-next-line import/first
 import { RequestMethod } from '@nestjs/common'
 // eslint-disable-next-line import/first
+import type { NestExpressApplication } from '@nestjs/platform-express'
+// eslint-disable-next-line import/first
 import { Logger as PinoLogger } from 'nestjs-pino'
 // eslint-disable-next-line import/first
 import cookieParser from 'cookie-parser'
@@ -28,11 +30,22 @@ import { createClient as createNodeRedisClient } from 'redis'
 import passport from 'passport'
 // eslint-disable-next-line import/first
 import { AppModule } from './app.module'
+// eslint-disable-next-line import/first
+import { McpExceptionFilter } from './modules/mcp/internals/parse-error.filter'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true })
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true })
   app.useLogger(app.get(PinoLogger))
   app.enableShutdownHooks()
+
+  // In production the API never publishes a port: Caddy terminates TLS
+  // and proxies /api/* to api:3001, so without this every request would
+  // report the proxy container's address as `req.ip` and the whole
+  // internet would share one per-IP rate-limit bucket. `1` means "trust
+  // exactly one hop": Express reads the right-most X-Forwarded-For
+  // entry, which is the one Caddy appended, so a client that sends its
+  // own X-Forwarded-For cannot push a fake address into that slot.
+  app.set('trust proxy', 1)
 
   // Frontend lives on a separate origin (Nuxt at :3000 in dev). CORS
   // + credentials are required so the session cookie travels with
@@ -90,6 +103,12 @@ async function bootstrap() {
       { path: 'auth/github/callback', method: RequestMethod.GET },
     ],
   })
+
+  // Global because that is the only filter Nest consults for failures
+  // raised before routing — a malformed body on /api/mcp is one. The
+  // filter narrows itself to that path and hands everything else to
+  // BaseExceptionFilter, so the REST surface keeps Nest's error shape.
+  app.useGlobalFilters(new McpExceptionFilter(app.getHttpAdapter()))
 
   const port = Number(process.env.API_PORT ?? 3001)
   await app.listen(port)

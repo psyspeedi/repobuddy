@@ -35,6 +35,7 @@
     "backfill:cost": "tsx scripts/backfill-cost-log.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^10.4.13",
     "@nestjs/config": "^4.0.4",

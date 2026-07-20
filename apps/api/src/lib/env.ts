@@ -98,6 +98,26 @@ const EnvSchema = z
     /** Bearer token for /api/metrics. Unset ⇒ endpoint is 404 in production. */
     METRICS_TOKEN: optionalString(),
 
+    /**
+     * Kill switch for the unauthenticated MCP endpoint (/api/mcp).
+     * Defaults to on; set to `false`/`0` to make every method 404 without
+     * redeploying a different image. Only public workspaces are ever
+     * reachable through it, so the flag is an operational lever (abuse,
+     * incident response), not a security boundary.
+     */
+    // `MCP_ENABLED=TRUE` / `yes` / `on` are ordinary things to write in
+    // an .env file; reading any of them as "off" would silently 404 the
+    // whole endpoint with nothing in the log to explain it. Only an
+    // explicit falsy word turns the switch off, which is what preprocess
+    // exists for here (z.coerce.boolean would read "false" as true).
+    MCP_ENABLED: z.preprocess(
+      (v) =>
+        v === '' || v === undefined
+          ? undefined
+          : ['true', '1', 'yes', 'on'].includes(String(v).trim().toLowerCase()),
+      z.boolean().default(true),
+    ),
+
     COST_BUDGET_USD_PER_DAY: z.coerce.number().nonnegative().default(3),
   })
   .refine(

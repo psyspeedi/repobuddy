@@ -14,6 +14,7 @@ import { HealthModule } from './modules/health/health.module'
 import { IndexerModule } from './modules/indexer/indexer.module'
 import { KagModule } from './modules/kag/kag.module'
 import { LoggerModule } from './modules/logger/logger.module'
+import { McpModule } from './modules/mcp/mcp.module'
 import { MeModule } from './modules/me/me.module'
 import { MetricsModule } from './modules/metrics/metrics.module'
 import { ProvidersModule } from './modules/providers/providers.module'
@@ -43,6 +44,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module'
     ChatModule,
     AdminModule,
     MeModule,
+    McpModule,
     SeoRoutesModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: SentryGlobalFilter }],
