@@ -2,14 +2,16 @@
 
 # RepoBuddy
 
-**Твой первый PR в любой open-source проект. Быстрее.**
+**Твой первый PR в чужой проект. Быстрее.**
 
-RepoBuddy индексирует публичный Git-репозиторий в граф знаний и даёт спрашивать про него что угодно — что запускается, что важно, где можно сделать первый PR безопасно — с ответами, опирающимися на реальный код.
+RepoBuddy индексирует публичный GitHub-репозиторий в типизированный граф знаний и отвечает на вопросы по коду — что здесь запускается, на что опирается всё остальное, где можно безопасно сделать первый PR — со ссылками на конкретные строки, а не на «похожие куски текста».
 
 <p>
   <a href="#демо">Демо</a> ·
   <a href="#что-делает">Что делает</a> ·
-  <a href="#запуск-локально">Запуск локально</a> ·
+  <a href="#mcp-сервер">MCP-сервер</a> ·
+  <a href="#для-мейнтейнеров">Для мейнтейнеров</a> ·
+  <a href="#локальный-запуск">Локальный запуск</a> ·
   <a href="docs/architecture.md">Архитектура</a> ·
   <a href="docs/kag-planning.md">KAG-планирование</a> ·
   <a href="docs/indexing-pipeline.md">Конвейер индексации</a> ·
@@ -24,113 +26,232 @@ RepoBuddy индексирует публичный Git-репозиторий �
 
 ## Демо
 
-<!-- TODO: ссылка на хостинг после деплоя -->
-**Хостинг**: _скоро_ — пока что см. [Запуск локально](#запуск-локально).
+Публичного инстанса нет: проект работает только как self-hosted. Всё, что описано ниже, поднимается локально за несколько команд — см. [Локальный запуск](#локальный-запуск).
 
-Предварительно проиндексированные демо-воркспейсы (открываются без аккаунта):
+Репозитории, на которых удобно пробовать после первого запуска (это не ссылки на живой сервис, а просто удачные подопытные):
 
-| Репо | Чем интересен |
+| Репозиторий | Чем удобен |
 | --- | --- |
-| `developit/mitt` | Крошечный (~30 строк core) — наглядно видно как сущности и chunks раскладываются. |
-| `sindresorhus/p-limit` | Одна функция, нетривиальная типизация. |
-| `colinhacks/zod` | Средний TypeScript-кодбейс с богатыми type-отношениями. |
+| `developit/mitt` | Совсем маленький: видно, как сущности и чанки раскладываются, индексация занимает секунды. |
+| `sindresorhus/p-limit` | Одна функция и нетривиальная типизация — хорошо видно, что вытаскивает парсер. |
+| `colinhacks/zod` | Средний TypeScript-кодбейс: уже интересные связи в графе и заметная стоимость индексации. |
 
 ## Что делает
 
-Вставляешь URL публичного GitHub-репо → RepoBuddy клонирует, извлекает AST-сущности и связи через TypeScript / JavaScript / Python / Go, строит типизированный граф знаний в Postgres + pgvector и даёт:
+Даёшь URL публичного GitHub-репозитория. RepoBuddy клонирует его, разбирает AST для TypeScript / JavaScript / Python / Go, собирает граф сущностей и связей в Postgres + pgvector — и дальше умеет вот что.
 
-- **Тур контрибьютора** — точки входа, классы и функции на которые опирается остальной код, «горячие» файлы, безопасные зоны для первого PR (тесты × стабильность × маленький файл), `CONTRIBUTING.md` / PR-шаблон / `CODE_OF_CONDUCT.md` проекта, auto-generated архитектурная диаграмма и setup-guide из манифестов + README.
-- **Чат с цитированием** — multi-step планировщик подбирает операторы поверх графа (`find_symbol → get_callers → retrieve_code_chunks → answer`), детерминированно их выполняет и стримит финальный ответ где каждое утверждение ссылается на фрагмент или сущность из которой оно взято.
-- **Auto-explore (agentic) режим** — LLM получает каталог операторов как function-calling tools и сам зацикливается пока не сможет ответить. Дороже на запрос, но глубже на exploratory-вопросах.
-- **GitHub issues + PRs как first-class** — чат тянет открытые issues, связывает их с упомянутым кодом, ищет похожие прошлые issues через embedding cosine, и поднимает смерженные PRs которые их зафиксили.
-- **Walkthrough как Mermaid sequence-диаграмма** — спрашиваешь «как работает X» и получаешь реальную call-chain inline.
-- **Treemap-обзор** — каждый файл размером по LOC и оттенком по hotness / coverage. Клик по плитке → граф соседей.
-- **Reasoning Inspector** — каждый assistant-turn несёт свой plan + trace; inspector рисует план как SVG-flowchart (или, в agentic-режиме, timeline tool-вызовов сгруппированных по итерациям).
+- **Онбординг контрибьютора.** Точки входа, ключевые абстракции, «горячие» файлы, зоны, где первый PR безопаснее всего (есть тесты × код стабилен × файл небольшой), найденные `CONTRIBUTING.md` / шаблон PR / `CODE_OF_CONDUCT.md`, сгенерированная архитектурная диаграмма и setup-инструкция, собранная из манифестов и README.
+- **Чат с цитатами.** Планировщик составляет план из операторов над графом (`find_symbol → get_callers → retrieve_code_chunks → answer`), исполнитель детерминированно его отрабатывает, а финальный ответ стримится так, что каждое утверждение подписано чанком или сущностью, из которой оно взято.
+- **Режим Auto-explore.** Тот же каталог операторов отдаётся модели как function-calling инструменты, и она сама крутит цикл, пока не наберёт достаточно контекста. Дороже за ход, но заметно лучше на исследовательских вопросах.
+- **Работа с issues.** Чат подтягивает открытые issues и связывает их с уже проиндексированным кодом. Отдельный оператор `find_resolution` перед ответом проверяет, не решён ли issue: ищет коммиты с `fix/close #N`, живым запросом находит PR любого состояния (включая draft) и косинусно похожие закрытые issues. Статусы: `merged`, `open_pr`, `draft_pr`, `stale_pr` (висит больше 90 дней), `duplicate_closed`, `related`, `none`. Это экономит самое обидное — час работы над тем, что уже кем-то сделано.
+- **Walkthrough как mermaid-диаграмма.** Спрашиваешь «как работает X» — получаешь реальную цепочку вызовов, отрисованную прямо в ответе.
+- **Treemap.** Каждый файл — плитка: размер по строкам кода, цвет по hotness или покрытию тестами. Клик по плитке открывает граф соседей.
+- **Reasoning Inspector.** Каждый ответ хранит свой план и трейс. В planned-режиме это SVG-схема плана, в agentic — таймлайн вызовов по итерациям. При повторном открытии чата видно не только ответ, но и то, как он получился.
+- **MCP-сервер.** Тот же граф доступен из Claude Code или Cursor — агент ходит по проиндексированному репозиторию напрямую. См. [MCP-сервер](#mcp-сервер).
 
 ## Архитектура
 
 ```mermaid
-flowchart LR
-    Browser["Browser<br/>(Vue 3 + Nuxt 4)"] -->|SSE chat| Web
-    Browser -->|REST + SSE progress| Web
+flowchart TB
+    Browser["Браузер<br/>(Nuxt 4 + Vue 3)"]
+    Agent["MCP-клиент<br/>(агент, IDE, CLI)"]
 
-    subgraph Server
-      Web["Nuxt server<br/>(Nitro routes)"]
-      Worker["Indexer worker<br/>(BullMQ consumer)"]
-    end
+    Browser --> Caddy["Caddy<br/>один домен, авто-TLS"]
+    Agent -->|"POST /api/mcp"| Caddy
 
-    Web --> Postgres[("Postgres 16<br/>+ pgvector<br/>+ pg_trgm")]
-    Worker --> Postgres
-    Web --> Redis[("Redis<br/>(BullMQ + cache)")]
-    Worker --> Redis
-    Web -->|chat / annotate / embed| OpenAI[("OpenAI<br/>chat + embeddings")]
-    Worker -->|annotate / embed| OpenAI
-    Web -->|issues / PRs| GitHub[("GitHub REST<br/>(Octokit anon)")]
-    Worker -->|clone shallow| GitHub
+    Caddy -->|"SSR + статика"| Web["apps/web<br/>Nuxt SSR :3000"]
+    Caddy -->|"/api/*, /auth/github*, /badge/*"| Api["apps/api<br/>NestJS 10 на Express :3001"]
+
+    Web -->|"REST + SSE"| Api
+
+    Api -->|"джоба index-workspace"| Redis[("Redis 7<br/>BullMQ · сессии · квоты")]
+    Worker["apps/api<br/>worker-процесс<br/>BullMQ consumer"] --> Redis
+
+    Api --> PG[("Postgres 16<br/>+ pgvector")]
+    Worker --> PG
+
+    Api -->|"планирование и ответ"| LLM[("LLM-провайдер<br/>OpenAI-совместимый")]
+    Worker -->|"аннотация и эмбеддинги"| LLM
+
+    Api -->|"issues, PR"| GH[("GitHub REST<br/>Octokit")]
+    Worker -->|"clone --depth 200"| GH
 ```
+
+Два процесса поднимаются из одного пакета `apps/api`: HTTP-API ([`src/main.ts`](apps/api/src/main.ts)) и воркер без HTTP-слоя ([`src/main.worker.ts`](apps/api/src/main.worker.ts), обычный Nest-контекст поверх BullMQ). Общие типы и zod-схемы живут в `packages/shared`.
 
 Подробный разбор: [`docs/architecture.md`](docs/architecture.md).
 
-## Чем отличается от «chat with your code»
+## Чем отличается от «чата с твоим кодом»
 
-Большинство code-RAG инструментов работают как `вопрос → embedding → похожие chunks → LLM`. Это падает на graph-вопросах («кто транзитивно вызывает X?»), перечислениях («перечисли все routes»), и на любых вопросах привязанных к конкретному issue / PR / коммиту.
+Обычный code-RAG устроен как `вопрос → эмбеддинг → похожие чанки → LLM`. Это разваливается на графовых вопросах («кто транзитивно вызывает X?»), на перечислениях («покажи все роуты») и вообще на всём, что привязано к конкретному issue, PR или коммиту.
 
-RepoBuddy сначала строит типизированный граф и выставляет 20+ операторов из которых планировщик выбирает — graph traversal (`get_callers` это рекурсивный CTE по `relations`, не similarity-поиск), hybrid retrieval (vector + BM25 объединённые через RRF), внешние GitHub-запросы (issues, PRs, similarity между issues), и отдельный `read_file` для дословного содержимого файла.
+RepoBuddy сначала строит типизированный граф и выставляет планировщику ровно **15 операторов** ([`packages/shared/src/schemas/plan.ts`](packages/shared/src/schemas/plan.ts)):
 
-Каждый план и его trace сохраняются вместе с assistant-сообщением, поэтому при повторном открытии чата по share-ссылке виден не только ответ, но и рассуждение которое его произвело.
+| Группа | Операторы |
+| --- | --- |
+| Обход графа | `find_symbol`, `get_callers`, `get_callees`, `walkthrough`, `tests_for`, `get_summary` |
+| Поиск | `hybrid_search`, `search_docs`, `retrieve_code_chunks`, `read_file` |
+| История и GitHub | `git_history`, `list_issues`, `find_resolution` |
+| Обзор | `get_project_overview` |
+| Ответ | `answer` — единственный стримящий оператор и обязательный финал любого плана |
 
-Полный walkthrough: [`docs/kag-planning.md`](docs/kag-planning.md).
+Разница именно в природе операторов: `get_callers` — это рекурсивный CTE по таблице `relations`, а не поиск по похожести; гибридный поиск объединяет pgvector-косинус и Postgres `ts_rank` через RRF; `read_file` отдаёт дословное содержимое файла, а не пересказ.
+
+Каталог защищён от расхождения: unit-тест проверяет, что каждое имя из `OPERATOR_NAMES` упомянуто в промпте планировщика и что у каждого не-`answer` оператора есть определение инструмента для agentic-цикла. Новый оператор просто не соберётся, пока его не пропишут везде.
+
+Полный разбор: [`docs/kag-planning.md`](docs/kag-planning.md).
+
+## MCP-сервер
+
+Тот же граф доступен внешним агентам по Model Context Protocol — `POST /api/mcp`, Streamable HTTP, stateless.
+
+Девять инструментов: `list_workspaces`, `search_code`, `find_symbol`, `get_callers`, `walkthrough`, `read_file`, `get_project_overview`, `list_issues`, `find_resolution`. Все, кроме `list_workspaces`, требуют `workspaceId` — его и берут из `list_workspaces`, это единственная точка входа.
+
+Что важно знать перед подключением:
+
+- Авторизации нет, и доступны только **публичные** воркспейсы: внутри есть ровно один путь загрузки воркспейса, и он фильтрует по публичности, так что приватный физически недостижим.
+- `GET` и `DELETE` на `/api/mcp` отвечают `405` с заголовком `Allow: POST` — в stateless-режиме серверных SSE-нотификаций и сессий нет. JSON-RPC-батчи отклоняются с `400`.
+- Лимиты по IP: 120 запросов в час плюс burst 10 запросов за 10 секунд.
+- `search_code` и `find_resolution` платные (считают эмбеддинги), поэтому проверяют общий дневной бюджет сервиса. Когда он исчерпан, инструмент возвращает ошибку с прямым указанием, что графовые инструменты продолжают работать.
+- Весь эндпоинт выключается переменной `MCP_ENABLED`.
+
+Реализация: [`apps/api/src/modules/mcp/`](apps/api/src/modules/mcp/).
+
+## Для мейнтейнеров
+
+Проиндексированный репозиторий можно превратить во входную точку для новых контрибьюторов.
+
+**Бейдж для README.** `GET /badge/<workspaceId>.svg` отдаёт SVG, на странице воркспейса есть готовый сниппет с кнопкой копирования:
+
+```markdown
+[![Explore with RepoBuddy](https://<api>/badge/<workspaceId>.svg)](https://<app>/w/<workspaceId>)
+```
+
+Бейдж анонимный и намеренно тупой: приватный, несуществующий или кривой id отдают один и тот же нейтральный бейдж `not found` со статусом `200` — чтобы картинка в чужом README не ломалась и чтобы бейдж не работал оракулом по id. Свежесть индекса он не показывает — иначе изображение в README дёргалось бы на каждый коммит в апстрим.
+
+**Честные сигналы вместо молчания.** Страница воркспейса не делает вид, что индекс идеален:
+
+- плашка свежести — на сколько коммитов индекс отстал от HEAD (`behindBy` и короткий `sha`);
+- плашка неполного покрытия, если обход упёрся в `MAX_FILES_PER_INDEX`;
+- плашка о том, что аннотация остановилась по бюджету и часть сущностей осталась без описаний.
+
+**Тур для первого визита.** Точки входа, ключевые абстракции, зоны для первого PR, setup-инструкция и открытые issues — то, что обычно приходится собирать вручную по репозиторию полдня.
 
 ## Стек
 
-**Frontend** — Nuxt 4, Vue 3 Composition API, Tailwind 4, shadcn-vue, `marked` + `isomorphic-dompurify` для рендера чат-сообщений, `shiki` для подсветки синтаксиса (lazy-loaded, dual-theme через CSS-переменные), `mermaid` для диаграмм (lazy-loaded), `d3-hierarchy` для treemap, `sigma` + `graphology` для neighbour-графа, `@nuxtjs/i18n` (cookie-driven, без URL-префиксов), `@nuxtjs/color-mode`.
+**Frontend** — Nuxt 4, Vue 3 Composition API, Tailwind 4, shadcn-nuxt + reka-ui, `marked` + `isomorphic-dompurify` для рендера сообщений, `shiki` для подсветки (лениво, dual-theme через CSS-переменные), `mermaid` для диаграмм (лениво), `d3-hierarchy` для treemap, `sigma` + `graphology` для графа соседей, `@nuxtjs/i18n` (en/ru, без URL-префиксов, выбор через cookie), `@nuxtjs/color-mode`.
 
-**Backend** — Nitro routes, BullMQ workers, `drizzle-orm` (Postgres + pgvector через `customType`), `nuxt-auth-utils` (GitHub OAuth, AES-GCM зашифрованные refresh-токены), Pino structured logging, `prom-client` metrics, `@octokit/rest`.
+**Backend** — NestJS 10 на Express, `@nestjs/bullmq` для очередей, `drizzle-orm` поверх `postgres` (pgvector через `customType`), `@nestjs/passport` + `passport-github2` + `express-session` с хранением сессий в Redis через `connect-redis`, `@nestjs/terminus` для health-чеков, `nestjs-pino` для структурированных логов, `prom-client` для метрик, `@sentry/nestjs`, `@octokit/rest`, `@modelcontextprotocol/sdk`.
 
-**AI** — OpenAI `gpt-4o` (планирование, аннотация, ответ) + `text-embedding-3-small` (1536-dim embeddings). Pluggable провайдер — поддерживается BYOK (на юзера: зашифрованный API-key + base URL). Hybrid search = vector cosine + Postgres `ts_rank` через reciprocal-rank-fusion.
+**AI** — OpenAI SDK поверх любого OpenAI-совместимого провайдера (`LLM_BASE_URL`: Groq, OpenRouter, Together, Ollama, vLLM). Две модельные полки: `planning` (по умолчанию `gpt-4o`) — планирование и ответ в чате; `extraction` (по умолчанию `gpt-4o-mini`) — массовая аннотация при индексации. Эмбеддинги — `text-embedding-3-small`, 1536 измерений. Поддерживается BYOK: пользовательский ключ и модель шифруются AES-GCM и всегда перебивают серверные настройки. Гибридный поиск — pgvector-косинус плюс Postgres `ts_rank` по генерируемой tsvector-колонке, объединение через RRF.
 
-**Парсинг кода** — `ts-morph` (TypeScript, JavaScript, Vue SFC), `web-tree-sitter` (Python, Go) с WASM-грамматиками.
+**Парсинг кода** — `ts-morph` для TypeScript, JavaScript и Vue SFC; `web-tree-sitter` с WASM-грамматиками для Python и Go. Других языков нет — см. [ограничения](#статус-и-ограничения).
 
-**DevOps** — Docker Compose dev-стек (Postgres, Redis, Grafana + Loki + Prometheus + Promtail), production-compose с Caddy auto-SSL, `pg_dump` backup-скрипт.
+**DevOps** — dev-стек в Docker Compose (Postgres 16 с pgvector, Redis 7, плюс опционально Prometheus, Loki, Promtail, Grafana), прод-compose с Caddy и авто-TLS, скрипт бэкапа на `pg_dump`.
 
-## Запуск локально
+## Локальный запуск
+
+Нужны Node ≥ 22, pnpm ≥ 9 и Docker для Postgres с Redis.
 
 ```bash
-# 1. Клонируем + ставим зависимости
+# 1. Клонируем и ставим зависимости
 git clone <this-repo> repobuddy && cd repobuddy
 pnpm install
 
-# 2. Поднимаем Postgres + Redis (Docker)
-cp .env.example .env   # затем заполни OPENAI_API_KEY + GITHUB_CLIENT_ID/SECRET
+# 2. Настраиваем окружение (.env лежит в корне монорепо)
+cp .env.example .env
+
+# 3. Поднимаем Postgres + Redis и накатываем миграции
 pnpm db:up
 pnpm db:migrate
 
-# 3. Запускаем web + worker (два терминала)
-pnpm dev:web
-pnpm dev:worker
+# 4. Три процесса в трёх терминалах
+pnpm dev:web      # Nuxt      :3000
+pnpm dev:api      # NestJS    :3001
+pnpm dev:worker   # BullMQ-воркер, без HTTP
 
-# 4. Открой http://localhost:3000
+# 5. Открываем http://localhost:3000
 ```
 
-Опциональные дашборды: `docker compose up -d grafana prometheus loki promtail` → Grafana на `http://localhost:3301` (`admin` / `admin`).
+Минимум, который надо заполнить в `.env`:
+
+| Переменная | Как получить |
+| --- | --- |
+| `DATABASE_URL`, `REDIS_URL` | Подходят значения из `.env.example`, если поднимал через `pnpm db:up`. |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App (см. ниже про callback URL). |
+| `NUXT_SESSION_PASSWORD` | `openssl rand -base64 32` — минимум 32 символа. Имя историческое, осталось от `nuxt-auth-utils`. |
+| `ENCRYPTION_KEY` | `openssl rand -hex 32` — ровно 64 hex-символа. |
+| `OPENAI_API_KEY` **или** `LLM_API_KEY` | Хотя бы один обязателен, схема проверяет это явно. |
+
+Стоит знать про два подводных камня:
+
+- **Корневой `pnpm dev` поднимает только web и api — воркера в нём нет.** Без `pnpm dev:worker` джоба индексации просто ляжет в очередь и останется там. Три терминала — это не перестраховка.
+- **Callback URL в GitHub OAuth App должен указывать на API, а не на фронт**: `http://localhost:3001/auth/github/callback`. Роуты `/auth/github*` специально вынесены из префикса `/api`, чтобы этот URL не менялся.
+
+Опциональные дашборды: `docker compose up -d grafana prometheus loki promtail`, дальше Grafana на `http://localhost:3301` (`admin` / `admin`).
 
 ## Тесты
 
 ```bash
-pnpm typecheck   # nuxt typecheck по server + app
-pnpm test        # vitest — unit + integration
-pnpm test:watch
+pnpm -r typecheck                                  # три воркспейса; для web нужен nuxt prepare
+pnpm test                                          # всё
+pnpm --filter @repobuddy/api test test/unit        # только unit
+pnpm --filter @repobuddy/api test test/integration # нужны Postgres + Redis
 ```
 
-Integration-тесты используют один Postgres-инстанс — suite запускается последовательно (`fileParallelism: false`) чтобы избежать TRUNCATE-гонок. Unit-тесты покрывают парсеры индексатора (TS/JS/Py/Go), KAG-executor, plan-schema и ключевые Vue-composables.
+Тесты живут только в `apps/api` (vitest). Unit-часть покрывает парсеры индексатора (TS / Python / Go), чанкер, executor с его резолвером ссылок `$sN`, схему плана, SSE-парсер, крипто, бейдж и два drift-guard'а — на каталог операторов и на каталог MCP-инструментов. Интеграционная часть гоняет полный прогон индексации на фикстурных репозиториях, операторы, гибридный поиск, аннотацию, дедупликацию и разбор git-истории; LLM и эмбеддинги при этом замоканы через `CODEGRAPH_MOCK_PROVIDERS=1`.
+
+Интеграционные тесты делят один Postgres и один Redis, поэтому набор запускается строго последовательно (`fileParallelism: false`, `singleFork`) — иначе `TRUNCATE` из разных файлов гоняются друг с другом.
+
+Отдельно про тестовую базу: подключение берётся из `TEST_DATABASE_URL`, а если его нет — из дефолта `postgres://repobuddy:repobuddy@localhost:5532/repobuddy_test`. Хелпер отказывается запускать тесты, если имя базы не оканчивается на `_test` — защита от того, чтобы `pnpm test` в шелле с экспортированным рабочим `DATABASE_URL` не сделал `TRUNCATE CASCADE` по живым данным. Мигрировать тестовую базу — `pnpm db:migrate:test`.
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) гоняет два джоба на push и PR в `main`: сначала typecheck с unit-тестами, потом интеграционные с поднятыми pgvector и Redis.
+
+## Заметки по деплою
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Поднимаются `postgres`, `redis`, `api`, `worker`, `web` и `caddy`. Наружу порты публикует только Caddy — `api` и `web` доступны лишь внутри сети.
+
+**Роутинг.** Всё живёт на одном домене (`APP_DOMAIN`). Caddy отправляет на `api:3001` пути `/api/*`, `/auth/github*`, `/robots.txt`, `/sitemap.xml`, `/feed.xml`, `/indexnow/*` и `/badge/*`, остальное уходит на `web:3000`. У API-ветки стоит `flush_interval -1` — без него оба SSE-потока (чат и прогресс индексации) буферизуются и приезжают пачкой в конце. Конфиг: [`docker/Caddyfile`](docker/Caddyfile).
+
+**Сессии** хранятся в Redis через `connect-redis` (`express-session`), так что API можно масштабировать горизонтально, не теряя логины.
+
+**Миграции автоматически не запускаются.** После деплоя их надо накатить руками: `pnpm --filter @repobuddy/api db:migrate` с нужным `DATABASE_URL`. Каталог `drizzle/meta/` намеренно закоммичен — без `_journal.json` миграции на свежем клоне не стартуют.
+
+**Рантайм — `tsx`, а не собранный `dist`.** `nest build` со swc настроен, но swc переписывает субпуть-алиасы `#shared/*` и `#server/*` в пути относительно `src/`, которые ломаются после переезда в `dist/`. Пока это осознанный компромисс: чуть медленнее холодный старт и чуть больше памяти. Для перехода на `node dist/src/main.js` нужен `tsc-alias` или перевод порядка 84 импортов на относительные пути — пояснение продублировано в скрипте `build:check-paths` и комментарием в [`apps/api/Dockerfile`](apps/api/Dockerfile).
+
+**Что стоит сделать после первого деплоя:**
+
+- `ADMIN_LOGINS` — без него админки нет ни у кого, включая тебя.
+- `METRICS_TOKEN` — `/api/metrics` требует `Authorization: Bearer`, и без токена в production отдаёт `404`.
+- `GITHUB_TOKEN` — read-only PAT на публичные данные поднимает лимит GitHub API с 60 запросов в час на IP до 5000. Без него `list_issues`, `find_resolution` и индексация PR-истории будут деградировать при первом же всплеске.
+- Решить судьбу `MCP_ENABLED` — по умолчанию MCP включён и неаутентифицирован.
+- Настроить cron для [`docker/backup.sh`](docker/backup.sh) — скрипт монтируется в контейнер Postgres, но планировщика в compose нет.
 
 ## Статус и ограничения
 
-- AST-покрытие намеренно неполное — re-exports, generic-резолвер, dynamic imports — best-effort.
-- LLM annotation стоит реальных денег (~$0.50–$2.00 на средний репо). Жёсткий guardrail через `LLM_BUDGET_USD_PER_INDEX`.
-- Agentic chat-режим (`Auto-explore` чекбокс) — opt-in, потому что каждый turn может стоить в 4–8 раз дороже planned-режима.
-- Mobile: чат работает end-to-end; side-панели (Reasoning Inspector / Source Viewer / Neighbour Graph) требуют ≥`lg` viewport — bottom-sheet-вариант в работе.
+Проект рабочий, но это pet-project без публичного хостинга. Что честно стоит знать заранее.
+
+**Языки.** AST-разбор есть только для TypeScript, JavaScript (включая Vue SFC), Python и Go. Java, Rust, C#, C/C++, Ruby, PHP и прочее в граф не попадают вообще — такие файлы становятся whole-file чанками, находятся поиском, но не дают ни сущностей, ни рёбер. Внутри поддержанных языков покрытие тоже намеренно неполное: ре-экспорты, дженерики и динамические импорты — best-effort. Связь «что покрыто тестами» выводится эвристикой по путям импортов, а не по именам символов.
+
+**Экономика — самое неочевидное место.** Аннотация идёт на дешёвой extraction-модели, а бюджет `LLM_BUDGET_USD_PER_INDEX` (по умолчанию 2.0) считается по намеренно завышенной оценке: округление вверх применяется к каждому слагаемому, поэтому минимальная учтённая цена сущности — 2 цента против реальных ~0,035. На практике это значит, что аннотация среднего репозитория обрывается примерно на сотой сущности, остальные остаются без описаний (индекс при этом полностью рабочий, просто `get_summary` по ним вернёт пусто), а в UI появляется соответствующая плашка.
+
+Та же завышенная оценка пишется в леджер и в дневной счётчик, поэтому дефолтный `COST_BUDGET_USD_PER_DAY=3` практически выбирается одной индексацией среднего репозитория — после чего не-админы получают `503` в чате и на новых индексациях до полуночи UTC. Реальный счёт у провайдера на тех же цифрах — порядка $0.10–0.20. Это консервативный предохранитель, а не оценка настоящих трат; если крутишь на своём железе или на Groq, лимиты имеет смысл поднять.
+
+**Границы индексации.** `MAX_FILES_PER_INDEX` (2000) обрезает обход — покрывается только часть репозитория, и об этом честно сообщает плашка. `MAX_REPO_SIZE_MB` (200) проверяется уже **после** клона: трафик и время всё равно потрачены, отказ происходит следующим шагом. Клон делается с `--depth 200 --single-branch`, поэтому история старше двухсот коммитов, другие ветки и теги в граф не попадают, а hotness считается по этому усечённому окну.
+
+**Индекс — снимок.** Автообновления нет: свежесть показывает отдельная ручка, переиндексация — только вручную владельцем. Индексируется исключительно публичный GitHub по URL; загрузка ZIP в коде есть, но пайплайн её отвергает.
+
+**Agentic-режим** остаётся opt-in чекбоксом, потому что один ход там стоит в разы дороже planned-режима.
+
+**Инженерный долг, который видно из репозитория:** нет CD (CI только типизирует и гоняет тесты, деплой ручной); `apps/api` не линтится — скрипты `lint` там заглушки, ESLint настроен только для `apps/web`; тестов во фронтенде нет вообще; в `apps/api/src/modules/workers/internals/build.ts` лежит мёртвый esbuild-скрипт эпохи Nitro, который ни на что не влияет и ждёт удаления.
+
+**Мобильные.** Чат работает целиком, боковые панели (Reasoning Inspector, Source Viewer, граф соседей) на узких экранах переезжают в bottom-sheet. Это работает, но остаётся вторичным сценарием — основной всё-таки десктоп.
 
 ## Лицензия
 
-MIT.
+MIT — см. [LICENSE](LICENSE).
+</content>
