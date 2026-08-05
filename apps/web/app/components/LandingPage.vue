@@ -6,12 +6,25 @@ import {
   Workflow,
   MessageSquare,
   Activity,
+  Plug,
 } from 'lucide-vue-next'
 
 const { t } = useI18n()
 const { loggedIn } = useAuth()
 const { public: { apiBaseUrl } } = useRuntimeConfig()
 const githubAuthUrl = `${apiBaseUrl}/auth/github`
+
+// Shown verbatim in the MCP section — it's a config snippet, not prose,
+// so it lives here rather than in i18n. `<your-instance>` because there
+// is no hosted instance to point at yet.
+const mcpConfig = `{
+  "mcpServers": {
+    "repobuddy": {
+      "type": "http",
+      "url": "https://<your-instance>/api/mcp"
+    }
+  }
+}`
 
 // Each feature gets a distinct tint so the cards read as a colourful
 // grid rather than six identical boxes. Colors come from Tailwind's
@@ -167,53 +180,48 @@ useHead({
       </div>
     </section>
 
-    <!-- For maintainers. The other blocks address the contributor
-         arriving at a repo; this one addresses the person who owns it,
-         for whom onboarding is a recurring cost rather than a one-off. -->
-    <section class="space-y-6 rounded-2xl border border-primary/20 bg-primary/5 p-6 sm:p-8">
-      <div class="space-y-2 text-center">
-        <h2 class="text-2xl font-semibold">
-          {{ t('landing.maintainers.title') }}
-        </h2>
-        <p class="mx-auto max-w-2xl text-sm text-muted-foreground">
-          {{ t('landing.maintainers.subtitle') }}
-        </p>
+    <!-- Use it from your editor (MCP). The graph engine is the core
+         asset; exposing it over MCP is the strongest "and it also…"
+         for this audience — a live integration, not a marketing claim. -->
+    <section class="space-y-4 rounded-xl border border-border bg-card p-6 sm:p-8">
+      <div class="flex items-center gap-3">
+        <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/30">
+          <Plug class="h-5 w-5" />
+        </span>
+        <div>
+          <h2 class="text-xl font-semibold">
+            {{ t('landing.mcp.title') }}
+          </h2>
+          <p class="text-sm text-muted-foreground">
+            {{ t('landing.mcp.subtitle') }}
+          </p>
+        </div>
       </div>
-      <ol class="grid gap-4 sm:grid-cols-3">
+      <pre class="overflow-x-auto rounded-lg border border-border bg-muted/50 p-3 text-xs leading-relaxed"><code>{{ mcpConfig }}</code></pre>
+      <p class="text-xs text-muted-foreground">
+        {{ t('landing.mcp.note') }}
+      </p>
+    </section>
+
+    <!-- For maintainers — a secondary path, kept deliberately modest so
+         it doesn't compete with the hero. The contributor is the star;
+         this is "and if you own a repo, you can share it". -->
+    <section class="space-y-3">
+      <h2 class="text-center text-lg font-semibold uppercase tracking-wide text-muted-foreground">
+        {{ t('landing.maintainers.title') }}
+      </h2>
+      <p class="mx-auto max-w-2xl text-center text-sm text-muted-foreground">
+        {{ t('landing.maintainers.subtitle') }}
+      </p>
+      <ol class="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row sm:gap-3">
         <li
           v-for="(step, i) in [0, 1, 2]"
           :key="step"
-          class="space-y-2 rounded-xl border border-border bg-card p-4"
+          class="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm"
         >
-          <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary ring-1 ring-primary/30">
-            {{ i + 1 }}
-          </span>
-          <h3 class="font-semibold">
-            {{ t(`landing.maintainers.steps.${step}.title`) }}
-          </h3>
-          <p class="text-sm text-muted-foreground">
-            {{ t(`landing.maintainers.steps.${step}.body`) }}
-          </p>
+          <span class="mr-1.5 font-semibold text-primary">{{ i + 1 }}.</span>{{ t(`landing.maintainers.steps.${step}.short`) }}
         </li>
       </ol>
-      <p class="text-center text-sm font-medium">
-        {{ t('landing.maintainers.note') }}
-      </p>
-      <!-- Step 1 needs an account, and the only way to get one is four
-           screens up in the hero. Same action, repeated where the
-           reader has just decided this section is about them. -->
-      <div class="flex justify-center">
-        <a v-if="!loggedIn" :href="githubAuthUrl">
-          <Button size="lg" class="shadow-lg shadow-primary/30">
-            {{ t('landing.hero.cta') }}
-          </Button>
-        </a>
-        <NuxtLink v-else to="/" @click.prevent="$router.replace('/')">
-          <Button size="lg" variant="outline">
-            {{ t('landing.hero.cta2') }}
-          </Button>
-        </NuxtLink>
-      </div>
     </section>
 
     <!-- Supported languages -->

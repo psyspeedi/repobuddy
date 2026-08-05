@@ -225,7 +225,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 **Что стоит сделать после первого деплоя:**
 
-- `ADMIN_LOGINS` — без него админки нет ни у кого, включая тебя.
+- `ADMIN_LOGINS` — без него админки нет ни у кого, включая тебя. Сама админка — это одна операторская консоль (overview, users, workspaces, audit-лог), целиком за этим списком; в продукт для контрибьютора она не входит и гостю не видна.
 - `METRICS_TOKEN` — `/api/metrics` требует `Authorization: Bearer`, и без токена в production отдаёт `404`.
 - `GITHUB_TOKEN` — read-only PAT на публичные данные поднимает лимит GitHub API с 60 запросов в час на IP до 5000. Без него `list_issues`, `find_resolution` и индексация PR-истории будут деградировать при первом же всплеске.
 - Решить судьбу `MCP_ENABLED` — по умолчанию MCP включён и неаутентифицирован.

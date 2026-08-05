@@ -133,36 +133,31 @@
     "stack": {
       "title": "Built with",
       "items": {
-        "0": "Nuxt 4 + Nitro",
+        "0": "NestJS 10 + Nuxt 4",
         "1": "Postgres 16 + pgvector",
-        "2": "OpenAI gpt-4o + gpt-4o-mini",
-        "3": "d3-hierarchy + Sigma.js + Mermaid",
+        "2": "OpenAI gpt-4o / gpt-4o-mini",
+        "3": "BullMQ + Redis",
         "4": "ts-morph + web-tree-sitter",
-        "5": "BullMQ + Redis"
+        "5": "d3 + Sigma.js + Mermaid"
       }
     },
     "public": {
       "title": "Try it on a project you might contribute to",
       "subtitle": "These workspaces are open to anyone — open the tour, ask questions, skim the issues. No account needed."
     },
+    "mcp": {
+      "title": "Use it from your editor",
+      "subtitle": "RepoBuddy speaks the Model Context Protocol, so an agent in Claude Code or Cursor can query the graph directly — no working copy required.",
+      "note": "Nine read-only tools over public workspaces: search, call-graph traversal, walkthroughs, issue resolution. Point the url at your own instance."
+    },
     "maintainers": {
-      "title": "Maintain a project? Set contributors up once.",
-      "subtitle": "Index your repository, open it up, and drop a badge in your README. Everyone who shows up gets a guided tour of your codebase instead of an issue asking where to start.",
+      "title": "Maintain a project?",
+      "subtitle": "Index your repo, make it public, and drop a badge in the README — contributors arrive with a guided tour of your codebase instead of an issue asking where to start.",
       "steps": {
-        "0": {
-          "title": "Index your repository",
-          "body": "Paste the GitHub URL. RepoBuddy builds the knowledge graph — entry points, call chains, setup commands, git history."
-        },
-        "1": {
-          "title": "Make it public",
-          "body": "One toggle on the workspace page. Read-only for visitors: they can explore and ask, they can't reindex or delete."
-        },
-        "2": {
-          "title": "Put the badge in your README",
-          "body": "Copy the ready-made markdown snippet from your workspace page into README.md or CONTRIBUTING.md. Re-index when the repo moves on — the workspace page tells you how far behind the index is."
-        }
-      },
-      "note": "Contributors get cited answers about your code straight in the browser — no account, no clone, nothing to install. Guests get a daily message limit; signing in raises it."
+        "0": { "short": "Index your repository" },
+        "1": { "short": "Make the workspace public" },
+        "2": { "short": "Add the badge to your README" }
+      }
     },
     "languages": {
       "title": "Supported languages",
