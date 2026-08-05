@@ -16,6 +16,7 @@ export type AuditAction =
   | 'workspace.delete'
   | 'workspace.reindex'
   | 'workspace.visibility'
+  | 'workspace.owner_key_for_guests'
   | 'byok.set'
   | 'byok.clear'
   | 'admin.delete_workspace'

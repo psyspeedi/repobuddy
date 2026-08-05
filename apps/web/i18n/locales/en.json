@@ -255,6 +255,12 @@
       "copyFailed": "Couldn't copy — select the snippet and copy it manually.",
       "preview": "Preview",
       "privateHint": "Make this workspace public first — the badge only works for public workspaces."
+    },
+    "ownerKey": {
+      "label": "Pay for visitor chats with my API key",
+      "hint": "Off: visitors run on the server's shared key, within the operator's daily budget. On: they run on your BYOK key — visitor message limits still apply, but the LLM cost is yours.",
+      "needByok": "Set a BYOK key in Settings to enable →",
+      "failed": "Couldn't update the setting."
     }
   },
   "chat": {

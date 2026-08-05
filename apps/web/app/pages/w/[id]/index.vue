@@ -20,6 +20,7 @@ interface WorkspaceResponse {
     error: string | null
     stats: WorkspaceStats | null
     isPublic: boolean
+    useOwnerKeyForGuests: boolean
     languages: string[]
   }
   viewerIsOwner: boolean
@@ -448,6 +449,39 @@ async function copyBadgeSnippet(): Promise<void> {
     useToast().error(t('workspace.invite.copyFailed'))
   }
 }
+
+// "Power visitor chats with my key" — owner-only opt-in. Needs the owner
+// to have a BYOK key set (fetched lazily, owner only); the toggle is
+// disabled with a hint otherwise.
+const { data: byokStatus, execute: loadByok } = useApiFetch<{ configured: boolean }>(
+  '/api/me/byok',
+  { server: false, lazy: true, immediate: false },
+)
+onMounted(() => { if (viewerIsOwner.value) void loadByok() })
+const ownerHasByok = computed(() => byokStatus.value?.configured ?? false)
+const ownerKeyOn = ref(false)
+watch(
+  () => wsData.value?.workspace.useOwnerKeyForGuests,
+  (v) => { ownerKeyOn.value = Boolean(v) },
+  { immediate: true },
+)
+const ownerKeySaving = ref(false)
+async function toggleOwnerKey(): Promise<void> {
+  if (ownerKeySaving.value) return
+  const next = !ownerKeyOn.value
+  ownerKeySaving.value = true
+  try {
+    await useApi()(`/api/workspaces/${workspaceId}/owner-key`, {
+      method: 'PUT',
+      body: { useOwnerKeyForGuests: next },
+    })
+    ownerKeyOn.value = next
+  } catch (err) {
+    useToast().error(err instanceof Error ? err.message : t('workspace.ownerKey.failed'))
+  } finally {
+    ownerKeySaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -693,6 +727,35 @@ async function copyBadgeSnippet(): Promise<void> {
         <div class="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{{ t('workspace.invite.preview') }}</span>
           <img :src="badgeUrl" alt="Explore with RepoBuddy" height="20" class="h-5">
+        </div>
+
+        <!-- Who pays for the visitors you invite. Off = the server key
+             (operator's budget); on = your own BYOK key. Visitor quotas
+             and rate limits stay on either way. -->
+        <div class="mt-1 border-t border-border pt-3">
+          <label
+            class="flex items-start gap-2"
+            :class="ownerHasByok ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'"
+          >
+            <input
+              type="checkbox"
+              class="mt-0.5 h-3.5 w-3.5 accent-primary"
+              :checked="ownerKeyOn"
+              :disabled="!ownerHasByok || ownerKeySaving"
+              @change="toggleOwnerKey"
+            >
+            <span class="text-xs">
+              <span class="font-medium text-foreground">{{ t('workspace.ownerKey.label') }}</span>
+              <span class="mt-0.5 block text-muted-foreground">{{ t('workspace.ownerKey.hint') }}</span>
+              <NuxtLink
+                v-if="!ownerHasByok"
+                to="/settings"
+                class="mt-1 inline-block text-primary hover:underline"
+              >
+                {{ t('workspace.ownerKey.needByok') }}
+              </NuxtLink>
+            </span>
+          </label>
         </div>
       </div>
     </details>

@@ -174,32 +174,59 @@ export class ChatService {
     const isGuest = viewer.kind === 'guest'
     const userId = isGuest ? null : (viewer as { userId: string }).userId
 
-    // Resolve the provider before the quota/budget gates. A BYOK user
-    // pays their own bill, so the quota contract says they bypass the
-    // message + token quotas AND the service-wide daily budget — but
-    // usesByok is only known after resolution. Doing it here (a cheap DB
-    // read, no LLM call) is what stops a BYOK user hitting 429/503 on the
-    // operator's limits while spending none of the operator's money.
-    const { llm, embeddings, usesByok } = await this.providers.resolveForUserId(userId, {
-      llmModel: this.config.get('OPENAI_MODEL_PLANNING'),
-    })
-
-    let quotaCtx: QuotaContext
-    if (isGuest) {
-      quotaCtx = { kind: 'guest', id: (viewer as { guestId: string }).guestId }
-    } else {
+    let isAdmin = false
+    if (!isGuest) {
       const [u] = await this.db
         .select({ githubLogin: users.githubLogin })
         .from(users)
         .where(eq(users.id, userId as string))
         .limit(1)
-      // Admins and BYOK users both bypass enforcement (they carry their
-      // own bill / are trusted operators).
-      const bypass = this.auth.isAdmin(u?.githubLogin) || usesByok
-      quotaCtx = { kind: 'user', id: userId as string, bypass }
+      isAdmin = this.auth.isAdmin(u?.githubLogin)
     }
+
+    // Provider resolution decides whose LLM key pays, in priority order:
+    //   1. the chatter's own BYOK key — they carry their own bill, so they
+    //      also bypass quotas + the daily budget;
+    //   2. the workspace owner's key, when the owner opted in
+    //      (useOwnerKeyForGuests) and has a BYOK key — visitor limits still
+    //      apply, so a public workspace can't drain the owner's key;
+    //   3. the server key — the operator pays, gated by the daily budget.
+    // Done here (cheap DB reads, no LLM call) so the gates below see who
+    // actually pays.
+    const llmModel = this.config.get('OPENAI_MODEL_PLANNING')
+    const chatter = await this.providers.resolveForUserId(userId, { llmModel })
+    let llm = chatter.llm
+    let embeddings = chatter.embeddings
+    const chatterHasOwnKey = chatter.usesByok
+
+    let billedToOwnerKey = false
+    if (
+      !chatterHasOwnKey
+      && ws.useOwnerKeyForGuests
+      && ws.ownerUserId
+      && ws.ownerUserId !== userId
+    ) {
+      const owner = await this.providers.resolveForUserId(ws.ownerUserId, { llmModel })
+      if (owner.usesByok) {
+        llm = owner.llm
+        embeddings = owner.embeddings
+        billedToOwnerKey = true
+      }
+    }
+    // The only branch that spends the operator's own key.
+    const costOnServerKey = !chatterHasOwnKey && !billedToOwnerKey
+
+    // Visitor quotas + rate limit apply unless the chatter carries their
+    // own bill or is an admin. Owner-key-for-guests deliberately keeps the
+    // visitor limits on.
+    const bypassLimits = isAdmin || chatterHasOwnKey
+    const quotaCtx: QuotaContext = isGuest
+      ? { kind: 'guest', id: (viewer as { guestId: string }).guestId }
+      : { kind: 'user', id: userId as string, bypass: bypassLimits }
+
     await assertCanSendMessage(quotaCtx)
-    await assertWithinDailyBudget({ bypass: quotaCtx.bypass })
+    // The service-wide daily budget only guards the operator's own key.
+    await assertWithinDailyBudget({ bypass: isAdmin || !costOnServerKey })
 
     if (isGuest) {
       const ip = req.ip ?? 'unknown'
@@ -410,10 +437,11 @@ export class ChatService {
         })
       }
 
+      // consumeMessage / recordTokenUsage no-op when quotaCtx.bypass is set
+      // (chatter's own key or admin); owner-key-for-guests keeps bypass off,
+      // so the visitor's quota is still consumed.
       await consumeMessage(quotaCtx)
-      if (!usesByok) {
-        await recordTokenUsage(quotaCtx, inputTokens + outputTokens)
-      }
+      await recordTokenUsage(quotaCtx, inputTokens + outputTokens)
 
       await recordCost(this.db, {
         workspaceId: body.workspaceId,
@@ -423,7 +451,9 @@ export class ChatService {
         outputTokens,
         costCentsPer1MInput: llm.costCentsPer1MInputTokens,
         costCentsPer1MOutput: llm.costCentsPer1MOutputTokens,
-        byok: usesByok,
+        // Only server-key spend counts against the service-wide daily
+        // budget; the owner's or chatter's own key is logged but excluded.
+        byok: !costOnServerKey,
       })
 
       chatRequests.inc({ status: 'ok', viewer: viewerLabel })

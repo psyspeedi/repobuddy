@@ -28,6 +28,7 @@ import { INDEX_WORKSPACE_QUEUE } from '../queues/queue.constants'
 import { WorkspaceAccessService } from './workspace-access.service'
 
 const VisibilityBody = z.object({ isPublic: z.boolean() })
+const OwnerKeyBody = z.object({ useOwnerKeyForGuests: z.boolean() })
 
 @Controller('workspaces')
 export class WorkspacesController {
@@ -239,6 +240,58 @@ export class WorkspacesController {
       void pingIndexNow([`${appUrl}/w/${id}`, `${appUrl}/sitemap.xml`])
     }
     return { ok: true, isPublic: parsed.isPublic }
+  }
+
+  /**
+   * PUT /api/workspaces/:id/owner-key — owner/admin. Opt in to paying for
+   * visitors' chats with the owner's own BYOK key. Enabling requires the
+   * owner to have a BYOK key set (chat resolution falls back to the server
+   * key if it's ever missing, but we refuse to enable a toggle that would
+   * silently do nothing).
+   */
+  @Put(':id/owner-key')
+  async setOwnerKeyForGuests(@Req() req: Request, @Param('id') id: string, @Body() body: unknown) {
+    const parsed = OwnerKeyBody.parse(body)
+    const access = await this.access.write(req, id)
+
+    if (parsed.useOwnerKeyForGuests) {
+      const [ws] = await this.db
+        .select({ ownerUserId: workspaces.ownerUserId })
+        .from(workspaces)
+        .where(eq(workspaces.id, id))
+        .limit(1)
+      if (!ws) throw new NotFoundException('workspace not found')
+      const [owner] = await this.db
+        .select({ encryptedByokApiKey: users.encryptedByokApiKey })
+        .from(users)
+        .where(eq(users.id, ws.ownerUserId))
+        .limit(1)
+      if (!owner?.encryptedByokApiKey) {
+        throw new BadRequestException(
+          'Set a BYOK API key in Settings first — visitor chats can only run on a key the owner has provided.',
+        )
+      }
+    }
+
+    await this.db
+      .update(workspaces)
+      .set({ useOwnerKeyForGuests: parsed.useOwnerKeyForGuests })
+      .where(eq(workspaces.id, id))
+    const [u] = await this.db
+      .select({ githubLogin: users.githubLogin })
+      .from(users)
+      .where(eq(users.id, access.userId))
+      .limit(1)
+    await recordAudit(this.db, {
+      userId: access.userId,
+      actorLogin: u?.githubLogin ?? null,
+      action: 'workspace.owner_key_for_guests',
+      targetType: 'workspace',
+      targetId: id,
+      metadata: { useOwnerKeyForGuests: parsed.useOwnerKeyForGuests },
+      ip: req.ip ?? null,
+    })
+    return { ok: true, useOwnerKeyForGuests: parsed.useOwnerKeyForGuests }
   }
 }
 

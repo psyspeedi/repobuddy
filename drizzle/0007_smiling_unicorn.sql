@@ -1,0 +1,1 @@
+ALTER TABLE "workspaces" ADD COLUMN "use_owner_key_for_guests" boolean DEFAULT false NOT NULL;

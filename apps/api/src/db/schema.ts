@@ -124,6 +124,12 @@ export const workspaces = pgTable(
     // the owner on /w/[id]. Owner stays the same; guests cannot reindex,
     // delete, or modify chat history.
     isPublic: boolean('is_public').notNull().default(false),
+    // Opt-in: when true AND the owner has a BYOK key, visitors' chats on
+    // this workspace run on the owner's key instead of the server's — the
+    // owner foots the bill for exploration of their own repo. Visitor
+    // quotas and rate limits still apply (a public workspace must not
+    // become an uncapped drain on the owner's key). Off by default.
+    useOwnerKeyForGuests: boolean('use_owner_key_for_guests').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
