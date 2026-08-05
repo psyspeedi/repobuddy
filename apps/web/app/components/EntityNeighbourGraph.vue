@@ -26,7 +26,11 @@ defineEmits<{
 const { t } = useI18n()
 const colorMode = useColorMode()
 const containerRef = ref<HTMLDivElement | null>(null)
-const view = ref<'graph' | 'tree'>('graph')
+// Default to the tree: for "who calls this / what breaks if I touch it"
+// a callers/callees list is more legible than a force graph. The Sigma
+// graph stays one click away — it's the flashier view, not the more
+// useful one.
+const view = ref<'graph' | 'tree'>('tree')
 
 interface NodeRow {
   id: string

@@ -204,9 +204,6 @@
     "send": "Send",
     "askPrompt": "Ask anything about this repository.",
     "stop": "Stop",
-    "share": "Share chat",
-    "shareTitle": "Copy a link to this chat session",
-    "shareCopied": "Link copied!",
     "suggest": {
       "q1": "What is this project about?",
       "q2": "What functions and classes are in this project?",

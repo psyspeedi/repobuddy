@@ -81,13 +81,28 @@ const showAll = ref(false)
 
 <template>
   <section class="space-y-3 rounded-lg border border-border bg-card p-4">
-    <header class="flex items-center justify-between">
+    <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <h2 class="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {{ t('insights.title') }}
       </h2>
+      <!-- Collapsed, the card is one line: the three numbers that answer
+           "is this project worth contributing to" inline. The full
+           six-tile grid costs ~120px above the chat, so it stays behind
+           the toggle rather than permanently squeezing the composer on a
+           laptop. -->
+      <p
+        v-if="!showAll && insights.totalCommitsScanned > 0"
+        class="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+      >
+        <span class="tabular-nums text-foreground">{{ insights.commitsLast90d }}</span> {{ t('insights.commits') }} / 90d
+        <span class="mx-1.5" aria-hidden="true">·</span>
+        {{ relativeLastCommit ?? '—' }}
+        <span class="mx-1.5" aria-hidden="true">·</span>
+        <span class="tabular-nums text-foreground">{{ insights.activeMaintainers90d }}</span> {{ t('insights.maintainers').toLowerCase() }}
+      </p>
       <button
         type="button"
-        class="text-xs text-muted-foreground hover:text-foreground"
+        class="ml-auto shrink-0 text-xs text-muted-foreground hover:text-foreground"
         @click="showAll = !showAll"
       >
         {{ showAll ? t('insights.showLess') : t('insights.showMore') }}
@@ -96,7 +111,7 @@ const showAll = ref(false)
     <div v-if="insights.totalCommitsScanned === 0" class="text-sm text-muted-foreground">
       {{ t('insights.noHistory') }}
     </div>
-    <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div v-else-if="showAll" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <div class="space-y-1 rounded-lg border border-violet-500/20 bg-violet-500/5 p-2.5">
         <div class="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-violet-700 dark:text-violet-300">
           <GitCommit class="h-3 w-3" />

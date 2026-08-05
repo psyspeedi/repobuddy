@@ -227,21 +227,6 @@ onUnmounted(() => {
   if (typeof window !== 'undefined') window.removeEventListener('keydown', onKeydown)
 })
 
-// Share-chat URL — copies a deep link to the current session. Works
-// for owners (history persisted) and for guests on public workspaces
-// (the link will simply land on an empty chat for the reader).
-const shareCopied = ref(false)
-async function shareChat(): Promise<void> {
-  const url = `${window.location.origin}/w/${workspaceId}?session=${chat.sessionId.value}`
-  try {
-    await navigator.clipboard.writeText(url)
-    shareCopied.value = true
-    setTimeout(() => { shareCopied.value = false }, 1500)
-  } catch {
-    // ignore
-  }
-}
-
 function onOpenChunk(chunkId: string): void {
   openChunkId.value = chunkId
   sidePanel.value = 'viewer'
@@ -466,7 +451,7 @@ async function copyBadgeSnippet(): Promise<void> {
 </script>
 
 <template>
-  <div v-if="wsData" class="cg-no-scroll flex flex-1 flex-col gap-4 min-h-0">
+  <div v-if="wsData" class="cg-no-scroll flex flex-1 flex-col gap-3 min-h-0">
     <header class="space-y-2">
       <NuxtLink
         v-if="loggedIn"
@@ -761,14 +746,6 @@ async function copyBadgeSnippet(): Promise<void> {
             </button>
           </div>
           <div class="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              class="hover:text-foreground"
-              :title="t('workspace.shareTitle')"
-              @click="shareChat"
-            >
-              {{ shareCopied ? t('workspace.shareCopied') : t('workspace.share') }}
-            </button>
             <span class="hidden tabular-nums sm:inline">⌘K · ⌘↵</span>
           </div>
         </div>
