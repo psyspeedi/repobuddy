@@ -62,6 +62,17 @@ async function main(): Promise<void> {
   const db = drizzle(sql)
 
   try {
+    // The very first migration creates tables with `vector` columns, so
+    // the extension has to exist before drizzle runs. docker/init-db.sql
+    // creates these for the compose Postgres, but the documented manual
+    // path is just `pnpm db:migrate` against any database — make it
+    // self-sufficient. Idempotent, so it's a no-op when init-db already ran.
+    console.log('[migrate] ensuring extensions…')
+    await sql.unsafe(
+      'CREATE EXTENSION IF NOT EXISTS vector;'
+        + ' CREATE EXTENSION IF NOT EXISTS pg_trgm;'
+        + ' CREATE EXTENSION IF NOT EXISTS "uuid-ossp";',
+    )
     console.log('[migrate] applying drizzle migrations…')
     await migrate(db, { migrationsFolder: DRIZZLE_DIR })
     console.log('[migrate] applying raw SQL migrations…')
