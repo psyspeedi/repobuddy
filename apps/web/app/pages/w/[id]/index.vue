@@ -451,7 +451,7 @@ async function copyBadgeSnippet(): Promise<void> {
 </script>
 
 <template>
-  <div v-if="wsData" class="cg-no-scroll flex flex-1 flex-col gap-3 min-h-0">
+  <div v-if="wsData" class="flex flex-col gap-3">
     <header class="space-y-2">
       <NuxtLink
         v-if="loggedIn"
@@ -697,16 +697,15 @@ async function copyBadgeSnippet(): Promise<void> {
       </div>
     </details>
 
-    <!-- min-h-0 rather than min-h-[400px]: the shell forbids page scroll,
-         so a floor taller than the space left pushes the composer off
-         screen with no way to reach it. The blocks above (insights,
-         coverage banners, invite card) already cost ~650px on a laptop.
-         Letting chat shrink keeps the input reachable; the inner
-         container is min-h-0 + overflow-hidden, so the message list
-         gives up the space, not the composer. -->
+    <!-- The page scrolls normally now (no cg-no-scroll on the root), so
+         the chat takes a comfortable bounded height instead of fighting
+         the header, insights and invite card for a fixed viewport. 72vh
+         reads well on a laptop and the message list scrolls inside it;
+         min-h keeps the composer usable on very short windows. The three
+         columns (sessions, chat, side panel) stretch to this height. -->
     <section
       v-if="isReady"
-      class="flex flex-1 flex-col gap-3 min-h-0 lg:flex-row"
+      class="flex h-[72vh] min-h-[460px] flex-col gap-3 lg:flex-row"
     >
       <!-- Hide the chat history sidebar for guests — their sessions are
            ephemeral, so the list would always be empty and useless.
