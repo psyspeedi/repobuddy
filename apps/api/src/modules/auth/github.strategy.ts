@@ -12,7 +12,10 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
     @Inject(AuthService) private readonly auth: AuthService,
   ) {
     const env = config.all()
-    const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+    // `||` not `??`: compose passes API_URL through as an empty string
+    // when the operator leaves it unset, and an empty base would build a
+    // relative, invalid OAuth callback. Fall back on empty too.
+    const apiUrl = process.env.API_URL || 'http://localhost:3001'
     // CSRF defence — passport-oauth2 generates a random `state`, parks
     // it in req.session, and rejects callbacks whose state doesn't
     // match. passport-github2 types declare `state` as string, but the
