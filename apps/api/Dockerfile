@@ -24,21 +24,22 @@ COPY packages/shared packages/shared/
 COPY apps/api apps/api/
 COPY drizzle drizzle/
 
+# Compile to JS. shared is built first (CJS in packages/shared/dist) because
+# the api build's `#shared/*` alias resolves to it at runtime; the api build
+# (nest + swc) emits apps/api/dist. Both entrypoints then run under plain
+# node — faster cold start and lower memory than the old tsx runtime.
+RUN pnpm --filter @repobuddy/shared build \
+    && pnpm --filter @repobuddy/api build
+
 # --- runner-api ---
 FROM base AS runner-api
 ENV NODE_ENV=production
 WORKDIR /repo/apps/api
 EXPOSE 3001
-# Run via tsx in production. nest build with swc is wired (apps/api/.swcrc,
-# nest-cli.json, "build" script), but emits `#shared/*` and `#server/*`
-# subpath aliases as relative paths against src/, which break after the
-# move to dist/. tsc-alias or migrating to fully-relative imports across
-# ~84 source files will unblock `node dist/src/main.js`. Until then tsx
-# is the stable runtime.
-CMD ["pnpm", "exec", "tsx", "src/main.ts"]
+CMD ["node", "dist/main.js"]
 
 # --- runner-worker ---
 FROM base AS runner-worker
 ENV NODE_ENV=production
 WORKDIR /repo/apps/api
-CMD ["pnpm", "exec", "tsx", "src/main.worker.ts"]
+CMD ["node", "dist/main.worker.js"]

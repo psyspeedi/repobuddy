@@ -15,7 +15,7 @@
     "keepClassNames": true,
     "baseUrl": "./",
     "paths": {
-      "#shared/*": ["../../packages/shared/src/*"],
+      "#shared/*": ["../../packages/shared/dist/*"],
       "#server/db/*": ["./src/db/*"],
       "#server/lib/*": ["./src/lib/*"],
       "#server/kag/*": ["./src/modules/kag/internals/*"],

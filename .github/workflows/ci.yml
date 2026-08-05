@@ -48,6 +48,12 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
+      # The prod containers run compiled JS (node dist/main.js), so a
+      # broken nest/swc build is a deploy blocker CI must catch. shared
+      # builds first because the api build's #shared alias resolves to it.
+      - name: API production build
+        run: pnpm --filter @repobuddy/shared build && pnpm --filter @repobuddy/api build
+
   integration:
     name: integration
     runs-on: ubuntu-latest
