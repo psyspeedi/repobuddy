@@ -172,18 +172,31 @@ export class ChatService {
   ): Promise<void> {
     const { workspace: ws, viewer } = await this.access.read(req, body.workspaceId)
     const isGuest = viewer.kind === 'guest'
+    const userId = isGuest ? null : (viewer as { userId: string }).userId
+
+    // Resolve the provider before the quota/budget gates. A BYOK user
+    // pays their own bill, so the quota contract says they bypass the
+    // message + token quotas AND the service-wide daily budget — but
+    // usesByok is only known after resolution. Doing it here (a cheap DB
+    // read, no LLM call) is what stops a BYOK user hitting 429/503 on the
+    // operator's limits while spending none of the operator's money.
+    const { llm, embeddings, usesByok } = await this.providers.resolveForUserId(userId, {
+      llmModel: this.config.get('OPENAI_MODEL_PLANNING'),
+    })
 
     let quotaCtx: QuotaContext
     if (isGuest) {
       quotaCtx = { kind: 'guest', id: (viewer as { guestId: string }).guestId }
     } else {
-      const uid = (viewer as { userId: string }).userId
       const [u] = await this.db
         .select({ githubLogin: users.githubLogin })
         .from(users)
-        .where(eq(users.id, uid))
+        .where(eq(users.id, userId as string))
         .limit(1)
-      quotaCtx = { kind: 'user', id: uid, bypass: this.auth.isAdmin(u?.githubLogin) }
+      // Admins and BYOK users both bypass enforcement (they carry their
+      // own bill / are trusted operators).
+      const bypass = this.auth.isAdmin(u?.githubLogin) || usesByok
+      quotaCtx = { kind: 'user', id: userId as string, bypass }
     }
     await assertCanSendMessage(quotaCtx)
     await assertWithinDailyBudget({ bypass: quotaCtx.bypass })
@@ -242,11 +255,6 @@ export class ChatService {
     const viewerLabel = isGuest ? 'guest' : 'user'
 
     try {
-      const ownerUserId = isGuest ? null : (viewer as { userId: string }).userId
-      const { llm, embeddings, usesByok } = await this.providers.resolveForUserId(ownerUserId, {
-        llmModel: this.config.get('OPENAI_MODEL_PLANNING'),
-      })
-
       const citedIds = extractEntityIdsFromQuestion(body.question)
       const pinnedEntities =
         citedIds.length > 0 ? await loadPinnedEntities(this.db, body.workspaceId, citedIds) : []
