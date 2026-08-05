@@ -257,7 +257,10 @@ function shikiLang(lang: string, filePath: string | null | undefined): string {
         ×
       </Button>
     </header>
-    <div class="flex-1 overflow-auto p-3" :class="mode === 'markdown' ? 'text-sm' : 'text-xs'">
+    <div
+      class="cg-source grid flex-1 overflow-auto"
+      :class="mode === 'markdown' ? 'p-3 text-sm' : 'text-xs'"
+    >
       <div v-if="loading">
         {{ t('viewer.loading') }}
       </div>
@@ -274,6 +277,26 @@ function shikiLang(lang: string, filePath: string | null | undefined): string {
 </template>
 
 <style>
+/* Source viewer: the Shiki <pre> otherwise shrinks to its content — as
+ * wide as the longest line, as tall as the line count — so the panel's
+ * own background shows through as a stripe on the right and a band below
+ * a short file. The scroll container is a single-cell grid (its child
+ * stretches to fill both axes); the <pre> fills that box but still grows
+ * to max-content so a long line scrolls horizontally over code, not bare
+ * background. Padding lives on the <pre> so its background reaches the
+ * panel edges. */
+.cg-source .shiki {
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  margin: 0;
+}
+.cg-source .shiki code {
+  display: block;
+}
+
 .cg-prose h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }
 .cg-prose h2 { font-size: 1.25rem; font-weight: 700; margin: 1rem 0 0.5rem; }
 .cg-prose h3 { font-size: 1.1rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
