@@ -163,6 +163,12 @@ services:
       # Caddy serves. Marking it required contradicted the api service
       # above, where the same variable is explicitly optional.
       NUXT_PUBLIC_API_BASE_URL: ${API_BASE_URL:-}
+      # Куда Nuxt ходит за данными во время серверного рендеринга.
+      # Пустой NUXT_PUBLIC_API_BASE_URL выше означает относительные пути —
+      # в браузере их разбирает Caddy, а на сервере Caddy впереди нет, и
+      # относительный путь резолвится в сам Nuxt (web:3000), где /api нет.
+      # Поэтому на сервере ходим прямо в контейнер api.
+      NUXT_API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:3001}
       NUXT_HOST: 0.0.0.0
       NUXT_PORT: 3000
     depends_on:
