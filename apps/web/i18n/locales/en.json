@@ -163,6 +163,7 @@
       "title": "Supported languages",
       "subtitle": "Static analysis covers four languages today, with Vue SFCs parsed as TypeScript. Markdown and per-commit diffs are indexed for every repo regardless of language."
     },
+    "repoLink": "Source on GitHub",
     "footer": "Open source. MIT licensed."
   },
   "login": {
