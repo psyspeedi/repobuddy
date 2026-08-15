@@ -138,6 +138,18 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    // Server-only: never reaches the browser. Where the Nuxt server itself
+    // should call the API during SSR.
+    //
+    // Needed because same-origin deployments set apiBaseUrl to "" so the
+    // browser issues relative /api/* calls that Caddy splits. On the server
+    // there is no Caddy in front — a relative URL resolves against the Nuxt
+    // server itself (web:3000), which serves no /api and answers 404. That
+    // silently emptied every SSR payload.
+    //
+    // Override with NUXT_API_INTERNAL_URL (compose sets it to http://api:3001).
+    // Left empty in dev, where apiBaseUrl already points at :3001 directly.
+    apiInternalUrl: process.env.API_INTERNAL_URL ?? '',
     public: {
       appUrl: process.env.APP_URL ?? 'http://localhost:3000',
       // After the NestJS migration the API lives on a separate origin.
