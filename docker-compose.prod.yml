@@ -26,7 +26,34 @@ services:
     volumes:
       - redis_data:/data
 
+  # Одноразовый прогон миграций перед стартом приложения.
+  #
+  # Почему отдельным сервисом, а не в entrypoint у api: api и worker
+  # поднимаются одновременно и мигрировали бы параллельно. Drizzle обещает
+  # идемпотентность (применённое пропускается), но про одновременный запуск
+  # двух процессов не говорит ничего — гонка на CREATE TABLE даст грязное
+  # падение. Здесь мигрирует ровно один контейнер, и пока он не завершится
+  # успешно, api и worker не стартуют.
+  #
+  # Если миграция упала — приложение не поднимется, а прежние контейнеры
+  # продолжат работать на старом образе. Это лучше, чем новый код против
+  # старой схемы.
+  migrate:
+    image: ghcr.io/psyspeedi/repobuddy-api:${IMAGE_TAG:-latest}
+    container_name: repobuddy-migrate
+    restart: "no"
+    command: ["pnpm", "db:migrate"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
+    # image + build вместе: на сервере деплой делает `pull` и берёт готовый
+    # образ из GHCR, локально `docker compose build` собирает то же самое.
+    # IMAGE_TAG — рычаг отката: поставить sha-xxxxxxx вместо latest.
+    image: ghcr.io/psyspeedi/repobuddy-api:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -78,10 +105,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     expose:
       - "3001"
 
   worker:
+    image: ghcr.io/psyspeedi/repobuddy-worker:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -116,8 +146,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
   web:
+    image: ghcr.io/psyspeedi/repobuddy-web:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
