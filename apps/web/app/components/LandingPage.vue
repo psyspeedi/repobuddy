@@ -261,8 +261,19 @@ useHead({
     </section>
 
     <!-- Footer -->
-    <footer class="border-t border-border pt-6 text-center text-xs text-muted-foreground">
-      {{ t('landing.footer') }}
+    <footer
+      class="flex flex-col items-center gap-2 border-t border-border pt-6 text-center text-xs text-muted-foreground"
+    >
+      <a
+        href="https://github.com/psyspeedi/repobuddy"
+        target="_blank"
+        rel="noopener"
+        class="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+      >
+        <Github class="h-4 w-4" />
+        <span>{{ t('landing.repoLink') }}</span>
+      </a>
+      <span>{{ t('landing.footer') }}</span>
     </footer>
   </div>
 </template>
