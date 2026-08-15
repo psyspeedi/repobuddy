@@ -8,9 +8,18 @@ name: Release
 # Self-hosted runner намеренно не используется: репозиторий публичный,
 # а значит любой pull request исполнил бы свой код внутри домашней сети.
 
+# Два потока из одного workflow — шаги сборки одинаковые:
+#
+#   push в main  → образы :main и :sha-xxxxxxx     (препрод, только из меша)
+#   тег vX.Y.Z   → образы :X.Y.Z, :latest, :sha-…  (прод, repobuddy.space)
+#
+# `latest` двигается ТОЛЬКО по тегу. docker-compose.prod.yml по умолчанию
+# смотрит на latest, поэтому прод обновляется осознанно — когда поставлен
+# тег, а не когда смержен PR.
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 concurrency:
@@ -24,8 +33,14 @@ jobs:
   # Не собираем образы, пока не прошли typecheck, тесты и продакшен-сборки.
   # ci.yml висит на том же push в main, но GitHub не связывает workflow между
   # собой — поэтому ждём его явно.
+  #
+  # Только для веток. На теге ci.yml не запускается вовсе (он висит на push
+  # в main и на PR), и ожидание провисело бы до таймаута. Тег ставится с
+  # main, куда красное не попадает из-за защиты ветки, так что проверка
+  # уже пройдена этим же коммитом.
   wait-for-ci:
     name: ждём CI
+    if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     steps:
       - uses: lewagon/wait-on-check-action@v1.3.4
@@ -45,6 +60,10 @@ jobs:
   build:
     name: ${{ matrix.name }}
     needs: wait-for-ci
+    # wait-for-ci пропускается на тегах, а пропущенная зависимость по
+    # умолчанию отменяет и зависящий job — поэтому разрешаем оба исхода
+    # явно. Провалившийся CI по-прежнему останавливает сборку.
+    if: always() && contains(fromJSON('["success", "skipped"]'), needs.wait-for-ci.result)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -81,10 +100,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.name }}
-          # latest — на что смотрит деплой по умолчанию.
-          # sha-xxxxxxx — неподвижный тег, им же и откатываемся.
+          # main          — препрод, обновляется на каждый мерж
+          # 0.1.0 / 0.1   — версия релиза
+          # latest        — прод; двигается ТОЛЬКО по тегу
+          # sha-xxxxxxx   — неподвижный, им откатываемся
           tags: |
-            type=raw,value=latest
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=sha,format=short,prefix=sha-
 
       - uses: docker/build-push-action@v6
