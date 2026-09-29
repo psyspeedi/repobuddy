@@ -9,7 +9,7 @@ import { loadLocaleFile, localeInfo, pickLang, type LocaleKey } from './locales.
 import { Resolver, walk } from './project.ts';
 import { RouteExtractor, type RouteRec } from './routes.ts';
 
-const VERSION = 2;
+const VERSION = 3;
 
 export interface FileEntry {
   mtime: number;

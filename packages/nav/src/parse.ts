@@ -167,6 +167,12 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, coll
       if (CYRILLIC.test(cyr)) addText(facts, cyr, lineOf(n));
     } else if (ts.isCallExpression(n)) {
       onCall(n);
+    } else if (ts.isJsxText(n)) {
+      // Видимый текст JSX — на любом языке, как текст шаблона Vue.
+      const lead = n.text.length - n.text.trimStart().length;
+      addText(facts, n.text, lineBase + sf.getLineAndCharacterOfPosition(n.getStart(sf) + lead).line);
+    } else if (ts.isJsxAttribute(n) && n.initializer && ts.isStringLiteral(n.initializer) && TEXT_ATTRS.has(n.name.getText())) {
+      addText(facts, n.initializer.text, lineOf(n));
     }
     ts.forEachChild(n, visit);
   };

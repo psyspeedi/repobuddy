@@ -104,3 +104,10 @@ test('react: пути из объекта-конфига, lazy-роут, пот�
   assert.deepEqual(c?.consumers, ['src/features/comments/components/comments-list.tsx']);
   assert.deepEqual(routePaths(react, 'src/features/comments/components/comments-list.tsx'), ['/app/discussions/:discussionId']);
 });
+
+test('react без i18n: видимый текст JSX и текстовые атрибуты на любом языке', () => {
+  const [a] = react.textInCode('no comments yet');
+  assert.deepEqual([a?.file, a?.line], ['src/features/comments/components/comments-list.tsx', 6]);
+  assert.equal(react.textInCode('Discussion comments')[0]?.line, 5);
+  assert.equal(react.keysByText('comments').length, 0);
+});
