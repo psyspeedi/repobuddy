@@ -5,12 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { extractFacts, type FileFacts } from './parse.ts';
-import { loadLocaleFile, localeInfo, pickLang, type LocaleKey } from './locales.ts';
+import { configuredLocale, fallbackOrder, loadLocaleFile, localeInfo, pickLang, type LocaleKey } from './locales.ts';
 import { projectInfo, Resolver, walk } from './project.ts';
 import { RouteExtractor, type RouteRec } from './routes.ts';
 import { fileRoutes } from './fileRoutes.ts';
 
-const VERSION = 4;
+const VERSION = 13;
 
 export interface FileEntry {
   mtime: number;
@@ -146,7 +146,7 @@ export function buildIndex(rootArg: string, opts: { force?: boolean } = {}): { i
     localeFiles.push({ rel, ...li });
     byLang.set(li.lang, (byLang.get(li.lang) ?? 0) + 1);
   }
-  const lang = pickLang(byLang, cfg.lang);
+  const lang = pickLang(byLang, cfg.lang ?? configuredLocale(root));
   const perLang = new Map<string, Map<string, LocaleKey>>();
   for (const lf of localeFiles) {
     if (!perLang.has(lf.lang)) perLang.set(lf.lang, new Map());
@@ -156,13 +156,14 @@ export function buildIndex(rootArg: string, opts: { force?: boolean } = {}): { i
       stats.failed.push(`${lf.rel}: ${(e as Error).message.split('\n')[0]}`);
     }
   }
-  const keys = new Map<string, LocaleKey>(lang ? perLang.get(lang) ?? [] : []);
-  for (const [l, m] of perLang) {
-    if (l === lang) continue;
-    for (const [k, v] of m) {
+  const keys = new Map<string, LocaleKey>();
+  // Основной язык первым, затем en, затем остальные: ключ без основного перевода
+  // получает file:line запасного языка, а не первого по алфавиту.
+  for (const l of fallbackOrder([...perLang.keys()], lang)) {
+    for (const [k, v] of perLang.get(l)!) {
       const base = keys.get(k);
-      if (base) (base.alts ??= {})[l] = v.value;
-      else keys.set(k, { ...v, alts: { [l]: v.value } });
+      if (!base) keys.set(k, { ...v });
+      else (base.alts ??= {})[l] = { value: v.value, file: v.file, line: v.line };
     }
   }
   for (const [rel, e] of Object.entries(files)) {
@@ -174,7 +175,16 @@ export function buildIndex(rootArg: string, opts: { force?: boolean } = {}): { i
   const exportsOf = (rel: string) => files[rel]?.facts?.exportNames ?? [];
   // parent у файловых роутов — индекс в их собственном списке; сдвигаем.
   const base = routes.length;
-  for (const r of fileRoutes({ root, files: relFiles, deps: info.deps, exportsOf })) {
+  const viteConfig = ['vite.config.ts', 'vite.config.js', 'vite.config.mts', 'vite.config.mjs']
+    .map((f) => {
+      try {
+        return fs.readFileSync(path.join(root, f), 'utf8');
+      } catch {
+        return '';
+      }
+    })
+    .join('\n');
+  for (const r of fileRoutes({ root, files: relFiles, deps: info.deps, exportsOf, viteConfig })) {
     if (r.parent !== null) r.parent += base;
     routes.push(r);
   }

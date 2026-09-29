@@ -108,11 +108,21 @@ test('remix: плоские роуты, pathless, resource routes, i18next ns:ke
   const nav = load('remix-app');
   const byFile = Object.fromEntries(nav.ix.routes.map((r) => [r.file, `${r.path} ${r.kind}`]));
   assert.deepEqual(byFile, {
+    'app/root.tsx': '/ layout',
     'app/routes/_index.tsx': '/ page',
     'app/routes/users.$id.tsx': '/users/:id page',
     'app/routes/_auth.login.tsx': '/login page',
     'app/routes/api.health.ts': '/api/health server',
+    'app/routes/notes.tsx': '/notes page',
+    'app/routes/notes.$noteId.tsx': '/notes/:noteId page',
   });
+  // Вложенность flat routes: notes.$noteId внутри notes, notes внутри root.
+  const note = nav.ix.routes.find((r) => r.file === 'app/routes/notes.$noteId.tsx')!;
+  assert.equal(nav.ix.routes[note.parent!]?.file, 'app/routes/notes.tsx');
+  assert.equal(nav.ix.routes[nav.ix.routes[note.parent!]!.parent!]?.file, 'app/root.tsx');
+  // <form action method> — вызов ручки.
+  assert.deepEqual(nav.endpointsOf('app/routes/notes.$noteId.tsx').map((e) => `${e.method} ${e.url}`), ['POST /notes/delete']);
+  assert.equal(nav.textInCode('удалить заметку')[0]?.line, 4);
   assert.deepEqual(trace(nav, 'добро пожаловать'), { key: 'common.greeting', usage: 'app/routes/_index.tsx:4', routes: ['/'] });
 });
 
@@ -139,4 +149,38 @@ test('vue: ключи из <i18n>-блока компонента', () => {
   const [k] = nav.keysByText('локальный привет');
   assert.deepEqual([k?.key, k?.file], ['hello', 'src/components/LocalI18n.vue']);
   assert.equal(nav.keysByText('Local hello').length, 0);
+});
+
+test('api-эвристики: del, однословный путь у клиента, тернарник, вызов через скобки и as', () => {
+  const nav = load('react-jsx');
+  const got = nav.ix.files['src/lib/api.ts']!.facts!.apiCalls.map((c) => `${c.method} ${c.url}`);
+  assert.deepEqual(got, ['GET tags', 'DELETE users/{id}', 'GET /articles/feed', 'GET /articles', 'GET /api/list-servers']);
+  assert.equal(nav.textInCode("don't panic")[0]?.file, 'src/Layout.tsx');
+});
+
+test('nuxt: index в середине пути выкидывается, родитель — ближайший предок', () => {
+  const nav = load('nuxt-app');
+  const r = nav.ix.routes.find((x) => x.file === 'pages/users/[id]/index/followers.vue')!;
+  assert.equal(r.path, '/users/:id/followers');
+  // [id].vue + каталог [id]/ — вложенность; а у него самого родитель users.vue.
+  assert.equal(nav.ix.routes[r.parent!]?.file, 'pages/users/[id].vue');
+  assert.equal(nav.ix.routes[nav.ix.routes[r.parent!]!.parent!]?.file, 'pages/users.vue');
+});
+
+test('next: error.tsx привязан к своему сегменту', () => {
+  const nav = load('next-app');
+  const hit = nav.textInCode('что-то пошло не так')[0]!;
+  const r = nav.routesFor(hit.file).hits[0]?.route;
+  assert.deepEqual([r?.path, r?.name], ['/:locale', 'error']);
+});
+
+test('vite + vue-router 5: страницы по файлам, .md, layouts, языки с регионом и запасной en', () => {
+  const nav = load('vite-vue');
+  assert.deepEqual(nav.ix.routes.map((r) => `${r.path} ${r.kind}`).sort(), ['/ page', '/about page', 'layout:default layout']);
+  assert.equal(nav.textInCode('страница из markdown')[0]?.file, 'src/pages/about.md');
+  assert.ok(nav.ix.langs.includes('es-419'));
+  // В основном ru ключа нет — file:line берётся из en, а не из de (первого по алфавиту).
+  assert.equal(nav.ix.keys['intro.aka']?.file, 'locales/en.yml');
+  assert.deepEqual(nav.keysByText('también conocido')[0]?.lang, 'es-419');
+  assert.deepEqual(nav.usagesOfKey('intro.aka').map((u) => u.file), ['src/pages/index.vue']);
 });

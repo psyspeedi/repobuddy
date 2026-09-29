@@ -15,6 +15,8 @@ export interface FileRouteInput {
   files: string[];
   deps: Set<string>;
   exportsOf: (rel: string) => string[];
+  /** Текст vite.config.* — там подключаются роутер по файлам и layouts. */
+  viteConfig?: string;
 }
 
 interface Draft {
@@ -32,7 +34,13 @@ export function fileRoutes(input: FileRouteInput): RouteRec[] {
     for (const base of ['pages', 'src/pages']) nextPages(input, base, out);
   }
   if (has('nuxt', 'nuxt3', 'nuxt-edge')) nuxt(input, out);
-  else if (has('unplugin-vue-router', 'vite-plugin-pages', 'vue-router/vite')) vuePages(input, ['src/pages', 'src/views'], out);
+  else if (has('unplugin-vue-router', 'vite-plugin-pages') || /vue-router\/vite|unplugin-vue-router|vite-plugin-pages/.test(input.viteConfig ?? '')) {
+    const cfg = input.viteConfig ?? '';
+    const exts = [...(/extensions\s*:\s*\[([^\]]*)\]/.exec(cfg)?.[1] ?? "'.vue'").matchAll(/['"]\.?(\w+)['"]/g)].map((m) => '.' + m[1]);
+    const dir = /(?:routesFolder|dirs|pagesDir)\s*:\s*['"]([^'"]+)['"]/.exec(cfg)?.[1];
+    vuePages(input, [...(dir ? [dir.replace(/^\.\//, '')] : []), 'src/pages', 'src/views'], out, exts.length ? exts : ['.vue']);
+    if (/vite-plugin-vue-layouts|vite-plugin-vue-meta-layouts/.test(cfg) || has('vite-plugin-vue-layouts')) nuxtExtras(input, out);
+  }
   if (has('@sveltejs/kit')) sveltekit(input, 'src/routes', out);
   if (has('@remix-run/react', '@remix-run/dev', '@react-router/dev')) remix(input, out);
   if (has('astro')) simplePages(input, 'src/pages', ['.astro', '.md', '.mdx', '.tsx', '.jsx', '.ts', '.js'], out, { endpoints: true });
@@ -117,9 +125,11 @@ function nextApp(input: FileRouteInput, base: string, out: RouteRec[]): void {
     if (segs.some((s) => s.startsWith('_') || /^\(\.+\)/.test(s))) continue; // приватные и перехватывающие
     const urlSegs = segs.filter((s) => !/^\(.*\)$/.test(s) && !s.startsWith('@')).map(bracketSeg);
     const p = toPath(urlSegs);
-    const kind = m[2] === 'page' ? 'page' : m[2] === 'route' ? 'server' : m[2] === 'layout' || m[2] === 'template' ? 'layout' : null;
+    const kind = m[2] === 'page' ? 'page' : m[2] === 'route' ? 'server' : m[2] === 'default' ? null : 'layout';
     if (!kind) continue;
-    drafts.push({ rec: mk(input, f, p, kind, kind === 'server' ? { methods: methodsOf(input, f) } : {}), dir });
+    // error / not-found / loading — обёртки сегмента, помечаем именем.
+    const name = /^(error|not-found|loading)$/.test(m[2]!) ? m[2]! : null;
+    drafts.push({ rec: mk(input, f, p, kind, kind === 'server' ? { methods: methodsOf(input, f) } : { name }), dir });
   }
   link(drafts, out);
 }
@@ -146,23 +156,31 @@ function nuxt(input: FileRouteInput, out: RouteRec[]): void {
 }
 
 /** Страницы в стиле Nuxt / unplugin-vue-router / vite-plugin-pages. */
-function vuePages(input: FileRouteInput, bases: string[], out: RouteRec[]): void {
-  const base = bases.find((b) => under(input.files, b).some((f) => f.endsWith('.vue')));
+function vuePages(input: FileRouteInput, bases: string[], out: RouteRec[], exts = ['.vue']): void {
+  const isPage = (f: string) => exts.some((e) => f.endsWith(e));
+  const base = bases.find((b) => under(input.files, b).some(isPage));
   if (base) {
-    const files = under(input.files, base).filter((f) => f.endsWith('.vue'));
+    const files = under(input.files, base).filter(isPage);
     const nuxt2 = !files.some((f) => f.includes('['));
     const seg = (s: string) => (nuxt2 && s.startsWith('_') ? ':' + s.slice(1) + (s === '_' ? '*' : '') : bracketSeg(s));
     const byPath = new Map<string, number>();
     // Родители раньше детей: users.vue раньше users/[id].vue.
-    const sorted = files.map((f) => ({ f, segs: f.slice(base.length + 1, -4).split('/') })).sort((a, b) => a.segs.length - b.segs.length);
+    const sorted = files
+      .map((f) => ({ f, segs: f.slice(base.length + 1, -path.extname(f).length).split('/') }))
+      .sort((a, b) => a.segs.length - b.segs.length);
     for (const { f, segs } of sorted) {
-      const urlSegs = segs.filter((s) => !/^\(.*\)$/.test(s)).map(seg);
-      if (urlSegs[urlSegs.length - 1] === 'index') urlSegs.pop();
+      // index выкидывается на любом уровне: a/index/b.vue → /a/b.
+      const urlSegs = segs.filter((s) => !/^\(.*\)$/.test(s) && s !== 'index').map(seg);
       const p = toPath(urlSegs);
       const rec = mk(input, f, p, 'page');
-      // pages/users.vue — родитель для pages/users/*.vue (NuxtPage внутри).
-      const parentKey = segs.slice(0, -1).join('/');
-      if (parentKey && byPath.has(parentKey)) rec.parent = byPath.get(parentKey)!;
+      // pages/users.vue — родитель для pages/users/**.vue (NuxtPage внутри); ищем ближайшего предка.
+      for (let k = segs.length - 1; k > 0; k--) {
+        const key = segs.slice(0, k).join('/');
+        if (byPath.has(key)) {
+          rec.parent = byPath.get(key)!;
+          break;
+        }
+      }
       const i = out.push(rec) - 1;
       byPath.set(segs.join('/'), i);
     }
@@ -219,6 +237,10 @@ function remix(input: FileRouteInput, out: RouteRec[]): void {
     if (out.length) return;
   }
   const base = 'app/routes';
+  const rootFile = ['app/root.tsx', 'app/root.jsx', 'app/root.ts', 'app/root.js'].find((f) => input.files.includes(f));
+  const rootIdx = rootFile ? out.push(mk(input, rootFile, '/', 'layout')) - 1 : null;
+  const byName = new Map<string, number>();
+  const pending: { rec: RouteRec; segs: string[] }[] = [];
   for (const f of under(input.files, base)) {
     const rel = f.slice(base.length + 1);
     let name: string;
@@ -238,7 +260,20 @@ function remix(input: FileRouteInput, out: RouteRec[]): void {
     }
     const exps = input.exportsOf(f);
     const server = !exps.includes('default') && (exps.includes('loader') || exps.includes('action'));
-    out.push(mk(input, f, toPath(url), server ? 'server' : 'page'));
+    const rec = mk(input, f, toPath(url), server ? 'server' : 'page', { parent: rootIdx });
+    byName.set(segs.join('.'), out.push(rec) - 1);
+    pending.push({ rec, segs });
+  }
+  // Второй проход: notes.tsx — родитель для notes.$noteId.tsx (Outlet); users_.edit — без вложенности.
+  for (const { rec, segs } of pending) {
+    for (let k = segs.length - 1; k > 0; k--) {
+      if (segs[k - 1]!.endsWith('_')) break;
+      const parentName = segs.slice(0, k).join('.');
+      if (byName.has(parentName)) {
+        rec.parent = byName.get(parentName)!;
+        break;
+      }
+    }
   }
 }
 

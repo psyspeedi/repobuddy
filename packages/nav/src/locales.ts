@@ -15,10 +15,18 @@ export interface LocaleKey {
   file: string;
   line: number;
   /** Переводы на другие языки: поиск по тексту идёт по всем. */
-  alts?: Record<string, string>;
+  alts?: Record<string, { value: string; file: string; line: number }>;
 }
 
-const LANG_RE = /^[a-z]{2,3}(?:[-_][A-Za-z]{2,4})?$/;
+// ru, en-US, zh-Hans, es-419, ca-valencia, sr-Latn-RS; трёхбуквенные — только известные,
+// иначе api.json / app.json приняли бы за язык.
+const THREE = new Set(['fil', 'haw', 'yue', 'ast', 'ckb', 'kab', 'gsw', 'nds', 'sah', 'tzm', 'arn', 'fur', 'ceb', 'nqo', 'kmr']);
+const LANG_RE = /^([a-z]{2}|[a-z]{3})(?:[-_](?:[A-Za-z]{2,4}|\d{3}|[a-z]{5,8}))*$/;
+export function isLang(s: string): boolean {
+  if (!LANG_RE.test(s)) return false;
+  const primary = s.split(/[-_]/)[0]!;
+  return primary.length === 2 || THREE.has(primary);
+}
 const FLAT_FORMATS = new Set(['.po', '.xlf', '.xliff']);
 
 interface LocaleFile {
@@ -39,18 +47,18 @@ export function localeInfo(rel: string): LocaleFile | null {
   rest[rest.length - 1] = base;
   if (FLAT_FORMATS.has(ext)) {
     // messages.ru.xlf, ru/messages.po, ru.po
-    const fromName = base.split('.').reverse().find((x) => LANG_RE.test(x));
-    const lang = fromName ?? rest.find((x) => LANG_RE.test(x));
+    const fromName = base.split('.').reverse().find((x) => isLang(x));
+    const lang = fromName ?? rest.find((x) => isLang(x));
     return lang ? { lang, prefix: [] } : null;
   }
   if (rest.length === 1) {
-    if (LANG_RE.test(base)) return { lang: base, prefix: [] };
+    if (isLang(base)) return { lang: base, prefix: [] };
     // common.ru.json
     const dotted = base.split('.');
-    if (dotted.length === 2 && LANG_RE.test(dotted[1]!)) return { lang: dotted[1]!, prefix: [dotted[0]!] };
+    if (dotted.length === 2 && isLang(dotted[1]!)) return { lang: dotted[1]!, prefix: [dotted[0]!] };
     return null;
   }
-  if (!LANG_RE.test(rest[0]!)) return null;
+  if (!isLang(rest[0]!)) return null;
   const prefix = rest.slice(1);
   if (prefix[prefix.length - 1] === 'index') {
     // index.json в корне языка — сами ключи; index.ts — обычно агрегатор, но
@@ -137,7 +145,7 @@ function loadYaml(text: string, rel: string, out: Map<string, LocaleKey>, prefix
   };
   // Rails-стиль: корень — язык (ru: {...}); снимаем его.
   let root: any = doc.contents;
-  if (YAML.isMap(root) && root.items.length === 1 && YAML.isScalar(root.items[0]!.key) && LANG_RE.test(String((root.items[0]!.key as any).value))) {
+  if (YAML.isMap(root) && root.items.length === 1 && YAML.isScalar(root.items[0]!.key) && isLang(String((root.items[0]!.key as any).value))) {
     root = root.items[0]!.value;
   }
   walkNode(root, prefix);
@@ -179,12 +187,45 @@ function loadXliff(text: string, rel: string, out: Map<string, LocaleKey>): void
   }
 }
 
-/** Выбирает язык: явно заданный, иначе ru, иначе тот, где больше файлов. */
-export function pickLang(langs: Map<string, number>, wanted?: string): string | null {
-  if (wanted && langs.has(wanted)) return wanted;
-  for (const l of ['ru', 'ru-RU', 'ru_RU']) if (langs.has(l)) return l;
+/**
+ * Основной язык: явно заданный → defaultLocale из конфигов → ru → en →
+ * тот, где больше ключей.
+ */
+export function pickLang(langs: Map<string, number>, wanted?: string | null): string | null {
+  const find = (l: string) => [...langs.keys()].find((x) => x.toLowerCase() === l.toLowerCase());
+  for (const l of [wanted, 'ru', 'ru-RU', 'ru_RU', 'en', 'en-US', 'en_US', 'en-GB']) {
+    const hit = l ? find(l) : undefined;
+    if (hit) return hit;
+  }
   let best: string | null = null;
   let n = -1;
   for (const [l, c] of langs) if (c > n) [best, n] = [l, c];
   return best;
+}
+
+/** Порядок запасных языков для ключей, которых нет в основном. */
+export function fallbackOrder(langs: string[], primary: string | null): string[] {
+  const rank = (l: string) => (l === primary ? 0 : /^en\b|^en[-_]/i.test(l) ? 1 : 2);
+  return [...langs].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
+/** defaultLocale / defaultLanguage / sourceLocale из типовых конфигов i18n. */
+export function configuredLocale(root: string): string | null {
+  const candidates = [
+    'nuxt.config.ts', 'nuxt.config.js', 'next.config.js', 'next.config.mjs', 'next.config.ts', 'astro.config.mjs', 'astro.config.ts',
+    'i18n.config.ts', 'i18n.ts', 'i18n.js', 'src/i18n.ts', 'src/i18n/index.ts', 'src/i18n/routing.ts', 'src/i18n/request.ts',
+    'next-i18next.config.js', 'lingui.config.ts', 'lingui.config.js', 'project.inlang/settings.json', 'svelte.config.js',
+    'src/lib/i18n.ts', 'src/lib/i18n/index.ts', 'angular.json', 'transloco.config.ts',
+  ];
+  for (const c of candidates) {
+    let text: string;
+    try {
+      text = fs.readFileSync(path.join(root, c), 'utf8');
+    } catch {
+      continue;
+    }
+    const m = /\b(?:defaultLocale|defaultLanguage|sourceLocale|baseLocale|fallbackLocale|sourceLanguageTag|baseLanguageTag)["']?\s*[:=]\s*["']([\w-]+)["']/.exec(text);
+    if (m) return m[1]!;
+  }
+  return null;
 }

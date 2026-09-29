@@ -107,7 +107,7 @@ function cmdText(nav: Nav, q: string, json: boolean): void {
   p(`«${q}»: ключей ${keys.length}, вшитым текстом ${hard.length}`);
   keys.slice(0, 6).forEach((k) => {
     p();
-    p(`${k.key} = «${k.value}»  (${k.file}:${k.line})`);
+    p(`${k.key} = «${k.value}»${k.lang ? ` [${k.lang}]` : ''}  (${k.file}:${k.line})`);
     const us = nav.usagesOfKey(k.key);
     if (!us.length) p('  не используется (или ключ собирается динамически)');
     for (const u of us.slice(0, 4)) {

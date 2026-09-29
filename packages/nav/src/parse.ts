@@ -58,7 +58,17 @@ export interface ScriptBlock {
   lineBase: number;
 }
 
-const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head']);
+const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'del']);
+const METHOD_NAME: Record<string, string> = { del: 'DELETE' };
+/** Получатель похож на http-клиент: тогда и однословный путь — URL (api.get('tags')). */
+const CLIENT_RECEIVER = /(^|\.)(\$?https?|api\w*|\w*client|axios|\$?axios|request|ky|fetcher|rest|backend|server|agent|\$?fetch|superagent|got)$/i;
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', laquo: '«', raquo: '»', mdash: '—', ndash: '–', hellip: '…' };
+function decodeEntities(s: string): string {
+  return s.replace(/&(#x[\da-f]+|#\d+|\w+);/gi, (m, e: string) => {
+    if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+    return ENTITIES[e.toLowerCase()] ?? m;
+  });
+}
 /** Функции-загрузчики: первый аргумент — URL. */
 const FETCHERS = new Set(['fetch', '$fetch', 'useFetch', 'useLazyFetch', 'ofetch', 'ky', 'got', 'useSWR', 'useSWRImmutable', 'axios', 'request', 'superagent']);
 const NOISE_CALLS = new Set([
@@ -140,7 +150,10 @@ export function extractFacts(file: string): FileFacts {
       const sf = ts.createSourceFile(file, b.content, ts.ScriptTarget.Latest, true, scriptKindFor(file, b.lang ?? 'js'));
       visitScript(sf, b.loc.start.line, facts, true, tags);
     }
-    if (descriptor.template?.ast) visitDomTemplate(descriptor.template.ast, facts, tags);
+    const tpl = descriptor.template;
+    // Своё дерево с сохранёнными пробелами: в готовом ast многострочный текст схлопнут
+    // и теряет номера строк. pug и прочие препроцессоры не разбираем.
+    if (tpl && (!tpl.lang || tpl.lang === 'html')) parseDomTemplate(tpl.content, tpl.loc.start.line, facts, tags);
     for (const cb of descriptor.customBlocks) {
       if (cb.type === 'i18n') facts.localKeys.push(...sfcI18nKeys(cb.content, cb.lang, cb.loc.start.line));
     }
@@ -150,6 +163,13 @@ export function extractFacts(file: string): FileFacts {
     extractAstro(file, src, facts, tags);
   } else if (file.endsWith('.html')) {
     visitHtml(src, 1, facts, tags);
+  } else if (file.endsWith('.md') || file.endsWith('.mdx')) {
+    // Видимый текст markdown построчно, без кода и фронтматтера.
+    let fence = false;
+    src.split('\n').forEach((l, i) => {
+      if (/^\s*(```|~~~|---\s*$)/.test(l)) fence = !fence;
+      else if (!fence && !/^\s*(import|export)\s/.test(l)) addText(facts, l.replace(/^[#>*\-\d.\s]+|[*_`]/g, ''), i + 1);
+    });
   } else {
     const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, scriptKindFor(file));
     visitScript(sf, 1, facts, true, tags);
@@ -169,8 +189,26 @@ function addString(facts: FileFacts, s: string, line: number): void {
   }
 }
 
+/** Многострочный текстовый узел: куски, разделённые строками без букв, — каждый со своей строкой. */
+function addTextChunks(facts: FileFacts, content: string, startLine: number): void {
+  const lines = content.split('\n');
+  let chunk: string[] = [];
+  let chunkLine = startLine;
+  const flush = () => {
+    if (chunk.length) addText(facts, chunk.join(' '), chunkLine);
+    chunk = [];
+  };
+  lines.forEach((l, i) => {
+    if (/\p{L}/u.test(l)) {
+      if (!chunk.length) chunkLine = startLine + i;
+      chunk.push(l);
+    } else flush();
+  });
+  flush();
+}
+
 function addText(facts: FileFacts, s: string, line: number): void {
-  const t = s.replace(/\s+/g, ' ').trim();
+  const t = decodeEntities(s).replace(/\s+/g, ' ').trim();
   if (t.length < 2 || !/\p{L}/u.test(t)) return;
   facts.texts.push({ t: t.slice(0, 300), line });
   // Текст узла может быть ключом: <span translate>MENU.HOME</span>.
@@ -244,18 +282,34 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
       if (full !== null) addString(facts, full, lineOf(n));
       const cyr = [n.head.text, ...n.templateSpans.map((s) => s.literal.text)].join(' ');
       if (CYRILLIC.test(cyr)) addText(facts, cyr, lineOf(n));
+    } else if (
+      ts.isPropertyAccessExpression(n) &&
+      !ts.isPropertyAccessExpression(n.parent) &&
+      !(ts.isCallExpression(n.parent) && n.parent.expression === n)
+    ) {
+      // Ссылка без вызова: return api.modules.v3.x.executeCode — тоже потребитель.
+      const chain = flattenChain(n);
+      if (chain && chain.length >= 3 && !chain[0]!.endsWith('()') && chain[0] !== 'this') facts.calls.push({ chain, line: lineOf(n) });
     } else if (ts.isTaggedTemplateExpression(n)) {
       onTagged(n);
     } else if (ts.isCallExpression(n)) {
       onCall(n);
     } else if (ts.isJsxText(n)) {
       // Видимый текст JSX — на любом языке, как текст шаблона.
-      const lead = n.text.length - n.text.trimStart().length;
-      addText(facts, n.text, lineBase + sf.getLineAndCharacterOfPosition(n.getStart(sf) + lead).line);
+      addTextChunks(facts, n.text, lineBase + sf.getLineAndCharacterOfPosition(n.pos).line);
     } else if (ts.isJsxAttribute(n) && n.initializer && ts.isStringLiteral(n.initializer) && TEXT_ATTRS.has(n.name.getText())) {
       addText(facts, n.initializer.text, lineOf(n));
-    } else if ((ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) && /^[A-Z]/.test(n.tagName.getText())) {
-      tags.add(n.tagName.getText());
+    } else if (ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) {
+      const tag = n.tagName.getText();
+      if (/^[A-Z]/.test(tag)) tags.add(tag);
+      if (/(^|\.)(form|Form)$/.test(tag)) {
+        const attr = (name: string) => {
+          const a = n.attributes.properties.find((p) => ts.isJsxAttribute(p) && p.name.getText() === name) as ts.JsxAttribute | undefined;
+          return a?.initializer && ts.isStringLiteral(a.initializer) ? a.initializer.text : null;
+        };
+        const action = attr('action');
+        if (action?.startsWith('/')) facts.apiCalls.push({ method: (attr('method') ?? 'GET').toUpperCase(), url: action, line: lineOf(n), owner: null });
+      }
     }
     ts.forEachChild(n, visit);
   };
@@ -294,7 +348,9 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
   };
 
   const onCall = (n: ts.CallExpression): void => {
-    const callee = n.expression;
+    let callee: ts.Expression = n.expression;
+    // (globalThis.$fetch as any)('/x'), (0, fetch)('/x')
+    while (ts.isParenthesizedExpression(callee) || ts.isAsExpression(callee) || ts.isNonNullExpression(callee)) callee = callee.expression;
     const arg0 = n.arguments[0];
     if (topLevel && callee.kind === ts.SyntaxKind.ImportKeyword && arg0 && ts.isStringLiteralLike(arg0)) {
       facts.imports.push({ spec: arg0.text, line: lineOf(n), dynamic: true, names: {} });
@@ -307,8 +363,16 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
     if (ts.isPropertyAccessExpression(callee)) {
       const m = callee.name.text;
       if (HTTP_METHODS.has(m) && arg0) {
-        const url = urlValue(arg0, consts);
-        if (url) facts.apiCalls.push({ method: m.toUpperCase(), url, line: lineOf(n), owner: ownerName(n) });
+        const loose = CLIENT_RECEIVER.test(callee.expression.getText(sf).replace(/\s+/g, ''));
+        for (const url of urlValues(arg0, consts, loose)) {
+          facts.apiCalls.push({ method: METHOD_NAME[m] ?? m.toUpperCase(), url, line: lineOf(n), owner: ownerName(n) });
+        }
+      }
+      // globalThis.$fetch('/x'), window.fetch('/x')
+      if (FETCHERS.has(m) && !HTTP_METHODS.has(m) && arg0 && !ts.isObjectLiteralExpression(arg0)) {
+        for (const url of urlValues(arg0, consts, false)) {
+          facts.apiCalls.push({ method: methodFromOptions(n.arguments[1], consts) ?? 'GET', url, line: lineOf(n), owner: ownerName(n) });
+        }
       }
       if (m === 'request' && arg0 && ts.isObjectLiteralExpression(arg0)) pushConfigCall(n, arg0);
       if (m === 'component' && arg0 && ts.isStringLiteralLike(arg0) && n.arguments[1] && ts.isIdentifier(n.arguments[1])) {
@@ -327,8 +391,9 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
     if (FETCHERS.has(name) && arg0) {
       if (ts.isObjectLiteralExpression(arg0)) pushConfigCall(n, arg0);
       else {
-        const url = urlValue(arg0, consts);
-        if (url) facts.apiCalls.push({ method: methodFromOptions(n.arguments[1], consts) ?? 'GET', url, line: lineOf(n), owner: ownerName(n) });
+        for (const url of urlValues(arg0, consts, false)) {
+          facts.apiCalls.push({ method: methodFromOptions(n.arguments[1], consts) ?? 'GET', url, line: lineOf(n), owner: ownerName(n) });
+        }
       }
     }
     if (destructured.has(name)) facts.calls.push({ chain: destructured.get(name)!, line: lineOf(n) });
@@ -343,7 +408,7 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
     for (const p of cfg.properties) {
       if (!ts.isPropertyAssignment(p)) continue;
       const k = p.name.getText();
-      if (k === 'url') url = urlValue(p.initializer, consts);
+      if (k === 'url') url = urlValues(p.initializer, consts, true)[0] ?? null;
       if (k === 'method') method = (stringValue(p.initializer, consts) ?? 'GET').toUpperCase();
     }
     if (url) facts.apiCalls.push({ method, url, line: lineOf(n), owner: ownerName(n) });
@@ -418,23 +483,43 @@ function stringValue(e: ts.Expression, consts: Map<string, string>): string | nu
   return null;
 }
 
-/** URL с плейсхолдерами на месте неизвестных частей: `/v1/x/${id}` → /v1/x/{id}. */
-function urlValue(e: ts.Expression, consts: Map<string, string>): string | null {
-  let s: string | null = null;
-  if (ts.isStringLiteralLike(e) || ts.isIdentifier(e)) s = stringValue(e, consts);
-  else if (ts.isTemplateExpression(e)) {
-    s = e.head.text;
-    for (const span of e.templateSpans) {
-      s += (stringValue(span.expression, consts) ?? `{${span.expression.getText().slice(0, 30)}}`) + span.literal.text;
+/**
+ * URL с плейсхолдерами на месте неизвестных частей: `/v1/x/${id}` → /v1/x/{id}.
+ * Тернарник разворачивается в варианты: '/a' + (f ? '/feed' : '') → /a/feed, /a.
+ * loose — получатель похож на http-клиент, тогда допустим и путь без «/» ('tags').
+ */
+function urlValues(e: ts.Expression, consts: Map<string, string>, loose: boolean): string[] {
+  const parts = (x: ts.Expression): string[] => {
+    while (ts.isParenthesizedExpression(x) || ts.isAsExpression(x)) x = x.expression;
+    if (ts.isStringLiteralLike(x)) return [x.text];
+    if (ts.isIdentifier(x)) return [consts.get(x.text) ?? `{${x.text}}`];
+    if (ts.isConditionalExpression(x)) return [...parts(x.whenTrue), ...parts(x.whenFalse)].slice(0, 4);
+    if (ts.isTemplateExpression(x)) {
+      let acc = [x.head.text];
+      for (const span of x.templateSpans) {
+        const mid = ts.isConditionalExpression(span.expression)
+          ? parts(span.expression)
+          : [stringValue(span.expression, consts) ?? `{${span.expression.getText().slice(0, 30)}}`];
+        acc = acc.flatMap((a) => mid.map((m) => a + m + span.literal.text)).slice(0, 4);
+      }
+      return acc;
     }
-  } else if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const a = urlValue(e.left, consts);
-    const b = stringValue(e.right, consts) ?? (ts.isIdentifier(e.right) ? `{${e.right.text}}` : null);
-    s = a !== null && b !== null ? a + b : null;
+    if (ts.isBinaryExpression(x) && x.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const l = parts(x.left);
+      const r = parts(x.right);
+      return l.flatMap((a) => r.map((b) => a + b)).slice(0, 4);
+    }
+    return [`{${x.getText().slice(0, 30)}}`];
+  };
+  if (ts.isIdentifier(e) && !consts.has(e.text)) return [];
+  const out: string[] = [];
+  for (const s of parts(e)) {
+    if (!s || /\s/.test(s) || s.startsWith('{')) continue;
+    const pathLike = s.includes('/') && /^(\/|https?:\/\/|[\w-]+\/)/.test(s);
+    const segment = loose && /^[a-z][\w-]*(\/|\?|$|\{)/i.test(s) && !/^(true|false|null|undefined)$/.test(s);
+    if (pathLike || segment) out.push(s);
   }
-  if (!s || /\s/.test(s) || !s.includes('/')) return null;
-  if (!/^(\/|https?:\/\/|\{|[\w-]+\/)/.test(s)) return null;
-  return s;
+  return [...new Set(out)];
 }
 
 function ownerName(n: ts.Node): string | null {
@@ -467,6 +552,11 @@ function visitDomTemplate(node: any, facts: FileFacts, tags: Set<string>): void 
   if (node.type === NODE_ELEMENT) {
     const tag: string = node.tag;
     if (/^[A-Z]/.test(tag) || tag.includes('-')) tags.add(toPascal(tag));
+    if (tag === 'form' || tag === 'Form') {
+      const attr = (name: string) => (node.props ?? []).find((p: any) => p.type === PROP_ATTRIBUTE && p.name === name)?.value?.content as string | undefined;
+      const action = attr('action');
+      if (action?.startsWith('/')) facts.apiCalls.push({ method: (attr('method') ?? 'GET').toUpperCase(), url: action, line: node.loc.start.line, owner: null });
+    }
     for (const p of node.props ?? []) {
       const line = p.loc?.start?.line ?? node.loc.start.line;
       if (p.type === PROP_ATTRIBUTE) {
@@ -488,9 +578,7 @@ function visitDomTemplate(node: any, facts: FileFacts, tags: Set<string>): void 
       }
     }
   } else if (node.type === NODE_TEXT) {
-    const lead = node.content.length - node.content.trimStart().length;
-    const extra = node.content.slice(0, lead).split('\n').length - 1;
-    addText(facts, node.content, node.loc.start.line + extra);
+    addTextChunks(facts, node.content, node.loc.start.line);
   } else if (node.type === NODE_INTERPOLATION && node.content?.content) {
     visitExpression(node.content.content, node.loc.start.line, facts, tags);
   }
@@ -501,14 +589,20 @@ function visitDomTemplate(node: any, facts: FileFacts, tags: Set<string>): void 
 function visitHtml(src: string, lineBase: number, facts: FileFacts, tags: Set<string>): void {
   // Control flow Angular 17+ (@if (...) {, @for, } ) — не текст; вырезаем с сохранением строк.
   const cleaned = src
+    // «} @else {» — закрывающая скобка перед следующим блоком.
+    .replace(/\}(\s*)(?=@(?:else|empty|placeholder|loading|error)\b)/g, ' $1')
     .replace(/@(?:if|else if|else|for|switch|case|default|defer|placeholder|loading|error|empty)\b[^{\n]*\{/g, (s) => {
       const cond = /\(([\s\S]*)\)/.exec(s)?.[1];
       return cond ? ` {{ ${cond.replace(/;[\s\S]*$/, '')} }} ` : ' ';
     })
-    .replace(/^\s*\}\s*$/gm, '');
+    .replace(/^[ \t]*\}[ \t]*$/gm, '');
+  parseDomTemplate(cleaned, lineBase, facts, tags);
+}
+
+function parseDomTemplate(src: string, lineBase: number, facts: FileFacts, tags: Set<string>): void {
   let ast: any;
   try {
-    ast = parseDom(cleaned, { onError: () => {}, onWarn: () => {}, comments: false } as any);
+    ast = parseDom(src, { onError: () => {}, onWarn: () => {}, comments: false, whitespace: 'preserve' } as any);
   } catch {
     return;
   }
@@ -570,7 +664,7 @@ function extractSvelte(file: string, src: string, facts: FileFacts, tags: Set<st
       visitExpression(src.slice(n.start, n.end), lineAt(starts, n.start), facts, tags);
       return;
     }
-    if (type === 'Text' && parentType !== 'Attribute') addText(facts, n.data ?? '', lineAt(starts, n.start + (n.raw?.length - n.raw?.trimStart().length || 0)));
+    if (type === 'Text' && parentType !== 'Attribute') addTextChunks(facts, n.data ?? '', lineAt(starts, n.start));
     if (type === 'Attribute' && Array.isArray(n.value)) {
       const text = n.value.filter((v: any) => v.type === 'Text').map((v: any) => v.data).join('');
       if (text) {

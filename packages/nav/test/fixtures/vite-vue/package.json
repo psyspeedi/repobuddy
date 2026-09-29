@@ -1,0 +1,1 @@
+{"name": "vv", "dependencies": {"vue": "3", "vue-router": "5", "vue-i18n": "10"}, "devDependencies": {"vite": "6", "vite-plugin-vue-layouts": "0.11"}}

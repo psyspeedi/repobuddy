@@ -84,6 +84,10 @@ export class Nav {
     return this.ix.routes.filter((r) => r.kind === 'server' && (r.path.toLowerCase().includes(n) || r.file.toLowerCase().includes(n)));
   }
 
+  isUiFile(rel: string): boolean {
+    return /\.(vue|svelte|astro|tsx|jsx|html)$/.test(rel) || this.routeByComp.has(rel) || /\.component\.[jt]s$/.test(rel);
+  }
+
   isHub(rel: string): boolean {
     return (this.rdeps.get(rel)?.length ?? 0) >= HUB_FANIN;
   }
@@ -94,23 +98,28 @@ export class Nav {
 
   // ---- текст и ключи ----
 
-  keysByText(q: string, limit = 12): { key: string; value: string; file: string; line: number }[] {
+  keysByText(q: string, limit = 12): { key: string; value: string; file: string; line: number; lang: string | null }[] {
     const n = norm(q);
-    const hits: { key: string; value: string; file: string; line: number; score: number }[] = [];
+    const hits: { key: string; value: string; file: string; line: number; lang: string | null; score: number }[] = [];
     for (const [key, v] of Object.entries(this.ix.keys)) {
-      // Совпадение по основному языку, по любому переводу или по самому ключу.
-      let best = Infinity;
-      let shown = v.value;
-      for (const val of [v.value, ...Object.values(v.alts ?? {})]) {
-        const nv = norm(val);
+      // Основной язык, затем переводы: показываем file:line того, где совпало.
+      const variants: { value: string; file: string; line: number; lang: string | null }[] = [
+        { value: v.value, file: v.file, line: v.line, lang: null },
+        ...Object.entries(v.alts ?? {}).map(([lang, a]) => ({ ...a, lang })),
+      ];
+      let best: (typeof hits)[number] | null = null;
+      for (const x of variants) {
+        const nv = norm(x.value);
         const pos = nv.indexOf(n);
         if (pos < 0) continue;
-        const score = (nv === n ? 0 : 1) + nv.length / 1000 + (pos === 0 ? 0 : 0.5) + (val === v.value ? 0 : 0.2);
-        if (score < best) [best, shown] = [score, val];
+        const wordStart = pos === 0 || /[\s\p{P}]/u.test(nv[pos - 1]!);
+        // В чужих языках подстрока внутри слова — шум («Bio» в «Ulubione»).
+        if (x.lang && !wordStart) continue;
+        const score = (nv === n ? 0 : 1) + (wordStart ? 0 : 0.8) + nv.length / 1000 + (pos === 0 ? 0 : 0.3) + (x.lang ? 0.5 : 0);
+        if (!best || score < best.score) best = { key, value: x.value, file: x.file, line: x.line, lang: x.lang, score };
       }
-      if (best === Infinity && norm(key) === n) best = 0.1;
-      if (best === Infinity) continue;
-      hits.push({ key, value: shown, file: v.file, line: v.line, score: best });
+      if (!best && norm(key) === n) best = { key, value: v.value, file: v.file, line: v.line, lang: null, score: 0.1 };
+      if (best) hits.push(best);
     }
     return hits.sort((a, b) => a.score - b.score).slice(0, limit);
   }
@@ -165,11 +174,12 @@ export class Nav {
     const out: UsageHit[] = [];
     const seen = new Set<string>();
     for (const [rel, e] of Object.entries(this.ix.files)) {
+      let inFile = 0;
       for (const t of e.facts?.texts ?? []) {
         if (norm(t.t).includes(n)) {
           out.push({ file: rel, line: t.line, how: 'text' });
           seen.add(rel);
-          break;
+          if (++inFile >= 3) break;
         }
       }
       if (out.length >= limit) return out;
@@ -285,15 +295,18 @@ export class Nav {
       const last = call.chain[call.chain.length - 1]!.replace(/\(\)$/, '');
       const cands = this.byOwner.get(last);
       if (!cands) continue;
-      const segs = call.chain.map((s) => s.replace(/\(\)$/, '').toLowerCase());
+      // Слова цепочки без самого метода: this.articleService.update → article.
+      const words = new Set(call.chain.slice(0, -1).flatMap((s) => wordsOf(s)));
       let best: Endpoint[] = [];
       let bestScore = -1;
       for (const c of cands) {
-        const fsegs = c.file.toLowerCase().split(/[\\/.\-_]/);
-        const score = segs.filter((s) => fsegs.includes(s)).length;
+        const fw = new Set(wordsOf(c.file));
+        const score = [...words].filter((w) => fw.has(w)).length;
         if (score > bestScore) [best, bestScore] = [[c], score];
         else if (score === bestScore) best.push(c);
       }
+      // Несколько кандидатов и ни одного совпадения по словам — не угадываем.
+      if (bestScore === 0 && cands.length > 1) continue;
       if (best.length <= 3) out.push(...best);
     }
     return dedupeEndpoints(out);
@@ -342,25 +355,48 @@ export class Nav {
   apiConsumers(q: string): { ep: Endpoint; consumers: string[] }[] {
     const n = q.toLowerCase();
     const eps: Endpoint[] = [];
+    // Исходящие вызовы из серверных ручек — не клиентский api.
+    const serverFiles = new Set(this.ix.routes.filter((r) => r.kind === 'server').map((r) => r.file));
     for (const [rel, e] of Object.entries(this.ix.files)) {
+      if (serverFiles.has(rel) || /(^|\/)server\//.test(rel)) continue;
       for (const c of e.facts?.apiCalls ?? []) if (c.url.toLowerCase().includes(n)) eps.push({ ...c, file: rel });
     }
     return eps.map((ep) => {
       const consumers: string[] = [];
       const importers = new Set(this.isHub(ep.file) ? [] : (this.rdeps.get(ep.file) ?? []));
       const gql = /^(QUERY|MUTATION|SUBSCRIPTION)$/.test(ep.method);
+      let selfFallback = false;
       for (const rel of Object.keys(this.ix.files)) {
         if (importers.has(rel) && (gql ? this.importsName(rel, ep.file) : this.callsInto(rel, ep.file))) {
           consumers.push(rel);
           continue;
         }
-        // Сам api-модуль — не потребитель; vuex-экшен с прямым axios — да.
-        if (rel === ep.file && (gql || /(^|\/)api\//.test(rel))) continue;
+        // Файл-источник — потребитель, только если это экран или компонент (fetch прямо в
+        // странице); api-модуль, сервис или стор с методом-обёрткой — нет.
+        if (rel === ep.file && (gql || !this.isUiFile(rel))) {
+          selfFallback = !gql && !/(^|\/)api\//.test(rel);
+          continue;
+        }
         if (this.endpointsOf(rel).some((x) => x.file === ep.file && x.line === ep.line)) consumers.push(rel);
       }
+      // Никто не найден (vuex-экшен, dispatch по строке) — показываем хотя бы, где живёт вызов.
+      if (!consumers.length && selfFallback) consumers.push(ep.file);
       return { ep, consumers };
     });
   }
+}
+
+const GENERIC_WORDS = new Set(['this', 'api', 'apis', 'module', 'modules', 'service', 'services', 'index', 'ts', 'js', 'tsx', 'jsx', 'vue', 'src', 'app', 'use', 'store', 'stores', 'query', 'queries', 'lib', 'core', 'http', 'client', 'shared', 'common', 'features', 'feature']);
+
+/** articleService → [article]; features/articles/articles.service.ts → [article]. */
+function wordsOf(s: string): string[] {
+  return s
+    .replace(/\(\)/g, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 1 && !GENERIC_WORDS.has(w))
+    .map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w));
 }
 
 function normUrl(u: string): string {

@@ -15,7 +15,10 @@ const SKIP_DIRS = new Set([
   '.vercel', '.netlify', '.turbo', '.cache', 'out', '.rbnav', '__tests__', '__mocks__', 'e2e', 'cypress', 'testing',
   '.storybook', 'storybook-static', 'vendor', 'tmp',
 ]);
-const SKIP_FILES = /\.(spec|test|stories|story|cy|e2e)\.[cm]?[jt]sx?$|\.config\.[cm]?[jt]s$/;
+const SKIP_FILES =
+  /\.(spec|test|stories|story|cy|e2e)\.[cm]?[jt]sx?$|^(vite|vitest|webpack|rollup|nuxt|next|svelte|astro|tailwind|postcss|eslint|prettier|jest|playwright|babel|tsup|commitlint|stylelint|uno|windi|quasar|karma|capacitor|lint-staged|remix|react-router|app)\.config\.[cm]?[jt]s$/;
+/** app.config.ts — конфиг Angular-приложения (provideRouter), а в Nuxt/Vite это конфиг инструмента. */
+const APP_CONFIG = /^app\.config\.[cm]?[jt]s$/;
 /** Каталоги со статикой: из них берём только словари переводов (next-i18next). */
 const ASSET_DIRS = new Set(['public', 'static', 'assets']);
 
@@ -59,8 +62,11 @@ export function walk(root: string, info: ProjectInfo = projectInfo(root)): strin
           if (isLocale && !['.js', '.ts', '.mjs'].includes(ext)) out.push(full);
           continue;
         }
-        if (SOURCE_EXT.includes(ext) && !e.name.endsWith('.d.ts') && !SKIP_FILES.test(e.name)) out.push(full);
+        const skip = SKIP_FILES.test(e.name) && !(info.angular && APP_CONFIG.test(e.name));
+        if (SOURCE_EXT.includes(ext) && !e.name.endsWith('.d.ts') && !skip) out.push(full);
         else if (ext === '.html' && info.angular) out.push(full);
+        // Markdown-страницы (vite-plugin-pages, Astro, Nuxt Content, Next mdx).
+        else if ((ext === '.md' || ext === '.mdx') && !/^readme/i.test(e.name) && /[\\/](pages|routes|app|content)[\\/]/.test(full.slice(root.length))) out.push(full);
         else if (isLocale) out.push(full);
       }
     }
