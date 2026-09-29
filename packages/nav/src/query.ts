@@ -24,8 +24,23 @@ export interface RouteHit {
   via: string[];
 }
 
+/** Для сравнения с экраном: без HTML-тегов, экранирования vue-i18n {'@'}, регистра, ё и лишних пробелов. */
 export function norm(s: string): string {
-  return s.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+  return s
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\{'([^']*)'\}/g, '$1')
+    .replace(/&nbsp;/g, ' ')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Ключ подпадает под динамический префикс: status.${x} → status.*; P + `cards.${x}` → P.cards.*. */
+export function underDynPrefix(key: string, pre: string, args: string[] | undefined): boolean {
+  if (key.startsWith(pre + '.')) return true;
+  const i = key.indexOf('.' + pre + '.');
+  return i > 0 && !!args?.includes(key.slice(0, i));
 }
 
 export class Nav {
@@ -176,7 +191,7 @@ export class Nav {
       }
       if (!hit && e.facts?.dynPrefixes) {
         for (const [pre, line] of Object.entries(e.facts.dynPrefixes)) {
-          if (key.startsWith(pre + '.')) {
+          if (underDynPrefix(key, pre, e.facts.argStrings)) {
             hit = { file: rel, line, how: 'dynamic' };
             break;
           }

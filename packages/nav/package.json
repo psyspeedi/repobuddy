@@ -14,11 +14,13 @@
     "lint": "echo 'nav: no lint configured'"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@vue/compiler-dom": "^3.5.13",
     "@vue/compiler-sfc": "^3.5.13",
     "svelte": "^5",
     "typescript": "^5.7.2",
-    "yaml": "^2"
+    "yaml": "^2",
+    "zod": "^3"
   },
   "devDependencies": {
     "@types/node": "^22.10.2"
