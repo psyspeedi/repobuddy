@@ -42,6 +42,13 @@ export class Nav {
         const g = ix.globals[tag];
         if (g && g !== rel) d.add(g);
       }
+      // Автоимпорт Nuxt: useFoo() без import → composables/useFoo.ts.
+      for (const c of e.facts?.calls ?? []) {
+        if (c.chain.length !== 1) continue;
+        const name = c.chain[0]!.replace(/\(\)$/, '');
+        const target = ix.autoImports?.[name];
+        if (target && target !== rel && !e.bindings[name]) d.add(target);
+      }
       this.deps.set(rel, [...d]);
       for (const x of d) {
         if (!this.rdeps.has(x)) this.rdeps.set(x, []);
@@ -57,7 +64,24 @@ export class Nav {
       if (!r.component) return;
       if (!this.routeByComp.has(r.component)) this.routeByComp.set(r.component, []);
       this.routeByComp.get(r.component)!.push(i);
+      // +page.ts и т.п.: неявная зависимость страницы от своего загрузчика.
+      for (const x of r.extra ?? []) {
+        this.deps.get(r.component)?.push(x);
+        if (!this.rdeps.has(x)) this.rdeps.set(x, []);
+        this.rdeps.get(x)!.push(r.component);
+      }
     });
+  }
+
+  /** Серверные ручки, чей путь совпадает с URL клиента (параметры — как *). */
+  handlersFor(url: string): RouteRec[] {
+    const u = normUrl(url);
+    return this.ix.routes.filter((r) => r.kind === 'server' && urlMatches(u, normUrl(r.path)));
+  }
+
+  serverRoutes(q: string): RouteRec[] {
+    const n = q.toLowerCase();
+    return this.ix.routes.filter((r) => r.kind === 'server' && (r.path.toLowerCase().includes(n) || r.file.toLowerCase().includes(n)));
   }
 
   isHub(rel: string): boolean {
@@ -74,11 +98,19 @@ export class Nav {
     const n = norm(q);
     const hits: { key: string; value: string; file: string; line: number; score: number }[] = [];
     for (const [key, v] of Object.entries(this.ix.keys)) {
-      const nv = norm(v.value);
-      const pos = nv.indexOf(n);
-      if (pos < 0) continue;
-      const score = (nv === n ? 0 : 1) + nv.length / 1000 + (pos === 0 ? 0 : 0.5);
-      hits.push({ key, value: v.value, file: v.file, line: v.line, score });
+      // Совпадение по основному языку, по любому переводу или по самому ключу.
+      let best = Infinity;
+      let shown = v.value;
+      for (const val of [v.value, ...Object.values(v.alts ?? {})]) {
+        const nv = norm(val);
+        const pos = nv.indexOf(n);
+        if (pos < 0) continue;
+        const score = (nv === n ? 0 : 1) + nv.length / 1000 + (pos === 0 ? 0 : 0.5) + (val === v.value ? 0 : 0.2);
+        if (score < best) [best, shown] = [score, val];
+      }
+      if (best === Infinity && norm(key) === n) best = 0.1;
+      if (best === Infinity) continue;
+      hits.push({ key, value: shown, file: v.file, line: v.line, score: best });
     }
     return hits.sort((a, b) => a.score - b.score).slice(0, limit);
   }
@@ -115,23 +147,45 @@ export class Nav {
         }
         if (hit) break;
       }
+      // Ключ-фраза (gettext, Lingui): <Trans>Save changes</Trans> — видимый текст.
+      if (!hit && /\s/.test(key) && e.facts) {
+        const nk = norm(key);
+        const t = e.facts.texts.find((x) => norm(x.t) === nk);
+        if (t) hit = { file: rel, line: t.line, how: 'key' };
+      }
       if (hit) out.push(hit);
     }
     // Точные совпадения — первыми.
     return out.sort((a, b) => (a.how === b.how ? 0 : a.how === 'key' ? -1 : 1));
   }
 
+  /** Вшитый текст: видимый текст шаблонов/JSX, затем любые строковые литералы. */
   textInCode(q: string, limit = 20): UsageHit[] {
     const n = norm(q);
     const out: UsageHit[] = [];
+    const seen = new Set<string>();
     for (const [rel, e] of Object.entries(this.ix.files)) {
       for (const t of e.facts?.texts ?? []) {
         if (norm(t.t).includes(n)) {
           out.push({ file: rel, line: t.line, how: 'text' });
+          seen.add(rel);
           break;
         }
       }
-      if (out.length >= limit) break;
+      if (out.length >= limit) return out;
+    }
+    // toast('Saved'), t('Save changes') в gettext-стиле — строки, а не текст шаблона.
+    if (n.length >= 4) {
+      for (const [rel, e] of Object.entries(this.ix.files)) {
+        if (seen.has(rel) || !e.facts) continue;
+        for (const [str, line] of Object.entries(e.facts.strings)) {
+          if (str.includes(' ') && norm(str).includes(n)) {
+            out.push({ file: rel, line, how: 'text' });
+            break;
+          }
+        }
+        if (out.length >= limit) break;
+      }
     }
     return out;
   }
@@ -277,6 +331,13 @@ export class Nav {
     return e.facts.calls.some((c) => locals.has(c.chain[0]!.replace(/\(\)$/, '')));
   }
 
+  /** GraphQL: операцию не вызывают, а передают в useQuery — достаточно импорта. */
+  private importsName(rel: string, target: string): boolean {
+    if (/(^|\/)(api|router)\//i.test(rel)) return false;
+    const e = this.ix.files[rel];
+    return !!e && Object.values(e.bindings).includes(target);
+  }
+
   /** Эндпоинты по фрагменту URL и файлы, которые их вызывают. */
   apiConsumers(q: string): { ep: Endpoint; consumers: string[] }[] {
     const n = q.toLowerCase();
@@ -287,18 +348,36 @@ export class Nav {
     return eps.map((ep) => {
       const consumers: string[] = [];
       const importers = new Set(this.isHub(ep.file) ? [] : (this.rdeps.get(ep.file) ?? []));
+      const gql = /^(QUERY|MUTATION|SUBSCRIPTION)$/.test(ep.method);
       for (const rel of Object.keys(this.ix.files)) {
-        if (importers.has(rel) && this.callsInto(rel, ep.file)) {
+        if (importers.has(rel) && (gql ? this.importsName(rel, ep.file) : this.callsInto(rel, ep.file))) {
           consumers.push(rel);
           continue;
         }
         // Сам api-модуль — не потребитель; vuex-экшен с прямым axios — да.
-        if (rel === ep.file && /(^|\/)api\//.test(rel)) continue;
+        if (rel === ep.file && (gql || /(^|\/)api\//.test(rel))) continue;
         if (this.endpointsOf(rel).some((x) => x.file === ep.file && x.line === ep.line)) consumers.push(rel);
       }
       return { ep, consumers };
     });
   }
+}
+
+function normUrl(u: string): string {
+  return (
+    u
+      .replace(/^https?:\/\/[^/]+/, '')
+      .split('?')[0]!
+      .replace(/\{[^}]*\}|:\w+\*?\??|\[[^\]]+\]|\$\{[^}]*\}/g, '*')
+      .replace(/\/+$/, '') || '/'
+  );
+}
+
+/** Клиентский URL может быть без /api-префикса baseURL и с плейсхолдерами. */
+function urlMatches(client: string, server: string): boolean {
+  const re = new RegExp('(^|/)' + server.replace(/[.+?^$()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]+') + '$');
+  const c = client.replace(/\*/g, 'x');
+  return re.test(c) || re.test('/api' + c);
 }
 
 function dedupeEndpoints(xs: Endpoint[]): Endpoint[] {

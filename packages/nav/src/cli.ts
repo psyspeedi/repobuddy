@@ -6,7 +6,7 @@ import { buildIndex } from './indexer.ts';
 import { Nav, type Endpoint, type RouteHit } from './query.ts';
 import type { RouteRec } from './routes.ts';
 
-const USAGE = `rb-nav — навигация по Vue/React-фронту без LLM
+const USAGE = `rb-nav — навигация по фронту без LLM: Vue/Nuxt, React/Next/Remix, Svelte/SvelteKit, Angular, Astro и др.
 
   rb-nav text "<текст с экрана>"   ключи i18n и вшитый текст → компоненты → роуты → api
   rb-nav route <путь|имя|файл>     роут: компонент, родители, meta, дети, api
@@ -50,7 +50,9 @@ const out: string[] = [];
 const p = (s = '') => out.push(s);
 
 function routeLabel(r: RouteRec): string {
-  return `${r.path}${r.name ? `  name=${r.name}` : ''}  (${r.file}:${r.line})`;
+  const kind = r.kind === 'layout' ? '  [layout]' : r.kind === 'server' ? `  [server ${(r.methods ?? []).join(',') || '*'}]` : '';
+  const where = r.kind && r.line === 1 ? r.file : `${r.file}:${r.line}`;
+  return `${r.path}${kind}${r.name ? `  name=${r.name}` : ''}  (${where})`;
 }
 
 function epLabel(e: Endpoint): string {
@@ -171,13 +173,20 @@ function cmdFile(nav: Nav, root: string, q: string, json: boolean): void {
 
 function cmdApi(nav: Nav, q: string, json: boolean): void {
   const res = nav.apiConsumers(q);
+  const servers = nav.serverRoutes(q);
   if (json) {
-    p(JSON.stringify(res.map((r) => ({ ...r, routes: r.consumers.map((c) => ({ file: c, routes: nav.routesFor(c, 3).hits })) })), null, 2));
+    p(JSON.stringify({
+      client: res.map((r) => ({ ...r, handlers: nav.handlersFor(r.ep.url), routes: r.consumers.map((c) => ({ file: c, routes: nav.routesFor(c, 3).hits })) })),
+      server: servers,
+    }, null, 2));
     return;
   }
-  if (!res.length) p(`эндпоинтов по «${q}» нет`);
+  if (!res.length && !servers.length) p(`эндпоинтов по «${q}» нет`);
+  for (const s of servers.slice(0, 8)) p(`обработчик ${routeLabel(s)}`);
+  if (servers.length) p();
   for (const { ep, consumers } of res.slice(0, 8)) {
     p(epLabel(ep));
+    for (const h of nav.handlersFor(ep.url).slice(0, 2)) p(`  обрабатывает ${h.file}`);
     if (!consumers.length) p('  вызовов не найдено статически (dispatch по строке, mapActions, внедрение через DI — пока не отслеживается)');
     for (const c of consumers.slice(0, 5)) {
       p(`  вызывает ${c}`);
@@ -193,6 +202,10 @@ function cmdStats(nav: Nav): void {
   const files = Object.values(ix.files);
   const api = files.reduce((n, f) => n + (f.facts?.apiCalls.length ?? 0), 0);
   p(`корень ${ix.root}`);
+  p(`стек: ${ix.stack.join(', ') || '—'}; языки: ${ix.langs.join(', ') || '—'}`);
+  const kinds = { page: 0, layout: 0, server: 0 };
+  for (const r of ix.routes) kinds[r.kind ?? 'page']++;
+  p(`экранов ${kinds.page}, layout ${kinds.layout}, серверных ручек ${kinds.server}; автоимпортов ${Object.keys(ix.autoImports ?? {}).length}`);
   p(`файлов ${files.length}, язык локали ${ix.lang ?? '—'}, ключей ${Object.keys(ix.keys).length}`);
   p(`роутов ${ix.routes.length}, с компонентом ${ix.routes.filter((r) => r.component).length}`);
   p(`http-вызовов ${api}, глобальных компонентов ${Object.keys(ix.globals).length}`);

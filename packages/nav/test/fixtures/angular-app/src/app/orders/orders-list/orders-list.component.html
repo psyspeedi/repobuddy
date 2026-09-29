@@ -1,0 +1,5 @@
+<h1>{{ 'ORDERS.TITLE' | translate }}</h1>
+@if (empty) {
+  <p [title]="'ORDERS.EMPTY' | translate">Пусто</p>
+}
+<app-order-row></app-order-row>

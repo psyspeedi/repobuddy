@@ -1,18 +1,25 @@
 // Ключи локалей в плоском виде. Префикс ключа — путь файла внутри
-// locales/<lang>/: pages/taxDeduction.json → pages.taxDeduction.*;
-// locales/ru.json → без префикса. index-файлы — агрегаторы, их пропускаем.
+// <locales>/<lang>/: pages/taxDeduction.json → pages.taxDeduction.*;
+// <locales>/ru.json → без префикса. index-файлы — агрегаторы, их пропускаем.
+// Форматы: JSON, YAML, JS/TS (export default, module.exports, обёртки),
+// gettext .po (Lingui) и XLIFF (Angular) — у последних ключи глобальные.
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
+import YAML from 'yaml';
 import { scriptKindFor } from './parse.ts';
+import { LOCALE_DIRS } from './project.ts';
 
 export interface LocaleKey {
   value: string;
   file: string;
   line: number;
+  /** Переводы на другие языки: поиск по тексту идёт по всем. */
+  alts?: Record<string, string>;
 }
 
-const LANG_RE = /^[a-z]{2}(?:[-_][A-Za-z]{2,4})?$/;
+const LANG_RE = /^[a-z]{2,3}(?:[-_][A-Za-z]{2,4})?$/;
+const FLAT_FORMATS = new Set(['.po', '.xlf', '.xliff']);
 
 interface LocaleFile {
   lang: string;
@@ -21,19 +28,33 @@ interface LocaleFile {
 
 export function localeInfo(rel: string): LocaleFile | null {
   const parts = rel.split(/[\\/]/);
-  const i = parts.findLastIndex((p) => p === 'locales' || p === 'locale' || p === 'i18n' || p === 'lang');
+  const i = parts.findLastIndex((p) => LOCALE_DIRS.includes(p));
   if (i < 0) return null;
   const rest = parts.slice(i + 1);
   if (!rest.length) return null;
-  const ext = path.extname(rest[rest.length - 1]!);
-  if (!['.json', '.js', '.ts', '.mjs'].includes(ext)) return null;
-  rest[rest.length - 1] = rest[rest.length - 1]!.slice(0, -ext.length);
-  if (rest.length === 1) return LANG_RE.test(rest[0]!) ? { lang: rest[0]!, prefix: [] } : null;
+  const file = rest[rest.length - 1]!;
+  const ext = path.extname(file);
+  if (!['.json', '.js', '.ts', '.mjs', '.yml', '.yaml', '.po', '.xlf', '.xliff'].includes(ext)) return null;
+  const base = file.slice(0, -ext.length);
+  rest[rest.length - 1] = base;
+  if (FLAT_FORMATS.has(ext)) {
+    // messages.ru.xlf, ru/messages.po, ru.po
+    const fromName = base.split('.').reverse().find((x) => LANG_RE.test(x));
+    const lang = fromName ?? rest.find((x) => LANG_RE.test(x));
+    return lang ? { lang, prefix: [] } : null;
+  }
+  if (rest.length === 1) {
+    if (LANG_RE.test(base)) return { lang: base, prefix: [] };
+    // common.ru.json
+    const dotted = base.split('.');
+    if (dotted.length === 2 && LANG_RE.test(dotted[1]!)) return { lang: dotted[1]!, prefix: [dotted[0]!] };
+    return null;
+  }
   if (!LANG_RE.test(rest[0]!)) return null;
   const prefix = rest.slice(1);
   if (prefix[prefix.length - 1] === 'index') {
-    // index.json в корне языка — сами ключи; index.ts — агрегатор.
-    if (ext !== '.json') return null;
+    // index.json в корне языка — сами ключи; index.ts — обычно агрегатор, но
+    // если в нём объект со строками, ключи тоже возьмём.
     prefix.pop();
   }
   return { lang: rest[0]!, prefix };
@@ -41,19 +62,32 @@ export function localeInfo(rel: string): LocaleFile | null {
 
 export function loadLocaleFile(abs: string, rel: string, out: Map<string, LocaleKey>, prefix: string[]): void {
   const text = fs.readFileSync(abs, 'utf8');
+  const ext = path.extname(abs);
+  if (ext === '.po') return loadPo(text, rel, out);
+  if (ext === '.xlf' || ext === '.xliff') return loadXliff(text, rel, out);
+  if (ext === '.yml' || ext === '.yaml') return loadYaml(text, rel, out, prefix);
   let root: ts.Expression | undefined;
   let sf: ts.SourceFile;
-  if (abs.endsWith('.json')) {
+  if (ext === '.json') {
     sf = ts.parseJsonText(abs, text);
     root = (sf.statements[0] as ts.ExpressionStatement | undefined)?.expression;
   } else {
     sf = ts.createSourceFile(abs, text, ts.ScriptTarget.Latest, true, scriptKindFor(abs));
+    const decls = new Map<string, ts.Expression>();
     for (const st of sf.statements) {
+      if (ts.isVariableStatement(st)) {
+        for (const d of st.declarationList.declarations) if (ts.isIdentifier(d.name) && d.initializer) decls.set(d.name.text, d.initializer);
+      }
       if (ts.isExportAssignment(st)) root = st.expression;
+      // module.exports = {...}
+      if (ts.isExpressionStatement(st) && ts.isBinaryExpression(st.expression) && st.expression.left.getText(sf) === 'module.exports') {
+        root = st.expression.right;
+      }
     }
+    if (root && ts.isIdentifier(root)) root = decls.get(root.text);
   }
   const walkObj = (e: ts.Expression | undefined, keyPath: string[]): void => {
-    while (e && (ts.isAsExpression(e) || ts.isParenthesizedExpression(e) || ts.isSatisfiesExpression(e))) e = e.expression;
+    e = dig(e);
     if (!e || !ts.isObjectLiteralExpression(e)) return;
     for (const p of e.properties) {
       if (!ts.isPropertyAssignment(p)) continue;
@@ -71,10 +105,84 @@ export function loadLocaleFile(abs: string, rel: string, out: Map<string, Locale
   walkObj(root, prefix);
 }
 
+/** as/satisfies/скобки, () => ({...}), defineI18nLocale(() => ({...})), defineMessages({...}). */
+function dig(e: ts.Expression | undefined): ts.Expression | undefined {
+  for (let i = 0; e && i < 8; i++) {
+    if (ts.isAsExpression(e) || ts.isParenthesizedExpression(e) || ts.isSatisfiesExpression(e)) e = e.expression;
+    else if (ts.isArrowFunction(e) || ts.isFunctionExpression(e)) {
+      if (ts.isBlock(e.body)) {
+        const ret = e.body.statements.find(ts.isReturnStatement);
+        e = ret?.expression;
+      } else e = e.body;
+    } else if (ts.isCallExpression(e)) e = e.arguments.find((a) => ts.isObjectLiteralExpression(a) || ts.isArrowFunction(a) || ts.isFunctionExpression(a));
+    else break;
+  }
+  return e;
+}
+
+function loadYaml(text: string, rel: string, out: Map<string, LocaleKey>, prefix: string[]): void {
+  const lc = new YAML.LineCounter();
+  const doc = YAML.parseDocument(text, { lineCounter: lc });
+  const walkNode = (node: any, keyPath: string[]): void => {
+    if (!YAML.isMap(node)) return;
+    for (const pair of node.items) {
+      const key = YAML.isScalar(pair.key) ? String(pair.key.value) : null;
+      if (key === null) continue;
+      const k = [...keyPath, key];
+      if (YAML.isScalar(pair.value) && typeof pair.value.value === 'string') {
+        const pos = (pair.key as any).range?.[0] ?? 0;
+        out.set(k.join('.'), { value: pair.value.value, file: rel, line: lc.linePos(pos).line });
+      } else walkNode(pair.value, k);
+    }
+  };
+  // Rails-стиль: корень — язык (ru: {...}); снимаем его.
+  let root: any = doc.contents;
+  if (YAML.isMap(root) && root.items.length === 1 && YAML.isScalar(root.items[0]!.key) && LANG_RE.test(String((root.items[0]!.key as any).value))) {
+    root = root.items[0]!.value;
+  }
+  walkNode(root, prefix);
+}
+
+function loadPo(text: string, rel: string, out: Map<string, LocaleKey>): void {
+  const lines = text.split('\n');
+  let msgid: string | null = null;
+  let ctx: string | null = null;
+  let idLine = 0;
+  const unq = (s: string) => JSON.parse(s.trim()) as string;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i]!.trim();
+    if (l.startsWith('msgctxt ')) ctx = unq(l.slice(8));
+    else if (l.startsWith('msgid ')) {
+      msgid = unq(l.slice(6));
+      idLine = i + 1;
+      while (lines[i + 1]?.trim().startsWith('"')) msgid += unq(lines[++i]!);
+    } else if (l.startsWith('msgstr ') && msgid) {
+      let str = unq(l.slice(7));
+      while (lines[i + 1]?.trim().startsWith('"')) str += unq(lines[++i]!);
+      out.set(ctx ? `${ctx}.${msgid}` : msgid, { value: str || msgid, file: rel, line: idLine });
+      msgid = null;
+      ctx = null;
+    }
+  }
+}
+
+function loadXliff(text: string, rel: string, out: Map<string, LocaleKey>): void {
+  const re = /<(trans-unit|unit)\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g;
+  let m: RegExpExecArray | null;
+  const strip = (s: string | undefined) => (s ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  while ((m = re.exec(text))) {
+    const body = m[3]!;
+    const target = /<target[^>]*>([\s\S]*?)<\/target>/.exec(body)?.[1];
+    const source = /<source[^>]*>([\s\S]*?)<\/source>/.exec(body)?.[1];
+    const line = text.slice(0, m.index).split('\n').length;
+    out.set(m[2]!, { value: strip(target) || strip(source), file: rel, line });
+  }
+}
+
 /** Выбирает язык: явно заданный, иначе ru, иначе тот, где больше файлов. */
 export function pickLang(langs: Map<string, number>, wanted?: string): string | null {
   if (wanted && langs.has(wanted)) return wanted;
-  if (langs.has('ru')) return 'ru';
+  for (const l of ['ru', 'ru-RU', 'ru_RU']) if (langs.has(l)) return l;
   let best: string | null = null;
   let n = -1;
   for (const [l, c] of langs) if (c > n) [best, n] = [l, c];

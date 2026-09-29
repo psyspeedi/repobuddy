@@ -8,6 +8,11 @@ import type { Resolver } from './project.ts';
 
 export interface RouteRec {
   path: string;
+  /** page — экран; layout — обёртка (Next/Nuxt); server — серверная ручка. */
+  kind?: 'page' | 'layout' | 'server';
+  methods?: string[];
+  /** Файлы, неявно относящиеся к роуту (SvelteKit +page.ts и т.п.). */
+  extra?: string[];
   name: string | null;
   file: string;
   line: number;
@@ -18,7 +23,7 @@ export interface RouteRec {
   parent: number | null;
 }
 
-const ROUTER_FACTORIES = new Set(['createRouter', 'createBrowserRouter', 'createHashRouter', 'createMemoryRouter', 'createWebRouter']);
+const ROUTER_FACTORIES = new Set(['provideRouter', 'createRouter', 'createBrowserRouter', 'createHashRouter', 'createMemoryRouter', 'createWebRouter']);
 const ROUTER_CLASSES = new Set(['VueRouter', 'Router']);
 const MAX_DEPTH = 16;
 
@@ -48,7 +53,7 @@ export class RouteExtractor {
   }
 
   extract(files: string[]): RouteRec[] {
-    const needle = /createRouter|createBrowserRouter|createHashRouter|createMemoryRouter|createWebRouter|new\s+(Vue)?Router\s*\(/;
+    const needle = /createRouter|createBrowserRouter|createHashRouter|createMemoryRouter|createWebRouter|new\s+(Vue)?Router\s*\(|forRoot|provideRouter|<Route\b/;
     for (const f of files) {
       if (f.endsWith('.json')) continue;
       let text: string;
@@ -62,13 +67,48 @@ export class RouteExtractor {
       if (!s) continue;
       for (const block of s.blocks) this.findEntries(block, f);
     }
+    if (!this.routes.length) this.typedRouteArrays(files);
     return this.routes;
+  }
+
+  /** Запасной путь: массивы с типом Routes / RouteRecordRaw[] / RouteObject[]. */
+  private typedRouteArrays(files: string[]): void {
+    for (const f of files) {
+      if (!/\.[cm]?[jt]sx?$/.test(f)) continue;
+      let text: string;
+      try {
+        text = fs.readFileSync(f, 'utf8');
+      } catch {
+        continue;
+      }
+      if (!/:\s*(Routes|Route\[\]|RouteRecordRaw\[\]|RouteObject\[\])\s*=/.test(text)) continue;
+      const s = this.symbols(f);
+      for (const block of s?.blocks ?? []) {
+        for (const st of block.sf.statements) {
+          if (!ts.isVariableStatement(st)) continue;
+          for (const d of st.declarationList.declarations) {
+            if (d.initializer && d.type && /^(Routes|Route\[\]|RouteRecordRaw\[\]|RouteObject\[\])$/.test(d.type.getText(block.sf))) {
+              this.collect({ expr: d.initializer, file: f, block }, '', null, 0);
+            }
+          }
+        }
+      }
+    }
   }
 
   private findEntries(block: ScriptBlock, file: string): void {
     const visit = (n: ts.Node): void => {
       let args: ts.NodeArray<ts.Expression> | undefined;
       if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && ROUTER_FACTORIES.has(n.expression.text)) args = n.arguments;
+      // Angular: RouterModule.forRoot(routes), provideRouter(routes).
+      if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'forRoot' && n.expression.expression.getText(block.sf) === 'RouterModule') {
+        if (n.arguments[0]) this.collect({ expr: n.arguments[0], file, block }, '', null, 0);
+      }
+      // JSX: <Routes><Route path element={<X/>}>…</Route></Routes> — только верхние Route.
+      if ((ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n)) && jsxTag(n) === 'Route' && !insideJsxRoute(n)) {
+        this.recordJsx(n, { expr: n as unknown as ts.Expression, file, block }, '', null, 0);
+        return;
+      }
       if (ts.isNewExpression(n) && ts.isIdentifier(n.expression) && ROUTER_CLASSES.has(n.expression.text)) args = n.arguments;
       const a0 = args?.[0];
       if (a0) {
@@ -119,8 +159,9 @@ export class RouteExtractor {
     const full = joinPath(parentPath, rawPath ?? '');
     const nameE = prop(o, 'name');
     const metaE = prop(o, 'meta');
-    const redirE = prop(o, 'redirect');
-    const compE = prop(o, 'component') ?? prop(o, 'element') ?? prop(o, 'Component') ?? prop(o, 'lazy') ?? defaultOf(prop(o, 'components'));
+    const redirE = prop(o, 'redirect') ?? prop(o, 'redirectTo');
+    const compE =
+      prop(o, 'component') ?? prop(o, 'element') ?? prop(o, 'Component') ?? prop(o, 'lazy') ?? prop(o, 'loadComponent') ?? defaultOf(prop(o, 'components'));
     const rec: RouteRec = {
       path: full || '/',
       name: nameE ? (this.str(nameE, loc) ?? nameE.getText(sf)) : null,
@@ -139,6 +180,117 @@ export class RouteExtractor {
     const idx = this.routes.push(rec) - 1;
     const ch = prop(o, 'children');
     if (ch) this.collect({ ...loc, expr: ch }, full, idx, depth + 1);
+    const lazy = prop(o, 'loadChildren');
+    if (lazy) this.lazyChildren({ ...loc, expr: lazy }, full, idx, depth + 1);
+  }
+
+  /** Angular loadChildren: () => import('./x').then(m => m.X) — массив роутов или NgModule с forChild. */
+  private lazyChildren(loc: Loc, parentPath: string, parent: number, depth: number): void {
+    let e = unwrap(loc.expr);
+    if (ts.isArrowFunction(e) || ts.isFunctionExpression(e)) {
+      if (ts.isBlock(e.body)) {
+        const r = e.body.statements.find(ts.isReturnStatement);
+        if (!r?.expression) return;
+        e = r.expression;
+      } else e = e.body;
+    }
+    let member = 'default';
+    if (ts.isCallExpression(e) && ts.isPropertyAccessExpression(e.expression) && e.expression.name.text === 'then') {
+      const cb = e.arguments[0];
+      if (cb && (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) && !ts.isBlock(cb.body) && ts.isPropertyAccessExpression(cb.body)) {
+        member = cb.body.name.text;
+      }
+      e = e.expression.expression;
+    }
+    if (!ts.isCallExpression(e) || e.expression.kind !== ts.SyntaxKind.ImportKeyword) {
+      // loadChildren: 'app/x.module#XModule' (старый строковый формат)
+      if (ts.isStringLiteralLike(e)) {
+        const [spec, mem] = e.text.split('#');
+        const t = spec ? this.resolver.resolve(spec.startsWith('.') ? spec : './' + spec, loc.file) : null;
+        if (t) this.childrenFromModule(t, mem ?? 'default', parentPath, parent, depth);
+      }
+      return;
+    }
+    const a0 = e.arguments[0];
+    if (!a0 || !ts.isStringLiteralLike(a0)) return;
+    const t = this.resolver.resolve(a0.text, loc.file);
+    if (t) this.childrenFromModule(t, member, parentPath, parent, depth);
+  }
+
+  private childrenFromModule(file: string, member: string, parentPath: string, parent: number, depth: number): void {
+    const ex = this.exported(file, member, 0);
+    const d = ex ? this.deref(ex) : null;
+    if (d && ts.isArrayLiteralExpression(d.expr)) {
+      this.collect(d, parentPath, parent, depth);
+      return;
+    }
+    // NgModule: ищем RouterModule.forChild(...) в файле и его локальных импортах.
+    const queue = [file];
+    const seen = new Set<string>();
+    while (queue.length && seen.size < 6) {
+      const f = queue.shift()!;
+      if (seen.has(f)) continue;
+      seen.add(f);
+      const s = this.symbols(f);
+      if (!s) continue;
+      let found = false;
+      for (const block of s.blocks) {
+        const visit = (n: ts.Node): void => {
+          if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'forChild' && n.arguments[0]) {
+            found = true;
+            this.collect({ expr: n.arguments[0], file: f, block }, parentPath, parent, depth);
+          }
+          ts.forEachChild(n, visit);
+        };
+        visit(block.sf);
+      }
+      if (found) return;
+      for (const imp of s.imports.values()) {
+        if (!imp.spec.startsWith('.')) continue;
+        const t = this.resolver.resolve(imp.spec, f);
+        if (t) queue.push(t);
+      }
+    }
+  }
+
+  /** <Route path="x" element={<X/>}> с вложенными Route. */
+  private recordJsx(el: ts.JsxElement | ts.JsxSelfClosingElement, loc: Loc, parentPath: string, parent: number | null, depth: number): void {
+    if (depth > MAX_DEPTH) return;
+    const sf = loc.block.sf;
+    const attrs = (ts.isJsxElement(el) ? el.openingElement : el).attributes.properties;
+    const attr = (name: string): ts.Expression | undefined => {
+      for (const a of attrs) {
+        if (!ts.isJsxAttribute(a) || a.name.getText(sf) !== name) continue;
+        if (!a.initializer) return ts.factory.createTrue();
+        if (ts.isStringLiteral(a.initializer)) return a.initializer;
+        if (ts.isJsxExpression(a.initializer) && a.initializer.expression) return a.initializer.expression;
+      }
+      return undefined;
+    };
+    const raw = this.str(attr('path'), loc) ?? '';
+    const full = joinPath(parentPath, raw);
+    const compE = attr('element') ?? attr('component') ?? attr('Component') ?? attr('lazy');
+    const rec: RouteRec = {
+      path: full || '/',
+      name: null,
+      file: path.relative(this.root, loc.file),
+      line: loc.block.lineBase + sf.getLineAndCharacterOfPosition(el.getStart(sf)).line,
+      endLine: loc.block.lineBase + sf.getLineAndCharacterOfPosition(el.getEnd()).line,
+      component: null,
+      meta: null,
+      redirect: null,
+      parent,
+    };
+    if (compE) {
+      const c = this.componentFile({ ...loc, expr: compE }, 0);
+      if (c) rec.component = path.relative(this.root, c);
+    }
+    const idx = this.routes.push(rec) - 1;
+    if (ts.isJsxElement(el)) {
+      for (const ch of el.children) {
+        if ((ts.isJsxElement(ch) || ts.isJsxSelfClosingElement(ch)) && jsxTag(ch) === 'Route') this.recordJsx(ch, loc, full, idx, depth + 1);
+      }
+    }
   }
 
   /** Файл компонента роута: ленивый import(), константа, импорт, JSX-элемент. */
@@ -152,8 +304,11 @@ export class RouteExtractor {
         if (!ret?.expression) return null;
         e = ret.expression;
       } else e = body;
+      // Стрелка возвращает разметку — это сам компонент, а не ленивый загрузчик.
+      if (isJsxLike(e)) return loc.file;
       return this.componentFile({ ...loc, expr: e }, depth + 1);
     }
+    if (ts.isClassExpression(e)) return loc.file;
     if (ts.isCallExpression(e)) {
       if (e.expression.kind === ts.SyntaxKind.ImportKeyword && e.arguments[0] && ts.isStringLiteralLike(e.arguments[0])) {
         const r = this.resolver.resolve(e.arguments[0].text, loc.file);
@@ -166,7 +321,14 @@ export class RouteExtractor {
       return null;
     }
     if (ts.isJsxSelfClosingElement(e) || ts.isJsxElement(e)) {
-      const tag = ts.isJsxElement(e) ? e.openingElement.tagName : e.tagName;
+      // <Guard><Page/></Guard> — страница внутри обёртки.
+      while (ts.isJsxElement(e)) {
+        const kids = e.children.filter((c): c is ts.JsxElement | ts.JsxSelfClosingElement => ts.isJsxElement(c) || ts.isJsxSelfClosingElement(c));
+        if (kids.length !== 1) break;
+        e = kids[0]!;
+      }
+      if (ts.isJsxFragment(e)) return null;
+      const tag = ts.isJsxElement(e) ? e.openingElement.tagName : (e as ts.JsxSelfClosingElement).tagName;
       if (ts.isIdentifier(tag)) return this.componentFile({ ...loc, expr: tag }, depth + 1);
       return null;
     }
@@ -366,6 +528,22 @@ function indexBlock(block: ScriptBlock, s: FileSyms): void {
       if (isExported(st)) s.exports.set(isDefault(st) ? 'default' : st.name.text, { local: st.name.text, block });
     }
   }
+}
+
+function isJsxLike(e: ts.Expression): boolean {
+  const u = unwrap(e);
+  return ts.isJsxElement(u) || ts.isJsxSelfClosingElement(u) || ts.isJsxFragment(u) || (ts.isConditionalExpression(u) && isJsxLike(u.whenTrue));
+}
+
+function jsxTag(n: ts.JsxElement | ts.JsxSelfClosingElement): string {
+  return (ts.isJsxElement(n) ? n.openingElement.tagName : n.tagName).getText();
+}
+
+function insideJsxRoute(n: ts.Node): boolean {
+  for (let p = n.parent; p; p = p.parent) {
+    if ((ts.isJsxElement(p) || ts.isJsxSelfClosingElement(p)) && jsxTag(p) === 'Route') return true;
+  }
+  return false;
 }
 
 function prop(o: ts.ObjectLiteralExpression, name: string): ts.Expression | undefined {

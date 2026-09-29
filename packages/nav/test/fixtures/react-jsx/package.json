@@ -1,0 +1,1 @@
+{"name": "rj", "dependencies": {"react": "18", "react-router-dom": "6", "react-intl": "6", "@lingui/core": "4", "@apollo/client": "3", "axios": "1"}}

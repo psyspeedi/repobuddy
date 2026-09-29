@@ -14,8 +14,11 @@
     "lint": "echo 'nav: no lint configured'"
   },
   "dependencies": {
+    "@vue/compiler-dom": "^3.5.13",
     "@vue/compiler-sfc": "^3.5.13",
-    "typescript": "^5.7.2"
+    "svelte": "^5",
+    "typescript": "^5.7.2",
+    "yaml": "^2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2"

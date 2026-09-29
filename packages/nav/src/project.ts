@@ -4,19 +4,43 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-export const SOURCE_EXT = ['.vue', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
-const RESOLVE_EXT = ['.tsx', '.ts', '.mjs', '.js', '.jsx', '.vue', '.json'];
+export const SOURCE_EXT = ['.vue', '.svelte', '.astro', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+const RESOLVE_EXT = ['.tsx', '.ts', '.mjs', '.js', '.jsx', '.vue', '.svelte', '.astro', '.json', '.html'];
+/** Каталоги, внутри которых лежат словари переводов. */
+export const LOCALE_DIRS = ['locales', 'locale', 'i18n', 'lang', 'langs', 'messages', 'translations', 'intl', 'l10n', 'translation'];
+export const LOCALE_EXT = ['.json', '.yml', '.yaml', '.po', '.xlf', '.xliff', '.js', '.ts', '.mjs'];
+const LOCALE_PATH = new RegExp(`[\\\\/](${LOCALE_DIRS.join('|')})[\\\\/]`);
 const SKIP_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', 'coverage', '.nuxt', '.output', '.next', 'public', '.rbnav',
-  '__tests__', '__mocks__', 'e2e', 'cypress', 'testing', '.storybook',
+  'node_modules', '.git', 'dist', 'build', 'coverage', '.nuxt', '.output', '.next', '.svelte-kit', '.astro', '.angular',
+  '.vercel', '.netlify', '.turbo', '.cache', 'out', '.rbnav', '__tests__', '__mocks__', 'e2e', 'cypress', 'testing',
+  '.storybook', 'storybook-static', 'vendor', 'tmp',
 ]);
-const SKIP_FILES = /\.(spec|test|stories|cy)\.[cm]?[jt]sx?$/;
+const SKIP_FILES = /\.(spec|test|stories|story|cy|e2e)\.[cm]?[jt]sx?$|\.config\.[cm]?[jt]s$/;
+/** Каталоги со статикой: из них берём только словари переводов (next-i18next). */
+const ASSET_DIRS = new Set(['public', 'static', 'assets']);
 
-export function walk(root: string): string[] {
+export interface ProjectInfo {
+  deps: Set<string>;
+  angular: boolean;
+}
+
+export function projectInfo(root: string): ProjectInfo {
+  const deps = new Set<string>();
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    for (const k of ['dependencies', 'devDependencies', 'peerDependencies']) for (const d of Object.keys(pkg[k] ?? {})) deps.add(d);
+  } catch {
+    // без package.json — определяем по файлам
+  }
+  const angular = deps.has('@angular/core') || fs.existsSync(path.join(root, 'angular.json'));
+  return { deps, angular };
+}
+
+export function walk(root: string, info: ProjectInfo = projectInfo(root)): string[] {
   const out: string[] = [];
-  const stack = [root];
+  const stack: { dir: string; assets: boolean }[] = [{ dir: root, assets: false }];
   while (stack.length) {
-    const dir = stack.pop()!;
+    const { dir, assets } = stack.pop()!;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -27,10 +51,17 @@ export function walk(root: string): string[] {
       if (e.name.startsWith('.') && e.name !== '.') continue;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name)) stack.push(full);
+        if (!SKIP_DIRS.has(e.name)) stack.push({ dir: full, assets: assets || ASSET_DIRS.has(e.name) });
       } else if (e.isFile()) {
-        if (SOURCE_EXT.includes(path.extname(e.name)) && !e.name.endsWith('.d.ts') && !SKIP_FILES.test(e.name)) out.push(full);
-        else if (e.name.endsWith('.json') && /[\\/]locales?[\\/]/.test(full)) out.push(full);
+        const ext = path.extname(e.name);
+        const isLocale = LOCALE_EXT.includes(ext) && LOCALE_PATH.test(full.slice(root.length));
+        if (assets) {
+          if (isLocale && !['.js', '.ts', '.mjs'].includes(ext)) out.push(full);
+          continue;
+        }
+        if (SOURCE_EXT.includes(ext) && !e.name.endsWith('.d.ts') && !SKIP_FILES.test(e.name)) out.push(full);
+        else if (ext === '.html' && info.angular) out.push(full);
+        else if (isLocale) out.push(full);
       }
     }
   }
