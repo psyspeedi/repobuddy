@@ -1,0 +1,4 @@
+{
+  // комментарии в tsconfig допустимы
+  "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["src/*"], "@ui/*": ["src/components/*"] } }
+}
