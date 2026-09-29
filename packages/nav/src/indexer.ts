@@ -10,7 +10,7 @@ import { projectInfo, Resolver, walk } from './project.ts';
 import { RouteExtractor, type RouteRec } from './routes.ts';
 import { fileRoutes } from './fileRoutes.ts';
 
-const VERSION = 13;
+const VERSION = 17;
 
 export interface FileEntry {
   mtime: number;
@@ -20,6 +20,10 @@ export interface FileEntry {
   deps: string[];
   /** Для каждого импорта: local-имя → файл. */
   bindings: Record<string, string>;
+  /** Баррель: файл-источник → реэкспортируемые имена ('*' — всё). */
+  reexports?: Record<string, string[]>;
+  /** Импортированное имя (не local) → файл: что именно файл берёт из барреля. */
+  importedNames?: Record<string, string[]>;
 }
 
 export interface NavIndex {
@@ -114,11 +118,20 @@ export function buildIndex(rootArg: string, opts: { force?: boolean } = {}): { i
         entry.facts = extractFacts(f);
         const deps = new Set<string>();
         for (const imp of entry.facts.imports) {
-          const r = resolver.resolve(imp.spec, f);
-          if (!r) continue;
-          const rr = path.relative(root, r);
-          deps.add(rr);
-          for (const local of Object.keys(imp.names)) entry.bindings[local] = rr;
+          const targets = imp.spec.includes('*') ? globImport(imp.spec, f, abs, resolver) : [resolver.resolve(imp.spec, f)];
+          for (const r of targets) {
+            if (!r) continue;
+            const rr = path.relative(root, r);
+            deps.add(rr);
+            if (imp.reexport) {
+              (entry.reexports ??= {})[rr] = Object.keys(imp.names);
+              continue;
+            }
+            for (const [local, imported] of Object.entries(imp.names)) {
+              entry.bindings[local] = rr;
+              ((entry.importedNames ??= {})[rr] ??= []).push(imported);
+            }
+          }
         }
         entry.deps = [...deps];
       } catch (e) {
@@ -207,7 +220,7 @@ export function buildIndex(rootArg: string, opts: { force?: boolean } = {}): { i
       if (!/\.(vue|tsx|jsx)$/.test(rel)) continue;
       const dir = dirs.find((d) => rel.startsWith(d + '/'));
       if (!dir) continue;
-      const inner = rel.slice(dir.length + 1).replace(/\.(vue|tsx|jsx)$/, '').split('/');
+      const inner = rel.slice(dir.length + 1).replace(/(\.(client|server))?\.(vue|tsx|jsx)$/, '').split('/');
       const name = nuxtLike ? nuxtComponentName(inner) : pascal(inner[inner.length - 1]!);
       if (!globals[name]) globals[name] = rel;
       if (nuxtLike && !globals['Lazy' + name]) globals['Lazy' + name] = rel;
@@ -242,6 +255,17 @@ export function buildIndex(rootArg: string, opts: { force?: boolean } = {}): { i
   fs.writeFileSync(cp, JSON.stringify(index));
   stats.ms = Date.now() - t0;
   return { index, stats };
+}
+
+/** import(`./types/${x}/index.vue`) → все файлы, подходящие под шаблон. */
+function globImport(spec: string, from: string, all: string[], resolver: Resolver): string[] {
+  const star = spec.indexOf('*');
+  const dirSpec = spec.slice(0, spec.lastIndexOf('/', star) + 1) || './';
+  const base = resolver.resolveDir(dirSpec, from);
+  if (!base) return [];
+  const rest = spec.slice(dirSpec.length).replace(/[.+?^$()|[\]\\{}]/g, '\\$&').replace(/\*/g, '[^/]+');
+  const re = new RegExp('^' + base.replace(/[.+?^$()|[\]\\{}]/g, '\\$&') + '/' + rest + '(\\.(vue|svelte|tsx?|jsx?))?$');
+  return all.filter((f) => re.test(f)).slice(0, 200);
 }
 
 /** Алиасы, которые фреймворк задаёт в сгенерированном tsconfig (его в репозитории нет). */

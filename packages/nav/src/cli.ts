@@ -73,7 +73,7 @@ function printRoutes(nav: Nav, file: string, indent: string, limit = 3): void {
     return;
   }
   for (const h of hits) {
-    p(`${indent}роут ${routeLabel(h.route)}`);
+    p(`${indent}роут ${routeLabel(h.route)}${h.viaParent ? '  (дочерний: файл в родительской странице)' : ''}`);
     const v = viaLabel(h);
     if (v) p(`${indent}  через ${v}`);
     if (h.route.meta) p(`${indent}  meta ${h.route.meta}`);
@@ -111,7 +111,7 @@ function cmdText(nav: Nav, q: string, json: boolean): void {
     const us = nav.usagesOfKey(k.key);
     if (!us.length) p('  не используется (или ключ собирается динамически)');
     for (const u of us.slice(0, 4)) {
-      p(`  ${u.file}:${u.line}${u.how === 'prefix+key' ? '  [префикс + ключ]' : ''}`);
+      p(`  ${u.file}:${u.line}${u.how === 'prefix+key' ? '  [префикс + ключ]' : u.how === 'dynamic' ? '  [динамический ключ: префикс + переменная]' : ''}`);
       printRoutes(nav, u.file, '    ');
       printApi(nav, u.file, '    ');
     }

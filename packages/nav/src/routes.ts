@@ -145,6 +145,17 @@ export class RouteExtractor {
       this.record({ ...d, expr: e }, parentPath, parent, depth);
       return;
     }
+    // STUBS.map((s) => ({ path: s.path, component: Stub })) — роут на каждый элемент.
+    if (ts.isCallExpression(e) && ts.isPropertyAccessExpression(e.expression) && e.expression.name.text === 'map') {
+      const fn = e.arguments[0];
+      const body = fn && (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) ? (ts.isBlock(fn.body) ? fn.body.statements.find(ts.isReturnStatement)?.expression : fn.body) : undefined;
+      const obj = body ? unwrap(body) : undefined;
+      const arr = this.deref({ ...d, expr: e.expression.expression });
+      if (obj && ts.isObjectLiteralExpression(obj) && arr && ts.isArrayLiteralExpression(arr.expr)) {
+        this.recordMapped(arr, obj, d, parentPath, parent);
+        return;
+      }
+    }
     // [...].map(fn), defineRoutes([...]) — берём массив-аргумент или объект вызова.
     if (ts.isCallExpression(e)) {
       if (ts.isPropertyAccessExpression(e.expression)) this.collect({ ...d, expr: e.expression.expression }, parentPath, parent, depth + 1);
@@ -182,6 +193,31 @@ export class RouteExtractor {
     if (ch) this.collect({ ...loc, expr: ch }, full, idx, depth + 1);
     const lazy = prop(o, 'loadChildren');
     if (lazy) this.lazyChildren({ ...loc, expr: lazy }, full, idx, depth + 1);
+  }
+
+  private recordMapped(arr: Loc, tpl: ts.ObjectLiteralExpression, fnLoc: Loc, parentPath: string, parent: number | null): void {
+    const sf = arr.block.sf;
+    const compE = prop(tpl, 'component') ?? prop(tpl, 'element') ?? prop(tpl, 'loadComponent');
+    const comp = compE ? this.componentFile({ ...fnLoc, expr: compE }, 0) : null;
+    const metaE = prop(tpl, 'meta');
+    for (const el0 of (arr.expr as ts.ArrayLiteralExpression).elements) {
+      const el = this.deref({ ...arr, expr: el0 });
+      if (!el || !ts.isObjectLiteralExpression(el.expr)) continue;
+      const raw = this.str(prop(el.expr, 'path'), el) ?? '';
+      const nameE = prop(el.expr, 'name');
+      this.routes.push({
+        path: joinPath(parentPath, raw) || '/',
+        name: nameE ? this.str(nameE, el) : null,
+        file: path.relative(this.root, el.file),
+        line: el.block.lineBase + el.block.sf.getLineAndCharacterOfPosition(el.expr.getStart(el.block.sf)).line,
+        endLine: el.block.lineBase + el.block.sf.getLineAndCharacterOfPosition(el.expr.getEnd()).line,
+        component: comp ? path.relative(this.root, comp) : null,
+        meta: metaE ? squeeze(metaE.getText(fnLoc.block.sf), 220) : null,
+        redirect: null,
+        parent,
+      });
+    }
+    void sf;
   }
 
   /** Angular loadChildren: () => import('./x').then(m => m.X) — массив роутов или NgModule с forChild. */

@@ -53,7 +53,8 @@ test('варианты ключа с суффиксом (P.L.default) и пре�
 });
 
 test('компонент → роуты через импорты, кратчайший путь', () => {
-  assert.deepEqual(routePaths(vue, 'src/components/SignBanner.vue'), ['/teacher/groups/:groupId(\\d+)']);
+  // Дочерний /grades тоже: GroupPage рендерит его внутри себя.
+  assert.deepEqual(routePaths(vue, 'src/components/SignBanner.vue'), ['/teacher/groups/:groupId(\\d+)', '/teacher/groups/:groupId(\\d+)/grades']);
   assert.deepEqual(routePaths(vue, 'src/components/GradesTab.vue'), ['/teacher/groups/:groupId(\\d+)', '/teacher/groups/:groupId(\\d+)/grades']);
   const hit = vue.routesFor('src/components/SignBanner.vue').hits[0]!;
   assert.deepEqual(hit.via, ['src/components/SignBanner.vue', 'src/views/Group/GroupPage.vue']);

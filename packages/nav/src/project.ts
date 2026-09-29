@@ -13,7 +13,8 @@ const LOCALE_PATH = new RegExp(`[\\\\/](${LOCALE_DIRS.join('|')})[\\\\/]`);
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'coverage', '.nuxt', '.output', '.next', '.svelte-kit', '.astro', '.angular',
   '.vercel', '.netlify', '.turbo', '.cache', 'out', '.rbnav', '__tests__', '__mocks__', 'e2e', 'cypress', 'testing',
-  '.storybook', 'storybook-static', 'vendor', 'tmp',
+  '.storybook', 'storybook-static', 'vendor', 'tmp', 'scripts', '_templates', 'mocks', 'mock', '__fixtures__', 'fixtures',
+  '.husky', '.github', '.gitlab',
 ]);
 const SKIP_FILES =
   /\.(spec|test|stories|story|cy|e2e)\.[cm]?[jt]sx?$|^(vite|vitest|webpack|rollup|nuxt|next|svelte|astro|tailwind|postcss|eslint|prettier|jest|playwright|babel|tsup|commitlint|stylelint|uno|windi|quasar|karma|capacitor|lint-staged|remix|react-router|app)\.config\.[cm]?[jt]s$/;
@@ -39,9 +40,18 @@ export function projectInfo(root: string): ProjectInfo {
   return { deps, angular };
 }
 
+/** Каталоги верхнего уровня с известной ролью — рядом с src/ индексируются только они. */
+const APP_DIRS = new Set([
+  'src', 'app', 'pages', 'components', 'layouts', 'server', 'composables', 'stores', 'store', 'utils', 'plugins', 'middleware',
+  'modules', 'content', 'lib', 'routes', 'views', 'public', 'static', 'assets', 'shared', 'packages', 'apps', 'libs',
+  ...LOCALE_DIRS,
+]);
+
 export function walk(root: string, info: ProjectInfo = projectInfo(root)): string[] {
   const out: string[] = [];
   const stack: { dir: string; assets: boolean }[] = [{ dir: root, assets: false }];
+  // Есть src/ — соседние каталоги вроде a11y/, builder/, tools/ — служебные скрипты, не приложение.
+  const hasSrc = fs.existsSync(path.join(root, 'src'));
   while (stack.length) {
     const { dir, assets } = stack.pop()!;
     let entries: fs.Dirent[];
@@ -54,6 +64,7 @@ export function walk(root: string, info: ProjectInfo = projectInfo(root)): strin
       if (e.name.startsWith('.') && e.name !== '.') continue;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
+        if (hasSrc && dir === root && !APP_DIRS.has(e.name)) continue;
         if (!SKIP_DIRS.has(e.name)) stack.push({ dir: full, assets: assets || ASSET_DIRS.has(e.name) });
       } else if (e.isFile()) {
         const ext = path.extname(e.name);
@@ -125,6 +136,20 @@ export class Resolver {
       }
       return;
     }
+  }
+
+  /** Каталог по спецификатору (для шаблонных import()). */
+  resolveDir(spec: string, fromFile: string): string | null {
+    const clean = spec.replace(/\/+$/, '') || '.';
+    if (clean.startsWith('.')) return path.resolve(path.dirname(fromFile), clean);
+    for (const r of this.rules) {
+      if (r.wildcard ? (clean + '/').startsWith(r.pattern) : clean === r.pattern) {
+        const rest = r.wildcard ? (clean + '/').slice(r.pattern.length) : '';
+        const t = r.targets[0];
+        if (t) return path.join(t, rest).replace(/\/+$/, '');
+      }
+    }
+    return null;
   }
 
   /** Абсолютный путь к файлу или null для внешних пакетов и нерезолвимого. */

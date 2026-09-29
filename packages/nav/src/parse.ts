@@ -17,6 +17,8 @@ export interface ImportFact {
   spec: string;
   line: number;
   dynamic: boolean;
+  /** export … from — реэкспорт (баррель); names: экспортируемое → исходное, '*' для export *. */
+  reexport?: boolean;
   /** local → imported ('default' для default-импорта, '*' для namespace). */
   names: Record<string, string>;
 }
@@ -50,6 +52,10 @@ export interface FileFacts {
   selectors: string[];
   /** Ключи из <i18n>-блока Vue SFC. */
   localKeys: { key: string; value: string; line: number }[];
+  /** `prefix.${x}` — префикс ключа с динамическим хвостом → строка. */
+  dynPrefixes?: Record<string, number>;
+  /** Строки, встретившиеся аргументом вызова: t('x'), useGetTranslation('a.b'). */
+  argStrings?: string[];
 }
 
 export interface ScriptBlock {
@@ -76,7 +82,6 @@ const NOISE_CALLS = new Set([
   'every', 'reduce', 'join', 'split', 'replace', 'toString', 'log', 'error', 'warn', 'emit', 'slice',
   'indexOf', 'trim', 'toLowerCase', 'toUpperCase', 'keys', 'values', 'entries', 'assign', 'stringify',
   'parse', 'set', 'has', 'add', 'sort', 'concat', 'format', 'startsWith', 'endsWith', 'test', 'match',
-  ...HTTP_METHODS,
 ]);
 const CYRILLIC = /[А-Яа-яЁё]/;
 const KEYLIKE = /^[\w-]+(?:[.:][\w-]+)+$/;
@@ -168,7 +173,10 @@ export function extractFacts(file: string): FileFacts {
     let fence = false;
     src.split('\n').forEach((l, i) => {
       if (/^\s*(```|~~~|---\s*$)/.test(l)) fence = !fence;
-      else if (!fence && !/^\s*(import|export)\s/.test(l)) addText(facts, l.replace(/^[#>*\-\d.\s]+|[*_`]/g, ''), i + 1);
+      // MDC: ::card, #title — разметка компонентов и слотов, не текст.
+      else if (!fence && !/^\s*(import|export)\s|^\s*::|^\s*#[\w-]+\s*$/.test(l)) {
+        addText(facts, l.replace(/^\s*(#{1,6}|>|[-*+]|\d+[.)])\s+/, '').replace(/\*\*|`/g, ''), i + 1);
+      }
     });
   } else {
     const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, scriptKindFor(file));
@@ -178,10 +186,21 @@ export function extractFacts(file: string): FileFacts {
   return facts;
 }
 
-function addString(facts: FileFacts, s: string, line: number): void {
+const argLines = new WeakMap<FileFacts, Set<string>>();
+
+/** isArg — строка в аргументе вызова: t('key') точнее, чем Exams['key'] в типе выше по файлу. */
+function addString(facts: FileFacts, s: string, line: number, isArg = false): void {
   const norm = s.trim().replace(/^\.+|\.+$/g, '');
   if (!norm || norm.length > 300) return;
-  if (!(norm in facts.strings)) facts.strings[norm] = line;
+  let args = argLines.get(facts);
+  if (!args) argLines.set(facts, (args = new Set()));
+  if (!(norm in facts.strings) || (isArg && !args.has(norm))) {
+    facts.strings[norm] = line;
+    if (isArg) {
+      args.add(norm);
+      (facts.argStrings ??= []).push(norm);
+    }
+  }
   // i18next: 'ns:key' → 'ns.key'; Angular i18n: '@@id' → 'id'.
   if (/^[\w-]+:[\w.-]+$/.test(norm)) {
     const dotted = norm.replace(':', '.');
@@ -229,8 +248,26 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
     if (c.namedBindings && ts.isNamedImports(c.namedBindings)) for (const e of c.namedBindings.elements) importedLocals.add(e.name.text);
   }
 
+  // Внедрение зависимостей: this.articlesService → ArticlesService (inject(X) или тип X).
+  const di = new Map<string, string>();
+  const typeName = (t: ts.TypeNode | undefined) => (t && ts.isTypeReferenceNode(t) && ts.isIdentifier(t.typeName) ? t.typeName.text : null);
+  const rewriteDi = (chain: string[] | null): string[] | null => {
+    if (chain && chain[0] === 'this' && chain.length >= 3 && di.has(chain[1]!)) return [di.get(chain[1]!)!, ...chain.slice(2)];
+    return chain;
+  };
+
   // Первый проход: строковые константы и деструктуризация цепочек.
   const pre = (n: ts.Node): void => {
+    if (ts.isPropertyDeclaration(n) && ts.isIdentifier(n.name)) {
+      const init = n.initializer;
+      const injected = init && ts.isCallExpression(init) && ts.isIdentifier(init.expression) && init.expression.text === 'inject' && init.arguments[0] && ts.isIdentifier(init.arguments[0]) ? init.arguments[0].text : null;
+      const t = injected ?? typeName(n.type);
+      if (t) di.set(n.name.text, t);
+    }
+    if (ts.isParameter(n) && ts.isIdentifier(n.name) && ts.isConstructorDeclaration(n.parent)) {
+      const t = typeName(n.type);
+      if (t) di.set(n.name.text, t);
+    }
     if (ts.isVariableDeclaration(n) && n.initializer) {
       if (ts.isIdentifier(n.name)) {
         const v = stringValue(n.initializer, consts);
@@ -242,6 +279,8 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
             if (!ts.isIdentifier(el.name)) continue;
             const prop = el.propertyName && ts.isIdentifier(el.propertyName) ? el.propertyName.text : el.name.text;
             destructured.set(el.name.text, [...base, prop]);
+            // const { oauth } = useSignIn() — метод взят, значит используется (часто из шаблона).
+            if (topLevel) facts.calls.push({ chain: [...base, prop], line: lineBase + sf.getLineAndCharacterOfPosition(el.getStart(sf)).line });
           }
         }
       }
@@ -267,19 +306,29 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
       return;
     }
     if (topLevel && ts.isExportDeclaration(n) && n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) {
-      facts.imports.push({ spec: n.moduleSpecifier.text, line: lineOf(n), dynamic: false, names: {} });
+      const names: Record<string, string> = {};
+      if (!n.exportClause) names['*'] = '*';
+      else if (ts.isNamedExports(n.exportClause)) for (const e of n.exportClause.elements) names[e.name.text] = (e.propertyName ?? e.name).text;
+      else names['*'] = '*';
+      facts.imports.push({ spec: n.moduleSpecifier.text, line: lineOf(n), dynamic: false, names, reexport: true });
       return;
     }
     if (ts.isDecorator(n)) onDecorator(n);
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) {
-      addString(facts, n.text, lineOf(n));
-      if (CYRILLIC.test(n.text)) addText(facts, n.text, lineOf(n));
+      // Литерал типа ('a' | 'b') — не использование и не текст.
+      if (n.parent && ts.isLiteralTypeNode(n.parent)) return;
+      addString(facts, n.text, lineOf(n), isCallArg(n));
+      if (CYRILLIC.test(n.text) && !inNonUi(n)) addText(facts, n.text, lineOf(n));
     } else if (ts.isTemplateExpression(n)) {
-      addString(facts, n.head.text, lineOf(n));
-      for (const span of n.templateSpans) addString(facts, span.literal.text, lineOf(n));
+      // `a.b.${x}` — хвост неизвестен: это не префикс для P+L, а динамический ключ.
+      if (/\.$/.test(n.head.text) && KEYLIKE.test(n.head.text.slice(0, -1) + '.x')) {
+        (facts.dynPrefixes ??= {})[n.head.text.slice(0, -1)] ??= lineOf(n);
+      } else addString(facts, n.head.text, lineOf(n), isCallArg(n));
+      // Части шаблонной строки-аргумента — тоже аргументы: $t(`${prefix}.key`).
+      for (const span of n.templateSpans) addString(facts, span.literal.text, lineOf(n), isCallArg(n));
       // Префикс из константы: `${prefix}.key` → полный ключ тоже в строки.
       const full = stringValue(n, consts);
-      if (full !== null) addString(facts, full, lineOf(n));
+      if (full !== null) addString(facts, full, lineOf(n), isCallArg(n));
       const cyr = [n.head.text, ...n.templateSpans.map((s) => s.literal.text)].join(' ');
       if (CYRILLIC.test(cyr)) addText(facts, cyr, lineOf(n));
     } else if (
@@ -356,6 +405,12 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
       facts.imports.push({ spec: arg0.text, line: lineOf(n), dynamic: true, names: {} });
       return;
     }
+    // import(`../types/${name}/index.vue`) — шаблон пути: связь со всеми подходящими файлами.
+    if (topLevel && callee.kind === ts.SyntaxKind.ImportKeyword && arg0 && ts.isTemplateExpression(arg0) && /^[.@~$]/.test(arg0.head.text)) {
+      const spec = arg0.head.text + arg0.templateSpans.map((s) => '*' + s.literal.text).join('');
+      facts.imports.push({ spec, line: lineOf(n), dynamic: true, names: {} });
+      return;
+    }
     if (topLevel && ts.isIdentifier(callee) && callee.text === 'require' && arg0 && ts.isStringLiteralLike(arg0)) {
       facts.imports.push({ spec: arg0.text, line: lineOf(n), dynamic: true, names: {} });
       return;
@@ -378,21 +433,45 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
       if (m === 'component' && arg0 && ts.isStringLiteralLike(arg0) && n.arguments[1] && ts.isIdentifier(n.arguments[1])) {
         facts.globals.push({ name: arg0.text, local: n.arguments[1].text });
       }
-      const chain = flattenChain(callee);
-      if (chain && chain.length >= 2 && !NOISE_CALLS.has(chain[chain.length - 1]!)) {
+      const chain = rewriteDi(flattenChain(callee));
+      const last = chain?.[chain.length - 1] ?? '';
+      const httpOnClient = HTTP_METHODS.has(last) && CLIENT_RECEIVER.test(callee.expression.getText(sf).replace(/\s+/g, ''));
+      if (chain && chain.length >= 2 && !NOISE_CALLS.has(last) && !httpOnClient) {
         facts.calls.push({ chain, line: lineOf(n) });
         // typesafe-i18n / paraglide: LL.home.title() → ключ home.title.
         if (/^\$?LL$|^m$/.test(chain[0]!)) addString(facts, chain.slice(1).join('.').replace(/\(\)/g, ''), lineOf(n));
       }
       return;
     }
+    const calleeName = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : '';
+    if (/^(dispatch|commit)$/.test(calleeName) && arg0 && ts.isStringLiteralLike(arg0)) {
+      const parts = arg0.text.split('/');
+      facts.calls.push({ chain: parts.length > 1 ? parts : ['$store', ...parts], line: lineOf(n) });
+    }
+    if (/^map(Actions|Mutations)$/.test(calleeName) && arg0) {
+      const ns = ts.isStringLiteralLike(arg0) ? arg0.text.split('/') : [];
+      const list = ts.isStringLiteralLike(arg0) ? n.arguments[1] : arg0;
+      const names: string[] = [];
+      if (list && ts.isArrayLiteralExpression(list)) for (const el of list.elements) if (ts.isStringLiteralLike(el)) names.push(el.text);
+      if (list && ts.isObjectLiteralExpression(list)) {
+        for (const p of list.properties) if (ts.isPropertyAssignment(p) && ts.isStringLiteralLike(p.initializer)) names.push(p.initializer.text);
+      }
+      for (const a of names) {
+        const parts = [...ns, ...a.split('/')];
+        facts.calls.push({ chain: parts.length > 1 ? parts : ['$store', ...parts], line: lineOf(n) });
+      }
+    }
     if (!ts.isIdentifier(callee)) return;
     const name = callee.text;
     if (FETCHERS.has(name) && arg0) {
       if (ts.isObjectLiteralExpression(arg0)) pushConfigCall(n, arg0);
       else {
-        for (const url of urlValues(arg0, consts, false)) {
-          facts.apiCalls.push({ method: methodFromOptions(n.arguments[1], consts) ?? 'GET', url, line: lineOf(n), owner: ownerName(n) });
+        const method = methodFromOptions(n.arguments[1], consts);
+        // fetch(url, { method: opts.method }) — универсальная обёртка, а не конкретный эндпоинт.
+        if (method !== '?') {
+          for (const url of urlValues(arg0, consts, false)) {
+            facts.apiCalls.push({ method: method ?? 'GET', url, line: lineOf(n), owner: ownerName(n) });
+          }
         }
       }
     }
@@ -417,6 +496,26 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
   visit(sf);
 }
 
+function isCallArg(n: ts.Node): boolean {
+  const p = n.parent;
+  return !!p && ts.isCallExpression(p) && p.arguments.includes(n as ts.Expression);
+}
+
+/** Строка для разработчика, а не для экрана: console/логгер/ошибка/метрика. */
+function inNonUi(n: ts.Node): boolean {
+  let p: ts.Node | undefined = n.parent;
+  for (let i = 0; p && i < 5; i++, p = p.parent) {
+    if (ts.isThrowStatement(p)) return true;
+    if (ts.isNewExpression(p) && /Error$/.test(p.expression.getText())) return true;
+    if (ts.isCallExpression(p)) {
+      const c = p.expression.getText();
+      if (/^(console|logger|log|Sentry|debug)\b|\.(log|warn|error|info|debug|trace|captureException|captureMessage|reachGoal|track|sendEvent)$/.test(c)) return true;
+      break;
+    }
+  }
+  return false;
+}
+
 function collectExports(sf: ts.SourceFile, facts: FileFacts): void {
   const has = (n: ts.Node, k: ts.SyntaxKind) => ts.canHaveModifiers(n) && (ts.getModifiers(n) ?? []).some((m) => m.kind === k);
   for (const st of sf.statements) {
@@ -435,7 +534,8 @@ function collectExports(sf: ts.SourceFile, facts: FileFacts): void {
 function methodFromOptions(opts: ts.Expression | undefined, consts: Map<string, string>): string | null {
   if (!opts || !ts.isObjectLiteralExpression(opts)) return null;
   for (const p of opts.properties) {
-    if (ts.isPropertyAssignment(p) && p.name.getText() === 'method') return (stringValue(p.initializer, consts) ?? '').toUpperCase() || null;
+    if (ts.isPropertyAssignment(p) && p.name.getText() === 'method') return (stringValue(p.initializer, consts) ?? '?').toUpperCase();
+    if (ts.isShorthandPropertyAssignment(p) && p.name.text === 'method') return consts.get('method')?.toUpperCase() ?? '?';
   }
   return null;
 }
@@ -455,6 +555,8 @@ function flattenChain(e: ts.Expression): string[] | null {
   if (ts.isCallExpression(e)) {
     const base = flattenChain(e.expression);
     if (!base) return null;
+    // inject(TagsService).getAll() → TagsService — сервис важнее самого inject.
+    if (base.length === 1 && base[0] === 'inject' && e.arguments[0] && ts.isIdentifier(e.arguments[0])) return [e.arguments[0].text];
     base[base.length - 1] += '()';
     return base;
   }

@@ -13,11 +13,13 @@ export interface Endpoint extends ApiCall {
 export interface UsageHit {
   file: string;
   line: number;
-  how: 'key' | 'prefix+key' | 'text';
+  how: 'key' | 'prefix+key' | 'text' | 'dynamic';
 }
 
 export interface RouteHit {
   route: RouteRec;
+  /** Роут найден как дочерний: файл виден через родительскую страницу. */
+  viaParent?: boolean;
   /** Цепочка файлов от места использования до компонента роута. */
   via: string[];
 }
@@ -84,6 +86,12 @@ export class Nav {
     return this.ix.routes.filter((r) => r.kind === 'server' && (r.path.toLowerCase().includes(n) || r.file.toLowerCase().includes(n)));
   }
 
+  /** a реэкспортирует b (index.ts модулей). */
+  private reexports(a: string, b: string): boolean {
+    const e = this.ix.files[a];
+    return !!e && e.deps.includes(b) && /(^|\/)index\.[cm]?[jt]s$/.test(a);
+  }
+
   isUiFile(rel: string): boolean {
     return /\.(vue|svelte|astro|tsx|jsx|html)$/.test(rel) || this.routeByComp.has(rel) || /\.component\.[jt]s$/.test(rel);
   }
@@ -137,7 +145,9 @@ export class Nav {
   usagesOfKey(key: string): UsageHit[] {
     const segs = key.split('.');
     const variants = [key];
-    if (segs.length > 2) variants.push(segs.slice(0, -1).join('.'));
+    // P.L.default / P.L.ano_student: сокращаем, только если у родителя есть вариант default.
+    const parent = segs.slice(0, -1).join('.');
+    if (segs.length > 2 && (this.ix.keys[parent + '.default'] || segs[segs.length - 1] === 'default')) variants.push(parent);
     const out: UsageHit[] = [];
     for (const [rel, e] of Object.entries(this.ix.files)) {
       const s = e.facts?.strings;
@@ -149,10 +159,12 @@ export class Nav {
           break;
         }
         const parts = k.split('.');
+        // Хвост должен быть аргументом вызова t('x'): иначе это класс, поле объекта или имя в словаре.
+        const args = new Set(e.facts?.argStrings ?? []);
         for (let i = 1; i < parts.length && !hit; i++) {
           const p = parts.slice(0, i).join('.');
           const l = parts.slice(i).join('.');
-          if (p in s && l in s) hit = { file: rel, line: s[l]!, how: 'prefix+key' };
+          if (p in s && l in s && args.has(l)) hit = { file: rel, line: s[l]!, how: 'prefix+key' };
         }
         if (hit) break;
       }
@@ -162,10 +174,19 @@ export class Nav {
         const t = e.facts.texts.find((x) => norm(x.t) === nk);
         if (t) hit = { file: rel, line: t.line, how: 'key' };
       }
+      if (!hit && e.facts?.dynPrefixes) {
+        for (const [pre, line] of Object.entries(e.facts.dynPrefixes)) {
+          if (key.startsWith(pre + '.')) {
+            hit = { file: rel, line, how: 'dynamic' };
+            break;
+          }
+        }
+      }
       if (hit) out.push(hit);
     }
-    // Точные совпадения — первыми.
-    return out.sort((a, b) => (a.how === b.how ? 0 : a.how === 'key' ? -1 : 1));
+    // Точные совпадения — первыми, динамические — последними.
+    const rank = { key: 0, 'prefix+key': 1, text: 2, dynamic: 3 } as const;
+    return out.sort((a, b) => rank[a.how] - rank[b.how]);
   }
 
   /** Вшитый текст: видимый текст шаблонов/JSX, затем любые строковые литералы. */
@@ -217,6 +238,8 @@ export class Nav {
   routesFor(file: string, limit = 6): { hits: RouteHit[]; total: number } {
     const prev = new Map<string, string | null>([[file, null]]);
     const queue = [file];
+    // Через баррель (index.ts с реэкспортами) идём только к тем, кто берёт из него нужный символ.
+    const via = new Map<string, Set<string> | null>();
     const found: RouteHit[] = [];
     const seenRoutes = new Set<number>();
     while (queue.length && prev.size < UP_LIMIT) {
@@ -229,17 +252,56 @@ export class Nav {
           if (seenRoutes.has(i)) continue;
           seenRoutes.add(i);
           found.push({ route: this.ix.routes[i]!, via: [...via] });
+          // Родитель рендерит детей через <router-view>/<NuxtPage>/<Outlet> — виден и на их URL.
+          for (const c of this.descendants(i)) {
+            if (seenRoutes.has(c)) continue;
+            seenRoutes.add(c);
+            found.push({ route: this.ix.routes[c]!, via: [...via], viaParent: true });
+          }
         }
       }
+      const curE = this.ix.files[cur];
+      const filter = via.get(cur) ?? null;
       for (const up of this.rdeps.get(cur) ?? []) {
         if (prev.has(up)) continue;
-        // Не поднимаемся через роутер и индексы-агрегаторы: там всё со всем.
+        // Не поднимаемся через роутер: там всё со всем.
         if (/(^|\/)router\//.test(up)) continue;
+        // Хаб (стор, i18n, плагин — его импортирует почти всё): роуты за ним случайны.
+        if (up !== file && this.isHub(up) && !this.ix.files[up]?.reexports) continue;
+        // Из барреля — только к импортёрам нужных символов.
+        if (filter && !(this.ix.files[up]?.importedNames?.[cur] ?? []).some((n) => filter.has(n) || n === '*')) continue;
+        const upE = this.ix.files[up];
+        const re = upE?.reexports?.[cur];
+        if (re) {
+          const names = re.includes('*') ? (curE?.facts?.exportNames ?? []) : re;
+          via.set(up, new Set(names));
+        }
         prev.set(up, cur);
         queue.push(up);
       }
     }
     return { hits: found.slice(0, limit), total: found.length };
+  }
+
+  private childrenCache: Map<number, number[]> | null = null;
+
+  descendants(i: number): number[] {
+    if (!this.childrenCache) {
+      this.childrenCache = new Map();
+      this.ix.routes.forEach((r, j) => {
+        if (r.parent === null || r.kind === 'server') return;
+        if (!this.childrenCache!.has(r.parent)) this.childrenCache!.set(r.parent, []);
+        this.childrenCache!.get(r.parent)!.push(j);
+      });
+    }
+    const out: number[] = [];
+    const stack = [...(this.childrenCache.get(i) ?? [])];
+    while (stack.length && out.length < 200) {
+      const j = stack.pop()!;
+      out.push(j);
+      stack.push(...(this.childrenCache.get(j) ?? []));
+    }
+    return out;
   }
 
   /** Кратчайшая цепочка импортов вверх до файла, который никто не импортирует. */
@@ -295,18 +357,33 @@ export class Nav {
       const last = call.chain[call.chain.length - 1]!.replace(/\(\)$/, '');
       const cands = this.byOwner.get(last);
       if (!cands) continue;
-      // Слова цепочки без самого метода: this.articleService.update → article.
+      const head = call.chain[0]!.replace(/\(.*\)$/, '');
+      // Голова цепочки — импортированный символ (сервис из DI, модуль, composable):
+      // тогда файл известен точно, и угадывать по словам не нужно.
+      const bound = e.bindings[head];
+      if (bound && call.chain.length >= 2) {
+        const exact = cands.filter((c) => c.file === bound || this.reexports(bound, c.file));
+        if (exact.length) {
+          out.push(...exact);
+          continue;
+        }
+      }
+      // this.x.method() без связи с сервисом (signal, локальный объект) — не потребитель.
+      if (head === 'this') continue;
+      // Слова цепочки без самого метода: api.modules.v3.student.gradeBook.getX → student, grade, book.
       const words = new Set(call.chain.slice(0, -1).flatMap((s) => wordsOf(s)));
       let best: Endpoint[] = [];
       let bestScore = -1;
       for (const c of cands) {
         const fw = new Set(wordsOf(c.file));
-        const score = [...words].filter((w) => fw.has(w)).length;
+        let score = [...words].filter((w) => fw.has(w)).length;
+        // useSignIn().oauth — функция-владелец объявлена в файле эндпоинта.
+        if (this.ix.files[c.file]?.facts?.exportNames.includes(head)) score += 2;
         if (score > bestScore) [best, bestScore] = [[c], score];
         else if (score === bestScore) best.push(c);
       }
-      // Несколько кандидатов и ни одного совпадения по словам — не угадываем.
-      if (bestScore === 0 && cands.length > 1) continue;
+      // Есть получатель, но ни одного совпадения по словам — не угадываем.
+      if (bestScore === 0 && (cands.length > 1 || call.chain.length >= 2)) continue;
       if (best.length <= 3) out.push(...best);
     }
     return dedupeEndpoints(out);
@@ -336,12 +413,18 @@ export class Nav {
    * Файл вызывает что-то, импортированное из target, и сам не часть api-слоя
    * (агрегаторы модулей вида `gradeBook: gradeBookModule(axios)` — не потребители).
    */
-  private callsInto(rel: string, target: string): boolean {
+  private callsInto(rel: string, target: string, owner: string | null): boolean {
     if (/(^|\/)(api|router)\//i.test(rel)) return false;
     const e = this.ix.files[rel];
     if (!e?.facts) return false;
     const locals = new Set(Object.entries(e.bindings).filter(([, f]) => f === target).map(([l]) => l));
-    return e.facts.calls.some((c) => locals.has(c.chain[0]!.replace(/\(\)$/, '')));
+    return e.facts.calls.some((c) => {
+      if (!locals.has(c.chain[0]!.replace(/\(.*\)$/, ''))) return false;
+      // useComments() — импортированная функция-обёртка: файл целиком потребитель.
+      if (c.chain.length === 1) return true;
+      // userService.login() — через объект сервиса: нужен именно метод-владелец эндпоинта.
+      return !owner || c.chain[c.chain.length - 1]!.replace(/\(\)$/, '') === owner;
+    });
   }
 
   /** GraphQL: операцию не вызывают, а передают в useQuery — достаточно импорта. */
@@ -367,7 +450,7 @@ export class Nav {
       const gql = /^(QUERY|MUTATION|SUBSCRIPTION)$/.test(ep.method);
       let selfFallback = false;
       for (const rel of Object.keys(this.ix.files)) {
-        if (importers.has(rel) && (gql ? this.importsName(rel, ep.file) : this.callsInto(rel, ep.file))) {
+        if (importers.has(rel) && (gql ? this.importsName(rel, ep.file) : this.callsInto(rel, ep.file, ep.owner))) {
           consumers.push(rel);
           continue;
         }
