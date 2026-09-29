@@ -266,8 +266,9 @@ export class Nav {
         if (prev.has(up)) continue;
         // Не поднимаемся через роутер: там всё со всем.
         if (/(^|\/)router\//.test(up)) continue;
-        // Хаб (стор, i18n, плагин — его импортирует почти всё): роуты за ним случайны.
-        if (up !== file && this.isHub(up) && !this.ix.files[up]?.reexports) continue;
+        // Хаб-модуль (стор, i18n, плагин — его импортирует почти всё): роуты за ним случайны.
+        // Компонент-обёртка страниц (MainContent) — не хаб: он честно показывает детей на всех экранах.
+        if (up !== file && this.isHub(up) && !this.ix.files[up]?.reexports && !this.isUiFile(up)) continue;
         // Из барреля — только к импортёрам нужных символов.
         if (filter && !(this.ix.files[up]?.importedNames?.[cur] ?? []).some((n) => filter.has(n) || n === '*')) continue;
         const upE = this.ix.files[up];
@@ -280,7 +281,15 @@ export class Nav {
         queue.push(up);
       }
     }
-    return { hits: found.slice(0, limit), total: found.length };
+    // Один путь — один ответ: pages/x.vue и pages/x/index.vue дают одинаковый URL.
+    const seenPath = new Set<string>();
+    const uniq = found.filter((h) => {
+      const k = `${h.route.path}|${h.route.kind ?? ''}`;
+      if (seenPath.has(k)) return false;
+      seenPath.add(k);
+      return true;
+    });
+    return { hits: uniq.slice(0, limit), total: uniq.length };
   }
 
   private childrenCache: Map<number, number[]> | null = null;

@@ -10,7 +10,7 @@ import { projectInfo, Resolver, walk } from './project.ts';
 import { RouteExtractor, type RouteRec } from './routes.ts';
 import { fileRoutes } from './fileRoutes.ts';
 
-const VERSION = 17;
+const VERSION = 19;
 
 export interface FileEntry {
   mtime: number;
@@ -132,6 +132,11 @@ export function buildIndex(rootArg: string, opts: { force?: boolean } = {}): { i
               ((entry.importedNames ??= {})[rr] ??= []).push(imported);
             }
           }
+        }
+        // Реэкспорт импортированного (export default X после import X) — тоже ребро барреля.
+        for (const [exported, local] of Object.entries(entry.facts.localReexports ?? {})) {
+          const f2 = entry.bindings[local];
+          if (f2) ((entry.reexports ??= {})[f2] ??= []).push(exported);
         }
         entry.deps = [...deps];
       } catch (e) {

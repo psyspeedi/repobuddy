@@ -56,6 +56,8 @@ export interface FileFacts {
   dynPrefixes?: Record<string, number>;
   /** Строки, встретившиеся аргументом вызова: t('x'), useGetTranslation('a.b'). */
   argStrings?: string[];
+  /** import X …; export default X / export { X } — реэкспорт импортированного: экспортируемое → local. */
+  localReexports?: Record<string, string>;
 }
 
 export interface ScriptBlock {
@@ -175,7 +177,14 @@ export function extractFacts(file: string): FileFacts {
       if (/^\s*(```|~~~|---\s*$)/.test(l)) fence = !fence;
       // MDC: ::card, #title — разметка компонентов и слотов, не текст.
       else if (!fence && !/^\s*(import|export)\s|^\s*::|^\s*#[\w-]+\s*$/.test(l)) {
-        addText(facts, l.replace(/^\s*(#{1,6}|>|[-*+]|\d+[.)])\s+/, '').replace(/\*\*|`/g, ''), i + 1);
+        const clean = l
+          .replace(/^\s*(#{1,6}|>|[-*+]|\d+[.)])\s+/, '')
+          .replace(/^\[[ xX]\]\s*/, '')
+          .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+          .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+          .replace(/<\/?[A-Za-z][^>]*>/g, '')
+          .replace(/\*\*|`/g, '');
+        addText(facts, clean, i + 1);
       }
     });
   } else {
@@ -320,8 +329,12 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
       addString(facts, n.text, lineOf(n), isCallArg(n));
       if (CYRILLIC.test(n.text) && !inNonUi(n)) addText(facts, n.text, lineOf(n));
     } else if (ts.isTemplateExpression(n)) {
-      // `a.b.${x}` — хвост неизвестен: это не префикс для P+L, а динамический ключ.
-      if (/\.$/.test(n.head.text) && KEYLIKE.test(n.head.text.slice(0, -1) + '.x')) {
+      // `list.${ok ? 'edit' : 'delete'}_error` — варианты известны: разворачиваем в конкретные ключи.
+      const variants = templateVariants(n, consts);
+      if (variants) {
+        for (const v of variants) addString(facts, v, lineOf(n), isCallArg(n));
+      } else if (/\.$/.test(n.head.text) && KEYLIKE.test(n.head.text.slice(0, -1) + '.x')) {
+        // `a.b.${x}` — хвост неизвестен: это не префикс для P+L, а динамический ключ.
         (facts.dynPrefixes ??= {})[n.head.text.slice(0, -1)] ??= lineOf(n);
       } else addString(facts, n.head.text, lineOf(n), isCallArg(n));
       // Части шаблонной строки-аргумента — тоже аргументы: $t(`${prefix}.key`).
@@ -446,7 +459,10 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
     const calleeName = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : '';
     if (/^(dispatch|commit)$/.test(calleeName) && arg0 && ts.isStringLiteralLike(arg0)) {
       const parts = arg0.text.split('/');
-      facts.calls.push({ chain: parts.length > 1 ? parts : ['$store', ...parts], line: lineOf(n) });
+      // vuex-smart-module: store.lessons.dispatch('x') — пространство имён в цепочке до dispatch.
+      const ns = ts.isPropertyAccessExpression(callee) ? (flattenChain(callee.expression) ?? []) : [];
+      const chain = [...ns, ...parts];
+      facts.calls.push({ chain: chain.length > 1 ? chain : ['$store', ...chain], line: lineOf(n) });
     }
     if (/^map(Actions|Mutations)$/.test(calleeName) && arg0) {
       const ns = ts.isStringLiteralLike(arg0) ? arg0.text.split('/') : [];
@@ -496,6 +512,31 @@ function visitScript(sf: ts.SourceFile, lineBase: number, facts: FileFacts, topL
   visit(sf);
 }
 
+/** Все значения шаблонной строки, если каждая вставка — константа или тернарник из строк. */
+function templateVariants(n: ts.TemplateExpression, consts: Map<string, string>): string[] | null {
+  let acc = [n.head.text];
+  let branched = false;
+  for (const span of n.templateSpans) {
+    let e = span.expression;
+    while (ts.isParenthesizedExpression(e)) e = e.expression;
+    let vals: string[] | null = null;
+    if (ts.isConditionalExpression(e)) {
+      const a = stringValue(e.whenTrue, consts);
+      const b = stringValue(e.whenFalse, consts);
+      if (a !== null && b !== null) {
+        vals = [a, b];
+        branched = true;
+      }
+    } else {
+      const v = stringValue(e, consts);
+      if (v !== null) vals = [v];
+    }
+    if (!vals) return null;
+    acc = acc.flatMap((x) => vals!.map((v) => x + v + span.literal.text)).slice(0, 8);
+  }
+  return branched ? acc : null;
+}
+
 function isCallArg(n: ts.Node): boolean {
   const p = n.parent;
   return !!p && ts.isCallExpression(p) && p.arguments.includes(n as ts.Expression);
@@ -525,8 +566,12 @@ function collectExports(sf: ts.SourceFile, facts: FileFacts): void {
       facts.exportNames.push(has(st, ts.SyntaxKind.DefaultKeyword) ? 'default' : st.name.text);
     } else if (ts.isExportAssignment(st)) {
       facts.exportNames.push('default');
+      if (ts.isIdentifier(st.expression)) (facts.localReexports ??= {})['default'] = st.expression.text;
     } else if (ts.isExportDeclaration(st) && st.exportClause && ts.isNamedExports(st.exportClause)) {
-      for (const e of st.exportClause.elements) facts.exportNames.push(e.name.text);
+      for (const e of st.exportClause.elements) {
+        facts.exportNames.push(e.name.text);
+        if (!st.moduleSpecifier) (facts.localReexports ??= {})[e.name.text] = (e.propertyName ?? e.name).text;
+      }
     }
   }
 }
